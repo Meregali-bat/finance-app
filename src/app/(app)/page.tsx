@@ -6,7 +6,7 @@ import { calculateDailyBudget } from "@/lib/period";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { TransactionFormDialog } from "@/components/forms/transaction-form-dialog";
+import { MovementFormDialog } from "@/components/forms/movement-form-dialog";
 import { DeleteIconButton } from "@/components/delete-icon-button";
 import { deleteTransaction } from "@/lib/actions/transaction";
 import { PeriodCloseCheck } from "@/components/period-close-check";
@@ -45,6 +45,13 @@ export default async function DashboardPage() {
   const todaysTransactions = transactions.filter(
     (t) => startOfDay(t.date).getTime() === todayStart.getTime(),
   );
+  const upcomingTransactions = transactions
+    .filter(
+      (t) =>
+        startOfDay(t.date).getTime() > todayStart.getTime() &&
+        t.date.getTime() < budget.periodEnd.getTime(),
+    )
+    .sort((a, b) => a.date.getTime() - b.date.getTime());
 
   const isOverBudget = budget.dailyAvailable < 0;
   const cardBillsSoon = budget.cardBillReminders
@@ -136,8 +143,33 @@ export default async function DashboardPage() {
         )}
       </div>
 
+      {upcomingTransactions.length > 0 && (
+        <div className="flex flex-col gap-3">
+          <h2 className="text-sm font-medium text-muted-foreground">Próximos lançamentos</h2>
+          <div className="flex flex-col gap-2">
+            {upcomingTransactions.map((t) => (
+              <Card key={t.id}>
+                <CardContent className="flex items-center justify-between gap-3 py-3">
+                  <div className="min-w-0">
+                    <p className="truncate font-medium">{t.description}</p>
+                    <p className="text-sm text-muted-foreground">{formatDate(t.date)}</p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <span className="font-medium tabular-nums">{formatCurrency(Number(t.amount))}</span>
+                    <DeleteIconButton
+                      action={deleteTransaction.bind(null, t.id)}
+                      confirmMessage={`Excluir o lançamento "${t.description}"?`}
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="fixed bottom-20 right-4 z-10">
-        <TransactionFormDialog />
+        <MovementFormDialog cards={creditCards.map((c) => ({ id: c.id, name: c.name }))} />
       </div>
     </div>
   );
