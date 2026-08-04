@@ -1,0 +1,134 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id                String             @id @default(cuid())
+  email             String             @unique
+  passwordHash      String
+  incomes           Income[]
+  fixedExpenses     FixedExpense[]
+  transactions      Transaction[]
+  creditCards       CreditCard[]
+  cardPurchases     CardPurchase[]
+  jars              Jar[]
+  jarDeposits       JarDeposit[]
+  periodAllocations PeriodAllocation[]
+  createdAt         DateTime           @default(now())
+}
+
+model Income {
+  id         String   @id @default(cuid())
+  userId     String
+  label      String
+  amount     Decimal
+  dayOfMonth Int
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model FixedExpense {
+  id        String   @id @default(cuid())
+  userId    String
+  label     String
+  amount    Decimal
+  dueDay    Int
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Transaction {
+  id          String   @id @default(cuid())
+  userId      String
+  amount      Decimal
+  description String
+  date        DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, date])
+}
+
+model CreditCard {
+  id         String         @id @default(cuid())
+  userId     String
+  name       String
+  closingDay Int
+  dueDay     Int
+  active     Boolean        @default(true)
+  createdAt  DateTime       @default(now())
+  user       User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  purchases  CardPurchase[]
+
+  @@index([userId])
+}
+
+model CardPurchase {
+  id          String     @id @default(cuid())
+  cardId      String
+  userId      String
+  amount      Decimal
+  description String
+  date        DateTime   @default(now())
+  card        CreditCard @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([cardId, date])
+  @@index([userId])
+}
+
+model Jar {
+  id        String       @id @default(cuid())
+  userId    String
+  name      String
+  color     String?
+  balance   Decimal      @default(0)
+  createdAt DateTime     @default(now())
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deposits  JarDeposit[]
+
+  @@index([userId])
+}
+
+model JarDeposit {
+  id        String   @id @default(cuid())
+  jarId     String
+  userId    String
+  amount    Decimal
+  note      String?
+  createdAt DateTime @default(now())
+  jar       Jar      @relation(fields: [jarId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([jarId])
+  @@index([userId])
+}
+
+/// Records the close of each period (between one payday and the next).
+/// resolvedAt null means the leftover is still pending a jar allocation decision.
+model PeriodAllocation {
+  id             String    @id @default(cuid())
+  userId         String
+  periodStart    DateTime
+  periodEnd      DateTime
+  leftoverAmount Decimal
+  resolvedAt     DateTime?
+  createdAt      DateTime  @default(now())
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, periodEnd])
+  @@index([userId])
+}
