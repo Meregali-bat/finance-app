@@ -64,9 +64,24 @@ export default async function DashboardPage() {
     .sort((a, b) => a.date.getTime() - b.date.getTime());
 
   const isOverBudget = budget.dailyAvailable < 0;
-  const cardBillsSoon = budget.cardBillReminders
-    .slice()
-    .sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime());
+
+  const cardNameById = new Map(creditCards.map((c) => [c.id, c.name]));
+  const expenseLabelById = new Map(fixedExpenses.map((e) => [e.id, e.label]));
+
+  const reminders = [
+    ...budget.cardBillReminders.map((bill) => ({
+      key: `card-${bill.cardId}-${bill.dueDate.toISOString()}`,
+      label: `Fatura do ${cardNameById.get(bill.cardId) ?? "cartão"}`,
+      amount: bill.amount,
+      dueDate: bill.dueDate,
+    })),
+    ...budget.fixedExpenseReminders.map((exp) => ({
+      key: `expense-${exp.expenseId}-${exp.dueDate.toISOString()}`,
+      label: expenseLabelById.get(exp.expenseId) ?? "Despesa fixa",
+      amount: exp.amount,
+      dueDate: exp.dueDate,
+    })),
+  ].sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime());
 
   return (
     <div className="flex flex-col gap-6">
@@ -112,18 +127,22 @@ export default async function DashboardPage() {
         </CardContent>
       </Card>
 
-      {cardBillsSoon.length > 0 && (
-        <div className="flex flex-col gap-2">
-          {cardBillsSoon.map((bill) => (
-            <Card key={`${bill.cardId}-${bill.dueDate.toISOString()}`} className="border-white/5">
-              <CardContent className="flex items-center gap-3 py-3">
-                <AlertTriangle className="size-4 shrink-0 text-negative" aria-hidden="true" />
-                <p className="text-sm">
-                  Fatura de {formatCurrency(bill.amount)} vence em {formatDate(bill.dueDate)}
-                </p>
-              </CardContent>
-            </Card>
-          ))}
+      {reminders.length > 0 && (
+        <div className="flex flex-col gap-3">
+          <h2 className="text-sm font-medium text-muted-foreground">Lembretes</h2>
+          <div className="flex flex-col gap-2">
+            {reminders.map((reminder) => (
+              <Card key={reminder.key} className="border-white/5">
+                <CardContent className="flex items-center gap-3 py-3">
+                  <AlertTriangle className="size-4 shrink-0 text-negative" aria-hidden="true" />
+                  <p className="text-sm">
+                    {reminder.label}: {formatCurrency(reminder.amount)} vence em{" "}
+                    {formatDate(reminder.dueDate)}
+                  </p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
         </div>
       )}
 

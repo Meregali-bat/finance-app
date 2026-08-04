@@ -45,6 +45,12 @@ export interface CardBillReminder {
   amount: number;
 }
 
+export interface FixedExpenseReminder {
+  expenseId: string;
+  dueDate: Date;
+  amount: number;
+}
+
 export interface PeriodBudget {
   periodStart: Date;
   periodEnd: Date;
@@ -56,6 +62,7 @@ export interface PeriodBudget {
   periodBalance: number;
   dailyAvailable: number;
   cardBillReminders: CardBillReminder[];
+  fixedExpenseReminders: FixedExpenseReminder[];
 }
 
 function startOfDay(date: Date): Date {
@@ -222,12 +229,13 @@ export function calculateDailyBudget(input: {
     })
     .reduce((sum, inc) => sum + inc.amount, 0);
 
-  const fixedExpenseTotal = fixedExpenses.reduce((sum, exp) => {
+  const fixedExpenseReminders: FixedExpenseReminder[] = fixedExpenses.flatMap((exp) => {
     const occurrences = occurrencesInRange(exp.dueDay, periodStart, periodEnd).filter((occ) =>
       isOccurrenceValid(occ, exp.createdAt),
     );
-    return sum + occurrences.length * exp.amount;
-  }, 0);
+    return occurrences.map((dueDate) => ({ expenseId: exp.id, dueDate, amount: exp.amount }));
+  });
+  const fixedExpenseTotal = fixedExpenseReminders.reduce((sum, r) => sum + r.amount, 0);
 
   const cardBillReminders = getCardBillsInPeriod(creditCards, cardPurchases, periodStart, periodEnd);
   const cardBillTotal = cardBillReminders.reduce((sum, r) => sum + r.amount, 0);
@@ -251,6 +259,7 @@ export function calculateDailyBudget(input: {
     periodBalance,
     dailyAvailable,
     cardBillReminders,
+    fixedExpenseReminders,
   };
 }
 

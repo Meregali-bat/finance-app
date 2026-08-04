@@ -140,6 +140,34 @@ describe("calculateDailyBudget", () => {
     expect(result.periodBalance).toBe(1800);
   });
 
+  it("exposes fixed expense due dates as reminders", () => {
+    const today = new Date(2026, 0, 1);
+    const result = calculateDailyBudget({
+      incomes,
+      fixedExpenses: [{ id: "rent", amount: 1200, dueDay: 10 }],
+      creditCards: [],
+      cardPurchases: [],
+      transactions: [],
+      today,
+    });
+    expect(result.fixedExpenseReminders).toEqual([
+      { expenseId: "rent", dueDate: new Date(2026, 0, 10), amount: 1200 },
+    ]);
+  });
+
+  it("omits a fixed expense reminder whose due date already passed before creation", () => {
+    const today = new Date(2026, 0, 20);
+    const result = calculateDailyBudget({
+      incomes,
+      fixedExpenses: [{ id: "netflix", amount: 50, dueDay: 5, createdAt: today }],
+      creditCards: [],
+      cardPurchases: [],
+      transactions: [],
+      today,
+    });
+    expect(result.fixedExpenseReminders).toEqual([]);
+  });
+
   it("reserves fixed expenses from the total up front", () => {
     const today = new Date(2026, 0, 1);
     const result = calculateDailyBudget({
