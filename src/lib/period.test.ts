@@ -43,6 +43,40 @@ describe("getPeriodBounds", () => {
     const { periodEnd } = getPeriodBounds([{ id: "i1", amount: 100, dayOfMonth: 31 }], today);
     expect(periodEnd).toEqual(new Date(2026, 1, 28));
   });
+
+  it("doesn't invent a past payday for an income created after that day already passed", () => {
+    // Registered today (Jan 20) with payday on the 5th — the 5th already
+    // happened this month, but this income didn't exist yet to count it.
+    const today = new Date(2026, 0, 20);
+    const { periodStart, periodEnd } = getPeriodBounds(
+      [{ id: "i1", amount: 3000, dayOfMonth: 5, createdAt: today }],
+      today,
+    );
+    expect(periodStart).toEqual(today);
+    expect(periodEnd).toEqual(new Date(2026, 1, 5));
+  });
+
+  it("only starts counting from the next occurrence when registered right before payday", () => {
+    // User's exact scenario: registers salary today (Jan 4), paid tomorrow (Jan 5).
+    const today = new Date(2026, 0, 4);
+    const { periodStart, periodEnd } = getPeriodBounds(
+      [{ id: "i1", amount: 9000, dayOfMonth: 5, createdAt: today }],
+      today,
+    );
+    expect(periodStart).toEqual(today);
+    expect(periodEnd).toEqual(new Date(2026, 0, 5));
+  });
+
+  it("keeps using an established income's history when a brand-new income is added alongside it", () => {
+    const today = new Date(2026, 0, 20);
+    const incomes = [
+      { id: "salary", amount: 3000, dayOfMonth: 5, createdAt: new Date(2025, 5, 1) }, // long-standing
+      { id: "freela", amount: 800, dayOfMonth: 10, createdAt: today }, // just added, day 10 already passed
+    ];
+    const { periodStart, periodEnd } = getPeriodBounds(incomes, today);
+    expect(periodStart).toEqual(new Date(2026, 0, 5)); // from the established salary, not today
+    expect(periodEnd).toEqual(new Date(2026, 1, 5)); // freela's next Jan-10 occurrence is skipped (invalid)
+  });
 });
 
 describe("calculateDailyBudget", () => {
@@ -61,6 +95,49 @@ describe("calculateDailyBudget", () => {
     expect(result.periodBalance).toBe(3000);
     expect(result.daysRemaining).toBe(31);
     expect(result.dailyAvailable).toBeCloseTo(3000 / 31);
+  });
+
+  it("doesn't count an income registered today toward today's balance if payday is tomorrow", () => {
+    const today = new Date(2026, 0, 4);
+    const result = calculateDailyBudget({
+      incomes: [{ id: "i1", amount: 9000, dayOfMonth: 5, createdAt: today }],
+      fixedExpenses: [],
+      creditCards: [],
+      cardPurchases: [],
+      transactions: [],
+      today,
+    });
+    expect(result.incomeTotal).toBe(0);
+    expect(result.periodBalance).toBe(0);
+    expect(result.periodEnd).toEqual(new Date(2026, 0, 5));
+  });
+
+  it("excludes a fixed expense's due date if it already passed before the expense was created", () => {
+    const today = new Date(2026, 0, 20);
+    const result = calculateDailyBudget({
+      incomes,
+      fixedExpenses: [{ id: "netflix", amount: 50, dueDay: 5, createdAt: today }],
+      creditCards: [],
+      cardPurchases: [],
+      transactions: [],
+      today,
+    });
+    expect(result.fixedExpenseTotal).toBe(0);
+    expect(result.periodBalance).toBe(3000);
+  });
+
+  it("still counts a fixed expense's due date this period if it hasn't happened yet", () => {
+    const today = new Date(2026, 0, 1);
+    const result = calculateDailyBudget({
+      incomes,
+      fixedExpenses: [{ id: "rent", amount: 1200, dueDay: 10, createdAt: today }],
+      creditCards: [],
+      cardPurchases: [],
+      transactions: [],
+      today,
+    });
+    expect(result.fixedExpenseTotal).toBe(1200);
+    expect(result.periodBalance).toBe(1800);
   });
 
   it("reserves fixed expenses from the total up front", () => {

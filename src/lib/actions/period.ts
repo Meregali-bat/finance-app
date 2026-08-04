@@ -24,11 +24,13 @@ async function loadBudgetInputs(userId: string) {
     id: i.id,
     amount: Number(i.amount),
     dayOfMonth: i.dayOfMonth,
+    createdAt: i.createdAt,
   }));
   const fixedExpenseInputs: FixedExpenseInput[] = fixedExpenses.map((e) => ({
     id: e.id,
     amount: Number(e.amount),
     dueDay: e.dueDay,
+    createdAt: e.createdAt,
   }));
   const creditCardInputs: CreditCardInput[] = creditCards.map((c) => ({
     id: c.id,

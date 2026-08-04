@@ -27,8 +27,18 @@ export default async function DashboardPage() {
   ]);
 
   const budget = calculateDailyBudget({
-    incomes: incomes.map((i) => ({ id: i.id, amount: Number(i.amount), dayOfMonth: i.dayOfMonth })),
-    fixedExpenses: fixedExpenses.map((e) => ({ id: e.id, amount: Number(e.amount), dueDay: e.dueDay })),
+    incomes: incomes.map((i) => ({
+      id: i.id,
+      amount: Number(i.amount),
+      dayOfMonth: i.dayOfMonth,
+      createdAt: i.createdAt,
+    })),
+    fixedExpenses: fixedExpenses.map((e) => ({
+      id: e.id,
+      amount: Number(e.amount),
+      dueDay: e.dueDay,
+      createdAt: e.createdAt,
+    })),
     creditCards: creditCards.map((c) => ({ id: c.id, closingDay: c.closingDay, dueDay: c.dueDay })),
     cardPurchases: creditCards.flatMap((c) =>
       c.purchases.map((p) => ({ cardId: c.id, amount: Number(p.amount), date: p.date })),

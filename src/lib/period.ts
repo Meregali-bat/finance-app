@@ -10,12 +10,16 @@ export interface IncomeInput {
   id: string;
   amount: number;
   dayOfMonth: number;
+  /** When omitted, every occurrence is treated as valid (useful for tests). */
+  createdAt?: Date;
 }
 
 export interface FixedExpenseInput {
   id: string;
   amount: number;
   dueDay: number;
+  /** When omitted, every occurrence is treated as valid (useful for tests). */
+  createdAt?: Date;
 }
 
 export interface CreditCardInput {
@@ -120,9 +124,22 @@ function diffCalendarDays(a: Date, b: Date): number {
 }
 
 /**
+ * An occurrence only "counts" if it happened on or after the record was
+ * created — otherwise a freshly-added income/expense would retroactively
+ * invent a past payday/due date that was never actually tracked.
+ */
+function isOccurrenceValid(occurrence: Date, createdAt: Date | undefined): boolean {
+  if (!createdAt) return true;
+  return occurrence.getTime() >= startOfDay(createdAt).getTime();
+}
+
+/**
  * The current period's boundaries, derived from every active income's
- * recurring day-of-month. periodStart is the most recent payday across all
- * sources; periodEnd is the soonest upcoming one (exclusive).
+ * recurring day-of-month. periodStart is the most recent *valid* payday
+ * across all sources (ignoring occurrences that predate the income's own
+ * creation); periodEnd is the soonest upcoming one (exclusive). If no income
+ * has a valid past occurrence yet (e.g. a brand-new income whose first
+ * payday hasn't happened), periodStart falls back to today.
  */
 export function getPeriodBounds(incomes: IncomeInput[], today: Date): {
   periodStart: Date;
@@ -135,10 +152,16 @@ export function getPeriodBounds(incomes: IncomeInput[], today: Date): {
     return { periodStart: start, periodEnd: end };
   }
 
-  const pastOccurrences = incomes.map((inc) => latestOccurrenceOnOrBefore(inc.dayOfMonth, today));
   const futureOccurrences = incomes.map((inc) => earliestOccurrenceAfter(inc.dayOfMonth, today));
+  const validPastOccurrences = incomes
+    .map((inc) => ({ occurrence: latestOccurrenceOnOrBefore(inc.dayOfMonth, today), createdAt: inc.createdAt }))
+    .filter(({ occurrence, createdAt }) => isOccurrenceValid(occurrence, createdAt))
+    .map(({ occurrence }) => occurrence);
 
-  const periodStart = new Date(Math.max(...pastOccurrences.map((d) => d.getTime())));
+  const periodStart =
+    validPastOccurrences.length > 0
+      ? new Date(Math.max(...validPastOccurrences.map((d) => d.getTime())))
+      : startOfDay(today);
   const periodEnd = new Date(Math.min(...futureOccurrences.map((d) => d.getTime())));
 
   return { periodStart, periodEnd };
@@ -193,11 +216,16 @@ export function calculateDailyBudget(input: {
   const { periodStart, periodEnd } = getPeriodBounds(incomes, today);
 
   const incomeTotal = incomes
-    .filter((inc) => latestOccurrenceOnOrBefore(inc.dayOfMonth, today).getTime() === periodStart.getTime())
+    .filter((inc) => {
+      const occurrence = latestOccurrenceOnOrBefore(inc.dayOfMonth, today);
+      return occurrence.getTime() === periodStart.getTime() && isOccurrenceValid(occurrence, inc.createdAt);
+    })
     .reduce((sum, inc) => sum + inc.amount, 0);
 
   const fixedExpenseTotal = fixedExpenses.reduce((sum, exp) => {
-    const occurrences = occurrencesInRange(exp.dueDay, periodStart, periodEnd);
+    const occurrences = occurrencesInRange(exp.dueDay, periodStart, periodEnd).filter((occ) =>
+      isOccurrenceValid(occ, exp.createdAt),
+    );
     return sum + occurrences.length * exp.amount;
   }, 0);
 
