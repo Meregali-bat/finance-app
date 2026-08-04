@@ -55,7 +55,13 @@ export function PeriodCloseModal({
           <p className="text-sm text-muted-foreground">Para onde quer mandar esse valor?</p>
           <Select value={jarId} onValueChange={(v) => setJarId(v as string)}>
             <SelectTrigger className="w-full">
-              <SelectValue />
+              <SelectValue>
+                {(value: string) =>
+                  value === KEEP_BALANCE
+                    ? "Manter no saldo atual"
+                    : jars.find((j) => j.id === value)?.name
+                }
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               <SelectItem value={KEEP_BALANCE}>Manter no saldo atual</SelectItem>
