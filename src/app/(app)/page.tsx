@@ -52,15 +52,14 @@ export default async function DashboardPage() {
   const progressPercent = totalDays > 0 ? Math.min(100, Math.round((elapsedDays / totalDays) * 100)) : 0;
 
   const todayStart = startOfDay(today);
+  const tomorrowStart = new Date(todayStart);
+  tomorrowStart.setDate(tomorrowStart.getDate() + 1);
+
   const todaysTransactions = transactions.filter(
     (t) => startOfDay(t.date).getTime() === todayStart.getTime(),
   );
-  const upcomingTransactions = transactions
-    .filter(
-      (t) =>
-        startOfDay(t.date).getTime() > todayStart.getTime() &&
-        t.date.getTime() < budget.periodEnd.getTime(),
-    )
+  const tomorrowsTransactions = transactions
+    .filter((t) => startOfDay(t.date).getTime() === tomorrowStart.getTime())
     .sort((a, b) => a.date.getTime() - b.date.getTime());
 
   const isOverBudget = budget.dailyAvailable < 0;
@@ -172,17 +171,14 @@ export default async function DashboardPage() {
         )}
       </div>
 
-      {upcomingTransactions.length > 0 && (
+      {tomorrowsTransactions.length > 0 && (
         <div className="flex flex-col gap-3">
-          <h2 className="text-sm font-medium text-muted-foreground">Próximos lançamentos</h2>
+          <h2 className="text-sm font-medium text-muted-foreground">Amanhã</h2>
           <div className="flex flex-col gap-2">
-            {upcomingTransactions.map((t) => (
+            {tomorrowsTransactions.map((t) => (
               <Card key={t.id}>
                 <CardContent className="flex items-center justify-between gap-3 py-3">
-                  <div className="min-w-0">
-                    <p className="truncate font-medium">{t.description}</p>
-                    <p className="text-sm text-muted-foreground">{formatDate(t.date)}</p>
-                  </div>
+                  <p className="min-w-0 truncate font-medium">{t.description}</p>
                   <div className="flex shrink-0 items-center gap-2">
                     <span className="font-medium tabular-nums">{formatCurrency(Number(t.amount))}</span>
                     <DeleteIconButton
