@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { CurrencyInput } from "@/components/currency-input";
 import { createFixedExpense, updateFixedExpense } from "@/lib/actions/expense";
 
 type ExpenseValues = {
@@ -80,17 +81,8 @@ export function ExpenseFormDialog({ expense }: { expense?: ExpenseValues }) {
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="flex flex-col gap-2">
-              <Label htmlFor="amount">Valor (R$)</Label>
-              <Input
-                id="amount"
-                name="amount"
-                type="number"
-                inputMode="decimal"
-                step="0.01"
-                min="0.01"
-                defaultValue={expense?.amount}
-                required
-              />
+              <Label htmlFor="amount">Valor</Label>
+              <CurrencyInput id="amount" name="amount" defaultValue={expense?.amount} required />
             </div>
             <div className="flex flex-col gap-2">
               <Label htmlFor="dueDay">Dia do vencimento</Label>

@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { CurrencyInput } from "@/components/currency-input";
 import { depositToJar } from "@/lib/actions/jar";
 
 export function JarDepositDialog({ jarId, jarName }: { jarId: string; jarName: string }) {
@@ -43,16 +44,8 @@ export function JarDepositDialog({ jarId, jarName }: { jarId: string; jarName: s
         </DialogHeader>
         <form action={handleSubmit} className="flex flex-col gap-4">
           <div className="flex flex-col gap-2">
-            <Label htmlFor="amount">Valor (R$)</Label>
-            <Input
-              id="amount"
-              name="amount"
-              type="number"
-              inputMode="decimal"
-              step="0.01"
-              min="0.01"
-              required
-            />
+            <Label htmlFor="amount">Valor</Label>
+            <CurrencyInput id="amount" name="amount" required />
           </div>
           <div className="flex flex-col gap-2">
             <Label htmlFor="note">Nota (opcional)</Label>

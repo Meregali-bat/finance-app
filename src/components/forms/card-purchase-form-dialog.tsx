@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { CurrencyInput } from "@/components/currency-input";
 import { createCardPurchase } from "@/lib/actions/card";
 
 function todayInputValue() {
@@ -54,16 +55,8 @@ export function CardPurchaseFormDialog({ cardId }: { cardId: string }) {
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="flex flex-col gap-2">
-              <Label htmlFor="amount">Valor (R$)</Label>
-              <Input
-                id="amount"
-                name="amount"
-                type="number"
-                inputMode="decimal"
-                step="0.01"
-                min="0.01"
-                required
-              />
+              <Label htmlFor="amount">Valor</Label>
+              <CurrencyInput id="amount" name="amount" required />
             </div>
             <div className="flex flex-col gap-2">
               <Label htmlFor="date">Data</Label>
