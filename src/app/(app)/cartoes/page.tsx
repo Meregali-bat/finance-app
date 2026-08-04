@@ -21,7 +21,7 @@ export default async function CardsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-xl font-semibold">Cartões de crédito</h1>
+      <h1 className="text-xl font-heading font-semibold">Cartões de crédito</h1>
 
       <CardFormDialog />
 

@@ -14,7 +14,7 @@ export default async function JarsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-xl font-semibold">Caixinhas</h1>
+      <h1 className="text-xl font-heading font-semibold">Caixinhas</h1>
 
       <JarFormDialog />
 

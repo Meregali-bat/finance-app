@@ -62,7 +62,7 @@ export default async function DashboardPage() {
               {isOverBudget ? "Você já estourou o orçamento de hoje" : "Você pode gastar hoje"}
             </p>
             <p
-              className={`text-4xl font-semibold tabular-nums ${
+              className={`font-heading text-4xl font-bold tabular-nums ${
                 isOverBudget ? "text-negative" : "text-primary"
               }`}
             >

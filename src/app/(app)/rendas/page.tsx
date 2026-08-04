@@ -20,7 +20,7 @@ export default async function FixedPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-xl font-semibold">Rendas e despesas fixas</h1>
+      <h1 className="text-xl font-heading font-semibold">Rendas e despesas fixas</h1>
 
       <Tabs defaultValue="rendas">
         <TabsList className="w-full">

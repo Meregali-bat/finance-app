@@ -48,7 +48,7 @@ export default async function CardDetailPage({
         >
           <ArrowLeft className="size-5" />
         </Link>
-        <h1 className="min-w-0 truncate text-xl font-semibold">{card.name}</h1>
+        <h1 className="min-w-0 truncate text-xl font-heading font-semibold">{card.name}</h1>
       </div>
 
       <Card>
