@@ -271,6 +271,42 @@ describe("calculateDailyBudget", () => {
     });
     expect(afterDue.cardBillTotal).toBe(0);
   });
+
+  it("folds a card-linked fixed expense into the card bill instead of the fixed expense total", () => {
+    const today = new Date(2026, 0, 1);
+    const card = { id: "c1", closingDay: 20, dueDay: 27 };
+    const result = calculateDailyBudget({
+      incomes,
+      fixedExpenses: [{ id: "youtube", amount: 34.9, dueDay: 10, cardId: "c1" }],
+      creditCards: [card],
+      cardPurchases: [],
+      transactions: [],
+      today,
+    });
+    expect(result.fixedExpenseTotal).toBe(0);
+    expect(result.fixedExpenseReminders).toEqual([]);
+    expect(result.cardBillTotal).toBe(34.9);
+    expect(result.cardBillReminders).toEqual([
+      { cardId: "c1", dueDate: new Date(2026, 0, 27), amount: 34.9 },
+    ]);
+  });
+
+  it("excludes a card-linked fixed expense's occurrence if it predates the expense's creation", () => {
+    const today = new Date(2026, 0, 1);
+    const card = { id: "c1", closingDay: 20, dueDay: 27 };
+    const result = calculateDailyBudget({
+      incomes,
+      fixedExpenses: [
+        { id: "youtube", amount: 34.9, dueDay: 5, cardId: "c1", createdAt: new Date(2026, 0, 6) },
+      ],
+      creditCards: [card],
+      cardPurchases: [],
+      transactions: [],
+      today,
+    });
+    expect(result.cardBillTotal).toBe(0);
+    expect(result.cardBillReminders).toEqual([]);
+  });
 });
 
 describe("getCardBillsInPeriod", () => {
@@ -322,6 +358,32 @@ describe("getCardBillsInPeriod", () => {
       new Date(2026, 1, 20),
     );
     expect(result).toEqual([{ cardId: "c1", dueDate: new Date(2026, 0, 27), amount: 150 }]);
+  });
+
+  it("adds a card-linked fixed expense's occurrence to the purchases in the same cycle", () => {
+    const purchase = { cardId: "c1", amount: 100, date: new Date(2026, 0, 15) };
+    const subscription = { id: "youtube", amount: 34.9, dueDay: 10, cardId: "c1" };
+
+    const result = getCardBillsInPeriod(
+      [card],
+      [purchase],
+      new Date(2026, 0, 1),
+      new Date(2026, 1, 1),
+      [subscription],
+    );
+    expect(result).toEqual([{ cardId: "c1", dueDate: new Date(2026, 0, 27), amount: 134.9 }]);
+  });
+
+  it("ignores a fixed expense linked to a different card", () => {
+    const subscription = { id: "youtube", amount: 34.9, dueDay: 10, cardId: "other-card" };
+    const result = getCardBillsInPeriod(
+      [card],
+      [],
+      new Date(2026, 0, 1),
+      new Date(2026, 1, 1),
+      [subscription],
+    );
+    expect(result).toEqual([]);
   });
 });
 

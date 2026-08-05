@@ -39,16 +39,19 @@ model Income {
 }
 
 model FixedExpense {
-  id        String   @id @default(cuid())
+  id        String      @id @default(cuid())
   userId    String
   label     String
   amount    Decimal
   dueDay    Int
-  active    Boolean  @default(true)
-  createdAt DateTime @default(now())
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  active    Boolean     @default(true)
+  createdAt DateTime    @default(now())
+  cardId    String?
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  card      CreditCard? @relation(fields: [cardId], references: [id], onDelete: SetNull)
 
   @@index([userId])
+  @@index([cardId])
 }
 
 model Transaction {
@@ -72,6 +75,7 @@ model CreditCard {
   createdAt  DateTime       @default(now())
   user       User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   purchases  CardPurchase[]
+  fixedExpenses FixedExpense[]
 
   @@index([userId])
 }

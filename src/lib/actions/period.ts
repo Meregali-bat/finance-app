@@ -31,6 +31,7 @@ async function loadBudgetInputs(userId: string) {
     amount: Number(e.amount),
     dueDay: e.dueDay,
     createdAt: e.createdAt,
+    cardId: e.cardId ?? undefined,
   }));
   const creditCardInputs: CreditCardInput[] = creditCards.map((c) => ({
     id: c.id,

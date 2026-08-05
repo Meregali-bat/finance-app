@@ -13,10 +13,14 @@ import { deleteFixedExpense, toggleFixedExpenseActive } from "@/lib/actions/expe
 export default async function FixedPage() {
   const userId = await requireUserId();
 
-  const [incomes, expenses] = await Promise.all([
+  const [incomes, expenses, creditCards] = await Promise.all([
     prisma.income.findMany({ where: { userId }, orderBy: { dayOfMonth: "asc" } }),
     prisma.fixedExpense.findMany({ where: { userId }, orderBy: { dueDay: "asc" } }),
+    prisma.creditCard.findMany({ where: { userId, active: true } }),
   ]);
+
+  const cards = creditCards.map((c) => ({ id: c.id, name: c.name }));
+  const cardNameById = new Map(cards.map((c) => [c.id, c.name]));
 
   return (
     <div className="flex flex-col gap-6">
@@ -73,41 +77,47 @@ export default async function FixedPage() {
         </TabsContent>
 
         <TabsContent value="despesas" className="flex flex-col gap-4">
-          <ExpenseFormDialog />
+          <ExpenseFormDialog cards={cards} />
           {expenses.length === 0 ? (
             <EmptyState text="Nenhuma despesa fixa cadastrada ainda." />
           ) : (
             <div className="flex flex-col gap-2">
-              {expenses.map((expense) => (
-                <Card key={expense.id}>
-                  <CardContent className="flex items-center justify-between gap-3 py-3">
-                    <div className="min-w-0">
-                      <p className="truncate font-medium">{expense.label}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {formatCurrency(Number(expense.amount))} · vence dia {expense.dueDay}
-                      </p>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-1">
-                      <ToggleActiveButton
-                        active={expense.active}
-                        onToggle={toggleFixedExpenseActive.bind(null, expense.id)}
-                      />
-                      <ExpenseFormDialog
-                        expense={{
-                          id: expense.id,
-                          label: expense.label,
-                          amount: Number(expense.amount),
-                          dueDay: expense.dueDay,
-                        }}
-                      />
-                      <DeleteIconButton
-                        action={deleteFixedExpense.bind(null, expense.id)}
-                        confirmMessage={`Excluir a despesa "${expense.label}"?`}
-                      />
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
+              {expenses.map((expense) => {
+                const cardName = expense.cardId ? cardNameById.get(expense.cardId) : undefined;
+                return (
+                  <Card key={expense.id}>
+                    <CardContent className="flex items-center justify-between gap-3 py-3">
+                      <div className="min-w-0">
+                        <p className="truncate font-medium">{expense.label}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {formatCurrency(Number(expense.amount))} · vence dia {expense.dueDay}
+                          {cardName ? ` · ${cardName}` : ""}
+                        </p>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-1">
+                        <ToggleActiveButton
+                          active={expense.active}
+                          onToggle={toggleFixedExpenseActive.bind(null, expense.id)}
+                        />
+                        <ExpenseFormDialog
+                          expense={{
+                            id: expense.id,
+                            label: expense.label,
+                            amount: Number(expense.amount),
+                            dueDay: expense.dueDay,
+                            cardId: expense.cardId,
+                          }}
+                          cards={cards}
+                        />
+                        <DeleteIconButton
+                          action={deleteFixedExpense.bind(null, expense.id)}
+                          confirmMessage={`Excluir a despesa "${expense.label}"?`}
+                        />
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
             </div>
           )}
         </TabsContent>

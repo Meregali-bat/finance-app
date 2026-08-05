@@ -13,18 +13,35 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from "@/components/ui/select";
 import { CurrencyInput } from "@/components/currency-input";
 import { createFixedExpense, updateFixedExpense } from "@/lib/actions/expense";
+
+const NONE = "__none__";
 
 type ExpenseValues = {
   id: string;
   label: string;
   amount: number;
   dueDay: number;
+  cardId?: string | null;
 };
 
-export function ExpenseFormDialog({ expense }: { expense?: ExpenseValues }) {
+export function ExpenseFormDialog({
+  expense,
+  cards = [],
+}: {
+  expense?: ExpenseValues;
+  cards?: { id: string; name: string }[];
+}) {
   const [open, setOpen] = useState(false);
+  const [cardId, setCardId] = useState<string>(expense?.cardId ?? NONE);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const isEdit = !!expense;
@@ -98,6 +115,29 @@ export function ExpenseFormDialog({ expense }: { expense?: ExpenseValues }) {
               />
             </div>
           </div>
+          {cards.length > 0 && (
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="cardId">Cartão</Label>
+              <input type="hidden" name="cardId" value={cardId === NONE ? "" : cardId} />
+              <Select value={cardId} onValueChange={(v) => setCardId(v as string)}>
+                <SelectTrigger id="cardId" className="w-full">
+                  <SelectValue>
+                    {(value: string) =>
+                      value === NONE ? "Nenhum" : cards.find((c) => c.id === value)?.name
+                    }
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NONE}>Nenhum</SelectItem>
+                  {cards.map((card) => (
+                    <SelectItem key={card.id} value={card.id}>
+                      {card.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           {error && (
             <p role="alert" className="text-sm text-negative">
               {error}

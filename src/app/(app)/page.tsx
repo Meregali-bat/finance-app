@@ -38,6 +38,7 @@ export default async function DashboardPage() {
       amount: Number(e.amount),
       dueDay: e.dueDay,
       createdAt: e.createdAt,
+      cardId: e.cardId ?? undefined,
     })),
     creditCards: creditCards.map((c) => ({ id: c.id, closingDay: c.closingDay, dueDay: c.dueDay })),
     cardPurchases: creditCards.flatMap((c) =>

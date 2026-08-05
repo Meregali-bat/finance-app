@@ -20,6 +20,8 @@ export interface FixedExpenseInput {
   dueDay: number;
   /** When omitted, every occurrence is treated as valid (useful for tests). */
   createdAt?: Date;
+  /** When set, this expense is billed on a credit card instead of standing alone. */
+  cardId?: string;
 }
 
 export interface CreditCardInput {
@@ -125,6 +127,23 @@ function occurrencesInRange(dayOfMonth: number, start: Date, end: Date): Date[] 
   return occurrences;
 }
 
+/**
+ * All occurrences of dayOfMonth within (cycleStart, cycleEnd] — same boundary
+ * convention used for matching real card purchases to a billing cycle.
+ */
+function occurrencesInCycle(dayOfMonth: number, cycleStart: Date, cycleEnd: Date): Date[] {
+  const occurrences: Date[] = [];
+  let cursor = addMonths(cycleStart.getFullYear(), cycleStart.getMonth(), -1);
+  for (let i = 0; i < 3; i++) {
+    const d = dateForDayInMonth(cursor.year, cursor.month, dayOfMonth);
+    if (d.getTime() > cycleStart.getTime() && d.getTime() <= cycleEnd.getTime()) {
+      occurrences.push(d);
+    }
+    cursor = addMonths(cursor.year, cursor.month, 1);
+  }
+  return occurrences;
+}
+
 function diffCalendarDays(a: Date, b: Date): number {
   const MS_PER_DAY = 24 * 60 * 60 * 1000;
   return Math.round((startOfDay(a).getTime() - startOfDay(b).getTime()) / MS_PER_DAY);
@@ -183,6 +202,7 @@ export function getCardBillsInPeriod(
   purchases: CardPurchaseInput[],
   periodStart: Date,
   periodEnd: Date,
+  cardFixedExpenses: FixedExpenseInput[] = [],
 ): CardBillReminder[] {
   const reminders: CardBillReminder[] = [];
 
@@ -192,7 +212,7 @@ export function getCardBillsInPeriod(
       const cycleEnd = latestOccurrenceBefore(card.closingDay, dueDate);
       const cycleStart = latestOccurrenceBefore(card.closingDay, cycleEnd);
 
-      const amount = purchases
+      const purchaseAmount = purchases
         .filter((p) => p.cardId === card.id)
         .filter((p) => {
           // Normalize to day granularity: purchase.date carries a time-of-day,
@@ -201,6 +221,17 @@ export function getCardBillsInPeriod(
           return purchaseDay.getTime() > cycleStart.getTime() && purchaseDay.getTime() <= cycleEnd.getTime();
         })
         .reduce((sum, p) => sum + p.amount, 0);
+
+      const fixedExpenseAmount = cardFixedExpenses
+        .filter((exp) => exp.cardId === card.id)
+        .reduce((sum, exp) => {
+          const occurrences = occurrencesInCycle(exp.dueDay, cycleStart, cycleEnd).filter((occ) =>
+            isOccurrenceValid(occ, exp.createdAt),
+          );
+          return sum + occurrences.length * exp.amount;
+        }, 0);
+
+      const amount = purchaseAmount + fixedExpenseAmount;
 
       if (amount > 0) {
         reminders.push({ cardId: card.id, dueDate, amount });
@@ -229,7 +260,10 @@ export function calculateDailyBudget(input: {
     })
     .reduce((sum, inc) => sum + inc.amount, 0);
 
-  const fixedExpenseReminders: FixedExpenseReminder[] = fixedExpenses.flatMap((exp) => {
+  const standaloneFixedExpenses = fixedExpenses.filter((exp) => !exp.cardId);
+  const cardFixedExpenses = fixedExpenses.filter((exp) => exp.cardId);
+
+  const fixedExpenseReminders: FixedExpenseReminder[] = standaloneFixedExpenses.flatMap((exp) => {
     const occurrences = occurrencesInRange(exp.dueDay, periodStart, periodEnd).filter((occ) =>
       isOccurrenceValid(occ, exp.createdAt),
     );
@@ -237,7 +271,13 @@ export function calculateDailyBudget(input: {
   });
   const fixedExpenseTotal = fixedExpenseReminders.reduce((sum, r) => sum + r.amount, 0);
 
-  const cardBillReminders = getCardBillsInPeriod(creditCards, cardPurchases, periodStart, periodEnd);
+  const cardBillReminders = getCardBillsInPeriod(
+    creditCards,
+    cardPurchases,
+    periodStart,
+    periodEnd,
+    cardFixedExpenses,
+  );
   const cardBillTotal = cardBillReminders.reduce((sum, r) => sum + r.amount, 0);
 
   const transactionTotal = transactions
