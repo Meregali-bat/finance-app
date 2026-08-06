@@ -12,7 +12,6 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { CurrencyInput } from "@/components/currency-input";
-import { dateInputValue } from "@/lib/format";
 import { markIncomeReceived } from "@/lib/actions/income-receipt";
 
 export function MarkIncomeReceivedDialog({
@@ -53,7 +52,12 @@ export function MarkIncomeReceivedDialog({
         </DialogHeader>
         <form action={handleSubmit} className="flex flex-col gap-4">
           <p className="text-sm text-muted-foreground">{label}</p>
-          <input type="hidden" name="occurrenceDate" value={dateInputValue(dueDate)} />
+          {/*
+            The exact instant, not a "YYYY-MM-DD" string: formatting the date
+            here would render it in the browser's timezone, which can land a
+            day off from the payday the server computed.
+          */}
+          <input type="hidden" name="occurrenceDate" value={dueDate.toISOString()} />
           <div className="flex flex-col gap-2">
             <Label htmlFor="receipt-amount">Valor recebido</Label>
             <CurrencyInput id="receipt-amount" name="amount" defaultValue={amount} required />

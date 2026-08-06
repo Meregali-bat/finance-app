@@ -20,13 +20,9 @@ export function formatDateLong(date: Date): string {
   }).format(date);
 }
 
-/** A date as a "YYYY-MM-DD" string, for use with `<input type="date">`. */
-export function dateInputValue(date: Date): string {
-  const offset = date.getTimezoneOffset();
-  return new Date(date.getTime() - offset * 60000).toISOString().slice(0, 10);
-}
-
 /** Today's date as a "YYYY-MM-DD" string, for defaultValue on `<input type="date">`. */
 export function todayInputValue(): string {
-  return dateInputValue(new Date());
+  const now = new Date();
+  const offset = now.getTimezoneOffset();
+  return new Date(now.getTime() - offset * 60000).toISOString().slice(0, 10);
 }
