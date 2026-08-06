@@ -68,12 +68,15 @@ export default async function HistoryPage({
     })),
   ].sort((a, b) => b.date.getTime() - a.date.getTime());
 
-  const total = items.reduce((sum, i) => sum + i.amount, 0);
+  // Income is stored as a negative amount, so it has to be left out of the
+  // spending figures — otherwise it would land in a category bucket as if it
+  // were an expense, and cancel out part of the month's total.
+  const expenseTotal = items.filter((i) => i.amount > 0).reduce((sum, i) => sum + i.amount, 0);
 
   const categorized = [
     ...transactions.map((t) => ({ amount: Number(t.amount), categoryName: t.category?.name })),
     ...cardPurchases.map((p) => ({ amount: Number(p.amount), categoryName: p.category?.name })),
-  ];
+  ].filter((item) => item.amount > 0);
   const amountByCategory = new Map<string, number>();
   for (const item of categorized) {
     const key = item.categoryName ?? "Sem categoria";
@@ -84,7 +87,7 @@ export default async function HistoryPage({
       key: name,
       name,
       amount,
-      percent: total !== 0 ? Math.max(0, Math.round((amount / total) * 100)) : 0,
+      percent: expenseTotal !== 0 ? Math.max(0, Math.round((amount / expenseTotal) * 100)) : 0,
     }))
     .sort((a, b) => b.amount - a.amount);
 
@@ -105,7 +108,7 @@ export default async function HistoryPage({
         </Link>
         <div className="text-center">
           <p className="font-medium capitalize">{monthLabel(year, monthIndex)}</p>
-          <p className="text-sm text-muted-foreground">{formatCurrency(total)}</p>
+          <p className="text-sm text-muted-foreground">{formatCurrency(expenseTotal)} em gastos</p>
         </div>
         <Link
           href={`/historico?month=${monthParam(nextMonth.year, nextMonth.monthIndex)}`}
