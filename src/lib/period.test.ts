@@ -200,6 +200,61 @@ describe("calculateDailyBudget", () => {
     expect(nextPeriod.incomeTotal).toBe(0);
   });
 
+  it("asks about a payday that landed just before the income was registered", () => {
+    // Registered the salary on the 6th, payday is the 5th. The money may well
+    // have arrived — the app can't know, so it has to ask rather than pretend
+    // the payday never happened.
+    const today = new Date(2026, 7, 6);
+    const result = calculateDailyBudget({
+      incomes: [{ id: "salary", amount: 4500, dayOfMonth: 5, createdAt: today }],
+      incomeReceipts: [],
+      fixedExpenses: [],
+      creditCards: [],
+      cardPurchases: [],
+      transactions: [],
+      today,
+    });
+    expect(result.incomeReminders).toEqual([
+      { incomeId: "salary", dueDate: new Date(2026, 7, 5), amount: 4500 },
+    ]);
+    // Still nothing in the budget — asking isn't the same as receiving.
+    expect(result.incomeTotal).toBe(0);
+  });
+
+  it("doesn't ask about a payday from well before the income was registered", () => {
+    // Insurance pays on the 16th and was registered on Aug 6. The Jul 16
+    // payday belongs to a stretch the app never tracked — dragging it in
+    // would invent a period that predates the user's own records.
+    const today = new Date(2026, 7, 6);
+    const result = calculateDailyBudget({
+      incomes: [{ id: "insurance", amount: 1929, dayOfMonth: 16, createdAt: today }],
+      incomeReceipts: [],
+      fixedExpenses: [],
+      creditCards: [],
+      cardPurchases: [],
+      transactions: [],
+      today,
+    });
+    expect(result.incomeReminders).toEqual([]);
+  });
+
+  it("counts a pre-registration payday once the user confirms it arrived", () => {
+    const today = new Date(2026, 7, 6);
+    const result = calculateDailyBudget({
+      incomes: [{ id: "salary", amount: 4500, dayOfMonth: 5, createdAt: today }],
+      incomeReceipts: [{ incomeId: "salary", occurrenceDate: new Date(2026, 7, 5), amount: 4500 }],
+      fixedExpenses: [],
+      creditCards: [],
+      cardPurchases: [],
+      transactions: [],
+      today,
+    });
+    // Confirmation is first-hand evidence the period really opened on the 5th.
+    expect(result.periodStart).toEqual(new Date(2026, 7, 5));
+    expect(result.incomeTotal).toBe(4500);
+    expect(result.incomeReminders).toEqual([]);
+  });
+
   it("only reminds about an income's most recent payday, not every past one", () => {
     // Two months of never confirming shouldn't pile up two reminders.
     const result = calculateDailyBudget({

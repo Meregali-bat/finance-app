@@ -159,14 +159,47 @@ function isOccurrenceValid(occurrence: Date, createdAt: Date | undefined): boole
 }
 
 /**
- * The current period's boundaries, derived from every active income's
- * recurring day-of-month. periodStart is the most recent *valid* payday
- * across all sources (ignoring occurrences that predate the income's own
- * creation); periodEnd is the soonest upcoming one (exclusive). If no income
- * has a valid past occurrence yet (e.g. a brand-new income whose first
- * payday hasn't happened), periodStart falls back to today.
+ * How far back before an income's registration a payday can sit and still be
+ * worth asking about. A payday from the days just before the user set the
+ * income up is very likely the money they're living on right now; anything
+ * older belongs to a stretch the app never tracked.
  */
-export function getPeriodBounds(incomes: IncomeInput[], today: Date): {
+const PRE_REGISTRATION_GRACE_DAYS = 7;
+
+/** Whether a payday is recent enough to be worth asking the user about. */
+function isPaydayAskable(occurrence: Date, createdAt: Date | undefined): boolean {
+  if (!createdAt || isOccurrenceValid(occurrence, createdAt)) return true;
+  return diffCalendarDays(startOfDay(createdAt), occurrence) <= PRE_REGISTRATION_GRACE_DAYS;
+}
+
+/** Whether the user has confirmed receiving a specific payday. */
+function isPaydayConfirmed(
+  receipts: IncomeReceiptInput[],
+  incomeId: string,
+  occurrence: Date,
+): boolean {
+  return receipts.some(
+    (r) => r.incomeId === incomeId && startOfDay(r.occurrenceDate).getTime() === occurrence.getTime(),
+  );
+}
+
+/**
+ * The current period's boundaries, derived from every active income's
+ * recurring day-of-month. periodStart is the most recent payday across all
+ * sources; periodEnd is the soonest upcoming one (exclusive). If no income
+ * has a usable past occurrence yet (e.g. a brand-new income whose first
+ * payday hasn't happened), periodStart falls back to today.
+ *
+ * A payday that predates its income's creation is normally ignored, so that
+ * registering an income doesn't retroactively invent a period that was never
+ * tracked. Confirming it lifts that restriction: the user saying the money
+ * arrived is first-hand evidence, not an invention.
+ */
+export function getPeriodBounds(
+  incomes: IncomeInput[],
+  today: Date,
+  incomeReceipts: IncomeReceiptInput[] = [],
+): {
   periodStart: Date;
   periodEnd: Date;
 } {
@@ -179,8 +212,12 @@ export function getPeriodBounds(incomes: IncomeInput[], today: Date): {
 
   const futureOccurrences = incomes.map((inc) => earliestOccurrenceAfter(inc.dayOfMonth, today));
   const validPastOccurrences = incomes
-    .map((inc) => ({ occurrence: latestOccurrenceOnOrBefore(inc.dayOfMonth, today), createdAt: inc.createdAt }))
-    .filter(({ occurrence, createdAt }) => isOccurrenceValid(occurrence, createdAt))
+    .map((inc) => ({ income: inc, occurrence: latestOccurrenceOnOrBefore(inc.dayOfMonth, today) }))
+    .filter(
+      ({ income, occurrence }) =>
+        isOccurrenceValid(occurrence, income.createdAt) ||
+        isPaydayConfirmed(incomeReceipts, income.id, occurrence),
+    )
     .map(({ occurrence }) => occurrence);
 
   const periodStart =
@@ -250,23 +287,21 @@ export function calculateDailyBudget(input: {
   today: Date;
 }): PeriodBudget {
   const { incomes, incomeReceipts = [], fixedExpenses, creditCards, cardPurchases, transactions, today } = input;
-  const { periodStart, periodEnd } = getPeriodBounds(incomes, today);
+  const { periodStart, periodEnd } = getPeriodBounds(incomes, today, incomeReceipts);
 
   /**
    * The most recent payday each income has already reached. Only the latest
    * one is tracked per income, so months of never confirming don't pile up
    * into a stack of reminders.
+   *
+   * Unlike the money below, this looks slightly further back than the
+   * income's registration date: asking "did this arrive?" about a payday
+   * from just before the user set the income up costs nothing, and it's the
+   * only way that money can ever be accounted for.
    */
-  const arrivedPaydays = incomes.flatMap((inc) => {
-    const occurrence = latestOccurrenceOnOrBefore(inc.dayOfMonth, today);
-    if (!isOccurrenceValid(occurrence, inc.createdAt)) return [];
-    return [{ income: inc, occurrence }];
-  });
-
-  const isConfirmed = ({ income, occurrence }: (typeof arrivedPaydays)[number]) =>
-    incomeReceipts.some(
-      (r) => r.incomeId === income.id && startOfDay(r.occurrenceDate).getTime() === occurrence.getTime(),
-    );
+  const arrivedPaydays = incomes
+    .map((inc) => ({ income: inc, occurrence: latestOccurrenceOnOrBefore(inc.dayOfMonth, today) }))
+    .filter(({ income, occurrence }) => isPaydayAskable(occurrence, income.createdAt));
 
   /**
    * A payday keeps asking to be confirmed until the user answers, even after
@@ -274,7 +309,7 @@ export function calculateDailyBudget(input: {
    * shouldn't be silently forgotten.
    */
   const incomeReminders: IncomeReminder[] = arrivedPaydays
-    .filter((payday) => !isConfirmed(payday))
+    .filter(({ income, occurrence }) => !isPaydayConfirmed(incomeReceipts, income.id, occurrence))
     .map(({ income, occurrence }) => ({
       incomeId: income.id,
       dueDate: occurrence,
@@ -345,8 +380,9 @@ export function calculateDailyBudget(input: {
 export function getPreviousPeriodBounds(
   incomes: IncomeInput[],
   periodStart: Date,
+  incomeReceipts: IncomeReceiptInput[] = [],
 ): { periodStart: Date; periodEnd: Date } {
   const dayBeforeStart = new Date(periodStart);
   dayBeforeStart.setDate(dayBeforeStart.getDate() - 1);
-  return getPeriodBounds(incomes, dayBeforeStart);
+  return getPeriodBounds(incomes, dayBeforeStart, incomeReceipts);
 }

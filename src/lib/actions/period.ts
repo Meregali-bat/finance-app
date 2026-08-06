@@ -13,8 +13,9 @@ import {
 } from "@/lib/period";
 
 async function loadBudgetInputs(userId: string) {
-  const [incomes, fixedExpenses, creditCards, transactions] = await Promise.all([
+  const [incomes, incomeReceipts, fixedExpenses, creditCards, transactions] = await Promise.all([
     prisma.income.findMany({ where: { userId } }),
+    prisma.incomeReceipt.findMany({ where: { userId } }),
     prisma.fixedExpense.findMany({ where: { userId } }),
     prisma.creditCard.findMany({ where: { userId }, include: { purchases: true } }),
     prisma.transaction.findMany({ where: { userId } }),
@@ -45,6 +46,11 @@ async function loadBudgetInputs(userId: string) {
 
   return {
     incomes: incomeInputs,
+    incomeReceipts: incomeReceipts.map((r) => ({
+      incomeId: r.incomeId,
+      occurrenceDate: r.occurrenceDate,
+      amount: Number(r.amount),
+    })),
     fixedExpenses: fixedExpenseInputs,
     creditCards: creditCardInputs,
     cardPurchases: cardPurchaseInputs,
@@ -68,8 +74,8 @@ export async function getPendingPeriodClose(): Promise<PendingPeriodClose | null
   const today = new Date();
   const inputs = await loadBudgetInputs(userId);
 
-  const { periodStart } = getPeriodBounds(inputs.incomes, today);
-  const previous = getPreviousPeriodBounds(inputs.incomes, periodStart);
+  const { periodStart } = getPeriodBounds(inputs.incomes, today, inputs.incomeReceipts);
+  const previous = getPreviousPeriodBounds(inputs.incomes, periodStart, inputs.incomeReceipts);
 
   if (previous.periodEnd.getTime() !== periodStart.getTime()) {
     return null;
