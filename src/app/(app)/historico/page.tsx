@@ -151,7 +151,7 @@ export default async function HistoryPage({
                     <span
                       className={`font-medium tabular-nums ${item.amount < 0 ? "text-primary" : ""}`}
                     >
-                      {formatCurrency(item.amount)}
+                      {formatCurrency(Math.abs(item.amount))}
                     </span>
                     {item.kind === "transaction" ? (
                       <DeleteIconButton

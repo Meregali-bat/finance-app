@@ -198,7 +198,7 @@ export default async function DashboardPage() {
                     <span
                       className={`font-medium tabular-nums ${Number(t.amount) < 0 ? "text-primary" : ""}`}
                     >
-                      {formatCurrency(Number(t.amount))}
+                      {formatCurrency(Math.abs(Number(t.amount)))}
                     </span>
                     <DeleteIconButton
                       action={deleteTransaction.bind(null, t.id)}
@@ -224,7 +224,7 @@ export default async function DashboardPage() {
                     <span
                       className={`font-medium tabular-nums ${Number(t.amount) < 0 ? "text-primary" : ""}`}
                     >
-                      {formatCurrency(Number(t.amount))}
+                      {formatCurrency(Math.abs(Number(t.amount)))}
                     </span>
                     <DeleteIconButton
                       action={deleteTransaction.bind(null, t.id)}
