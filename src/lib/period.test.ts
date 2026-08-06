@@ -130,6 +130,92 @@ describe("calculateDailyBudget", () => {
     expect(result.incomeReminders).toEqual([]);
   });
 
+  it("keeps reminding about an unconfirmed payday after a later one opens a new period", () => {
+    // Salary on the 6th was never confirmed; on the 16th the insurance
+    // payday opens a new period. The salary question is still unanswered,
+    // so it must not be silently dropped.
+    const twoIncomes = [
+      { id: "salary", amount: 4500, dayOfMonth: 6 },
+      { id: "insurance", amount: 1900, dayOfMonth: 16 },
+    ];
+    const result = calculateDailyBudget({
+      incomes: twoIncomes,
+      incomeReceipts: [],
+      fixedExpenses: [],
+      creditCards: [],
+      cardPurchases: [],
+      transactions: [],
+      today: new Date(2026, 7, 16),
+    });
+    expect(result.periodStart).toEqual(new Date(2026, 7, 16));
+    expect(result.incomeReminders).toEqual([
+      { incomeId: "salary", dueDate: new Date(2026, 7, 6), amount: 4500 },
+      { incomeId: "insurance", dueDate: new Date(2026, 7, 16), amount: 1900 },
+    ]);
+  });
+
+  it("stops reminding once the payday is confirmed", () => {
+    const today = new Date(2026, 0, 15);
+    const result = calculateDailyBudget({
+      incomes,
+      incomeReceipts: receivedJan1,
+      fixedExpenses: [],
+      creditCards: [],
+      cardPurchases: [],
+      transactions: [],
+      today,
+    });
+    expect(result.incomeReminders).toEqual([]);
+  });
+
+  it("counts a confirmed receipt only in the period its payday falls in", () => {
+    const twoIncomes = [
+      { id: "salary", amount: 4500, dayOfMonth: 6 },
+      { id: "insurance", amount: 1900, dayOfMonth: 16 },
+    ];
+    const receipts = [{ incomeId: "salary", occurrenceDate: new Date(2026, 7, 6), amount: 4500 }];
+
+    const ownPeriod = calculateDailyBudget({
+      incomes: twoIncomes,
+      incomeReceipts: receipts,
+      fixedExpenses: [],
+      creditCards: [],
+      cardPurchases: [],
+      transactions: [],
+      today: new Date(2026, 7, 10),
+    });
+    expect(ownPeriod.incomeTotal).toBe(4500);
+
+    // The Aug 16 period is funded by the insurance payday, not by the
+    // salary that already covered Aug 6 - Aug 16.
+    const nextPeriod = calculateDailyBudget({
+      incomes: twoIncomes,
+      incomeReceipts: receipts,
+      fixedExpenses: [],
+      creditCards: [],
+      cardPurchases: [],
+      transactions: [],
+      today: new Date(2026, 7, 16),
+    });
+    expect(nextPeriod.incomeTotal).toBe(0);
+  });
+
+  it("only reminds about an income's most recent payday, not every past one", () => {
+    // Two months of never confirming shouldn't pile up two reminders.
+    const result = calculateDailyBudget({
+      incomes,
+      incomeReceipts: [],
+      fixedExpenses: [],
+      creditCards: [],
+      cardPurchases: [],
+      transactions: [],
+      today: new Date(2026, 2, 15), // March 15; Jan 1, Feb 1 and Mar 1 all passed
+    });
+    expect(result.incomeReminders).toEqual([
+      { incomeId: "i1", dueDate: new Date(2026, 2, 1), amount: 3000 },
+    ]);
+  });
+
   it("doesn't count an income registered today toward today's balance if payday is tomorrow", () => {
     const today = new Date(2026, 0, 4);
     const result = calculateDailyBudget({

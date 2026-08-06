@@ -253,32 +253,45 @@ export function calculateDailyBudget(input: {
   const { periodStart, periodEnd } = getPeriodBounds(incomes, today);
 
   /**
-   * Only incomes whose latest occurrence lands exactly on periodStart are
-   * relevant to this period — that's the payday that opened it. Such an
-   * occurrence only counts once the user has confirmed receiving it
-   * (IncomeReceipt); until then it sits in incomeReminders instead of
-   * incomeTotal, so a registered-but-not-yet-received payday doesn't
-   * inflate the available budget.
+   * The most recent payday each income has already reached. Only the latest
+   * one is tracked per income, so months of never confirming don't pile up
+   * into a stack of reminders.
    */
-  const dueIncomes = incomes.flatMap((inc) => {
+  const arrivedPaydays = incomes.flatMap((inc) => {
     const occurrence = latestOccurrenceOnOrBefore(inc.dayOfMonth, today);
-    if (occurrence.getTime() !== periodStart.getTime()) return [];
     if (!isOccurrenceValid(occurrence, inc.createdAt)) return [];
     return [{ income: inc, occurrence }];
   });
 
-  const incomeReminders: IncomeReminder[] = [];
-  let incomeTotal = 0;
-  for (const { income, occurrence } of dueIncomes) {
-    const receipt = incomeReceipts.find(
+  const isConfirmed = ({ income, occurrence }: (typeof arrivedPaydays)[number]) =>
+    incomeReceipts.some(
       (r) => r.incomeId === income.id && startOfDay(r.occurrenceDate).getTime() === occurrence.getTime(),
     );
-    if (receipt) {
-      incomeTotal += receipt.amount;
-    } else {
-      incomeReminders.push({ incomeId: income.id, dueDate: occurrence, amount: income.amount });
-    }
-  }
+
+  /**
+   * A payday keeps asking to be confirmed until the user answers, even after
+   * a later payday has opened a new period — money that never showed up
+   * shouldn't be silently forgotten.
+   */
+  const incomeReminders: IncomeReminder[] = arrivedPaydays
+    .filter((payday) => !isConfirmed(payday))
+    .map(({ income, occurrence }) => ({
+      incomeId: income.id,
+      dueDate: occurrence,
+      amount: income.amount,
+    }));
+
+  /**
+   * Confirmed money funds the period its payday falls in, at the amount that
+   * actually landed. An unconfirmed payday contributes nothing, so a salary
+   * that hasn't arrived yet can't inflate the available budget.
+   */
+  const incomeTotal = incomeReceipts
+    .filter((r) => {
+      const payday = startOfDay(r.occurrenceDate);
+      return payday.getTime() >= periodStart.getTime() && payday.getTime() < periodEnd.getTime();
+    })
+    .reduce((sum, r) => sum + r.amount, 0);
 
   const standaloneFixedExpenses = fixedExpenses.filter((exp) => !exp.cardId);
   const cardFixedExpenses = fixedExpenses.filter((exp) => exp.cardId);
