@@ -24,12 +24,22 @@ import { CurrencyInput } from "@/components/currency-input";
 import { createTransaction } from "@/lib/actions/transaction";
 import { createCardPurchase } from "@/lib/actions/card";
 import { todayInputValue } from "@/lib/format";
+import { cn } from "@/lib/utils";
 
 const CASH = "__cash__";
+const NONE = "__none__";
 
-export function MovementFormDialog({ cards }: { cards: { id: string; name: string }[] }) {
+export function MovementFormDialog({
+  cards,
+  categories = [],
+}: {
+  cards: { id: string; name: string }[];
+  categories?: { id: string; name: string }[];
+}) {
   const [open, setOpen] = useState(false);
+  const [kind, setKind] = useState<"expense" | "income">("expense");
   const [cardId, setCardId] = useState<string>(CASH);
+  const [categoryId, setCategoryId] = useState<string>(NONE);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
@@ -37,13 +47,16 @@ export function MovementFormDialog({ cards }: { cards: { id: string; name: strin
     setError(null);
     startTransition(async () => {
       try {
-        if (cardId !== CASH) {
+        if (kind === "expense" && cardId !== CASH) {
           await createCardPurchase(cardId, formData);
         } else {
+          formData.set("type", kind);
           await createTransaction(formData);
         }
         setOpen(false);
+        setKind("expense");
         setCardId(CASH);
+        setCategoryId(NONE);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Erro ao salvar");
       }
@@ -63,9 +76,40 @@ export function MovementFormDialog({ cards }: { cards: { id: string; name: strin
           <DialogTitle>Nova movimentação</DialogTitle>
         </DialogHeader>
         <form action={handleSubmit} className="flex flex-col gap-4">
+          <div className="grid grid-cols-2 gap-2 rounded-lg bg-muted p-1">
+            <button
+              type="button"
+              onClick={() => setKind("expense")}
+              className={cn(
+                "rounded-md py-1.5 text-sm font-medium transition-colors",
+                kind === "expense" ? "bg-background shadow-sm" : "text-muted-foreground",
+              )}
+            >
+              Despesa
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setKind("income");
+                setCardId(CASH);
+              }}
+              className={cn(
+                "rounded-md py-1.5 text-sm font-medium transition-colors",
+                kind === "income" ? "bg-background shadow-sm" : "text-muted-foreground",
+              )}
+            >
+              Receita
+            </button>
+          </div>
           <div className="flex flex-col gap-2">
             <Label htmlFor="description">Descrição</Label>
-            <Input id="description" name="description" placeholder="Almoço" required autoFocus />
+            <Input
+              id="description"
+              name="description"
+              placeholder={kind === "expense" ? "Almoço" : "Freela"}
+              required
+              autoFocus
+            />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="flex flex-col gap-2">
@@ -77,7 +121,7 @@ export function MovementFormDialog({ cards }: { cards: { id: string; name: strin
               <Input id="date" name="date" type="date" defaultValue={todayInputValue()} required />
             </div>
           </div>
-          {cards.length > 0 && (
+          {kind === "expense" && cards.length > 0 && (
             <div className="flex flex-col gap-2">
               <Label htmlFor="cardId">Como foi pago</Label>
               <Select value={cardId} onValueChange={(v) => setCardId(v as string)}>
@@ -93,6 +137,29 @@ export function MovementFormDialog({ cards }: { cards: { id: string; name: strin
                   {cards.map((card) => (
                     <SelectItem key={card.id} value={card.id}>
                       {card.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+          {categories.length > 0 && (
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="categoryId">Categoria</Label>
+              <input type="hidden" name="categoryId" value={categoryId === NONE ? "" : categoryId} />
+              <Select value={categoryId} onValueChange={(v) => setCategoryId(v as string)}>
+                <SelectTrigger id="categoryId" className="w-full">
+                  <SelectValue>
+                    {(value: string) =>
+                      value === NONE ? "Sem categoria" : categories.find((c) => c.id === value)?.name
+                    }
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NONE}>Sem categoria</SelectItem>
+                  {categories.map((category) => (
+                    <SelectItem key={category.id} value={category.id}>
+                      {category.name}
                     </SelectItem>
                   ))}
                 </SelectContent>

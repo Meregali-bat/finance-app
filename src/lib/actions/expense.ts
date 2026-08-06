@@ -5,37 +5,51 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/auth-helpers";
 
-const expenseSchema = z.object({
-  label: z.string().trim().min(1, "Informe um nome").max(80),
-  amount: z.coerce.number().positive("Valor deve ser maior que zero"),
-  dueDay: z.coerce.number().int().min(1).max(31),
-  cardId: z.string().trim().optional().nullable(),
-});
+const expenseSchema = z
+  .object({
+    label: z.string().trim().min(1, "Informe um nome").max(80),
+    amount: z.coerce.number().positive("Valor deve ser maior que zero"),
+    dueDay: z.preprocess(
+      (v) => (v === "" || v == null ? undefined : v),
+      z.coerce.number().int().min(1).max(31).optional(),
+    ),
+    cardId: z.string().trim().optional().nullable(),
+  })
+  .superRefine((data, ctx) => {
+    if (!data.cardId && data.dueDay == null) {
+      ctx.addIssue({ code: "custom", message: "Informe o dia do vencimento", path: ["dueDay"] });
+    }
+  });
 
 export async function createFixedExpense(formData: FormData) {
   const userId = await requireUserId();
-  const { cardId, ...data } = expenseSchema.parse({
+  const { cardId, dueDay, ...data } = expenseSchema.parse({
     label: formData.get("label"),
     amount: formData.get("amount"),
     dueDay: formData.get("dueDay"),
     cardId: formData.get("cardId"),
   });
 
-  await prisma.fixedExpense.create({ data: { ...data, cardId: cardId || null, userId } });
+  await prisma.fixedExpense.create({
+    data: { ...data, dueDay: cardId ? null : (dueDay ?? null), cardId: cardId || null, userId },
+  });
   revalidatePath("/despesas");
   revalidatePath("/");
 }
 
 export async function updateFixedExpense(id: string, formData: FormData) {
   const userId = await requireUserId();
-  const { cardId, ...data } = expenseSchema.parse({
+  const { cardId, dueDay, ...data } = expenseSchema.parse({
     label: formData.get("label"),
     amount: formData.get("amount"),
     dueDay: formData.get("dueDay"),
     cardId: formData.get("cardId"),
   });
 
-  await prisma.fixedExpense.update({ where: { id, userId }, data: { ...data, cardId: cardId || null } });
+  await prisma.fixedExpense.update({
+    where: { id, userId },
+    data: { ...data, dueDay: cardId ? null : (dueDay ?? null), cardId: cardId || null },
+  });
   revalidatePath("/despesas");
   revalidatePath("/");
 }

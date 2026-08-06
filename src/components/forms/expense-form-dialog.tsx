@@ -29,7 +29,7 @@ type ExpenseValues = {
   id: string;
   label: string;
   amount: number;
-  dueDay: number;
+  dueDay: number | null;
   cardId?: string | null;
 };
 
@@ -45,6 +45,7 @@ export function ExpenseFormDialog({
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const isEdit = !!expense;
+  const hasCard = cardId !== NONE;
 
   function handleSubmit(formData: FormData) {
     setError(null);
@@ -96,25 +97,6 @@ export function ExpenseFormDialog({
               required
             />
           </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="amount">Valor</Label>
-              <CurrencyInput id="amount" name="amount" defaultValue={expense?.amount} required />
-            </div>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="dueDay">Dia do vencimento</Label>
-              <Input
-                id="dueDay"
-                name="dueDay"
-                type="number"
-                inputMode="numeric"
-                min="1"
-                max="31"
-                defaultValue={expense?.dueDay}
-                required
-              />
-            </div>
-          </div>
           {cards.length > 0 && (
             <div className="flex flex-col gap-2">
               <Label htmlFor="cardId">Cartão</Label>
@@ -137,6 +119,32 @@ export function ExpenseFormDialog({
                 </SelectContent>
               </Select>
             </div>
+          )}
+          <div className={hasCard ? "flex flex-col gap-2" : "grid grid-cols-2 gap-4"}>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="amount">Valor</Label>
+              <CurrencyInput id="amount" name="amount" defaultValue={expense?.amount} required />
+            </div>
+            {!hasCard && (
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="dueDay">Dia do vencimento</Label>
+                <Input
+                  id="dueDay"
+                  name="dueDay"
+                  type="number"
+                  inputMode="numeric"
+                  min="1"
+                  max="31"
+                  defaultValue={expense?.dueDay ?? undefined}
+                  required
+                />
+              </div>
+            )}
+          </div>
+          {hasCard && (
+            <p className="text-sm text-muted-foreground">
+              O vencimento segue a fatura do cartão selecionado.
+            </p>
           )}
           {error && (
             <p role="alert" className="text-sm text-negative">

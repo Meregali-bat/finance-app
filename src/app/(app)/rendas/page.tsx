@@ -5,18 +5,21 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { IncomeFormDialog } from "@/components/forms/income-form-dialog";
 import { ExpenseFormDialog } from "@/components/forms/expense-form-dialog";
+import { CategoryFormDialog } from "@/components/forms/category-form-dialog";
 import { DeleteIconButton } from "@/components/delete-icon-button";
 import { ToggleActiveButton } from "@/components/toggle-active-button";
 import { deleteIncome, toggleIncomeActive } from "@/lib/actions/income";
 import { deleteFixedExpense, toggleFixedExpenseActive } from "@/lib/actions/expense";
+import { deleteCategory, toggleCategoryActive } from "@/lib/actions/category";
 
 export default async function FixedPage() {
   const userId = await requireUserId();
 
-  const [incomes, expenses, creditCards] = await Promise.all([
+  const [incomes, expenses, creditCards, categories] = await Promise.all([
     prisma.income.findMany({ where: { userId }, orderBy: { dayOfMonth: "asc" } }),
     prisma.fixedExpense.findMany({ where: { userId }, orderBy: { dueDay: "asc" } }),
     prisma.creditCard.findMany({ where: { userId, active: true } }),
+    prisma.category.findMany({ where: { userId }, orderBy: { name: "asc" } }),
   ]);
 
   const cards = creditCards.map((c) => ({ id: c.id, name: c.name }));
@@ -33,6 +36,9 @@ export default async function FixedPage() {
           </TabsTrigger>
           <TabsTrigger value="despesas" className="flex-1">
             Despesas
+          </TabsTrigger>
+          <TabsTrigger value="categorias" className="flex-1">
+            Categorias
           </TabsTrigger>
         </TabsList>
 
@@ -90,8 +96,10 @@ export default async function FixedPage() {
                       <div className="min-w-0">
                         <p className="truncate font-medium">{expense.label}</p>
                         <p className="text-sm text-muted-foreground">
-                          {formatCurrency(Number(expense.amount))} · vence dia {expense.dueDay}
-                          {cardName ? ` · ${cardName}` : ""}
+                          {formatCurrency(Number(expense.amount))}
+                          {cardName
+                            ? ` · ${cardName}`
+                            : ` · vence dia ${expense.dueDay}`}
                         </p>
                       </div>
                       <div className="flex shrink-0 items-center gap-1">
@@ -118,6 +126,34 @@ export default async function FixedPage() {
                   </Card>
                 );
               })}
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="categorias" className="flex flex-col gap-4">
+          <CategoryFormDialog />
+          {categories.length === 0 ? (
+            <EmptyState text="Nenhuma categoria cadastrada ainda." />
+          ) : (
+            <div className="flex flex-col gap-2">
+              {categories.map((category) => (
+                <Card key={category.id}>
+                  <CardContent className="flex items-center justify-between gap-3 py-3">
+                    <p className="min-w-0 truncate font-medium">{category.name}</p>
+                    <div className="flex shrink-0 items-center gap-1">
+                      <ToggleActiveButton
+                        active={category.active}
+                        onToggle={toggleCategoryActive.bind(null, category.id)}
+                      />
+                      <CategoryFormDialog category={{ id: category.id, name: category.name }} />
+                      <DeleteIconButton
+                        action={deleteCategory.bind(null, category.id)}
+                        confirmMessage={`Excluir a categoria "${category.name}"?`}
+                      />
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
             </div>
           )}
         </TabsContent>

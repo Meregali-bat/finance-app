@@ -14,10 +14,19 @@ export interface IncomeInput {
   createdAt?: Date;
 }
 
+export interface IncomeReceiptInput {
+  incomeId: string;
+  /** The occurrence (payday) this confirmation applies to. */
+  occurrenceDate: Date;
+  /** The amount actually received, which may differ from the income's registered amount. */
+  amount: number;
+}
+
 export interface FixedExpenseInput {
   id: string;
   amount: number;
-  dueDay: number;
+  /** Required when standalone (no cardId); ignored when billed on a card, since the card's own due date applies. */
+  dueDay?: number;
   /** When omitted, every occurrence is treated as valid (useful for tests). */
   createdAt?: Date;
   /** When set, this expense is billed on a credit card instead of standing alone. */
@@ -53,6 +62,12 @@ export interface FixedExpenseReminder {
   amount: number;
 }
 
+export interface IncomeReminder {
+  incomeId: string;
+  dueDate: Date;
+  amount: number;
+}
+
 export interface PeriodBudget {
   periodStart: Date;
   periodEnd: Date;
@@ -65,6 +80,7 @@ export interface PeriodBudget {
   dailyAvailable: number;
   cardBillReminders: CardBillReminder[];
   fixedExpenseReminders: FixedExpenseReminder[];
+  incomeReminders: IncomeReminder[];
 }
 
 function startOfDay(date: Date): Date {
@@ -120,23 +136,6 @@ function occurrencesInRange(dayOfMonth: number, start: Date, end: Date): Date[] 
   for (let i = 0; i < 3; i++) {
     const d = dateForDayInMonth(cursor.year, cursor.month, dayOfMonth);
     if (d.getTime() >= start.getTime() && d.getTime() < end.getTime()) {
-      occurrences.push(d);
-    }
-    cursor = addMonths(cursor.year, cursor.month, 1);
-  }
-  return occurrences;
-}
-
-/**
- * All occurrences of dayOfMonth within (cycleStart, cycleEnd] — same boundary
- * convention used for matching real card purchases to a billing cycle.
- */
-function occurrencesInCycle(dayOfMonth: number, cycleStart: Date, cycleEnd: Date): Date[] {
-  const occurrences: Date[] = [];
-  let cursor = addMonths(cycleStart.getFullYear(), cycleStart.getMonth(), -1);
-  for (let i = 0; i < 3; i++) {
-    const d = dateForDayInMonth(cursor.year, cursor.month, dayOfMonth);
-    if (d.getTime() > cycleStart.getTime() && d.getTime() <= cycleEnd.getTime()) {
       occurrences.push(d);
     }
     cursor = addMonths(cursor.year, cursor.month, 1);
@@ -222,14 +221,13 @@ export function getCardBillsInPeriod(
         })
         .reduce((sum, p) => sum + p.amount, 0);
 
+      // A card-linked expense has no due day of its own — it's billed on
+      // every cycle that closes on or after it was created, same as the
+      // card's own due date logic for real purchases.
       const fixedExpenseAmount = cardFixedExpenses
         .filter((exp) => exp.cardId === card.id)
-        .reduce((sum, exp) => {
-          const occurrences = occurrencesInCycle(exp.dueDay, cycleStart, cycleEnd).filter((occ) =>
-            isOccurrenceValid(occ, exp.createdAt),
-          );
-          return sum + occurrences.length * exp.amount;
-        }, 0);
+        .filter((exp) => isOccurrenceValid(cycleEnd, exp.createdAt))
+        .reduce((sum, exp) => sum + exp.amount, 0);
 
       const amount = purchaseAmount + fixedExpenseAmount;
 
@@ -244,26 +242,49 @@ export function getCardBillsInPeriod(
 
 export function calculateDailyBudget(input: {
   incomes: IncomeInput[];
+  incomeReceipts?: IncomeReceiptInput[];
   fixedExpenses: FixedExpenseInput[];
   creditCards: CreditCardInput[];
   cardPurchases: CardPurchaseInput[];
   transactions: TransactionInput[];
   today: Date;
 }): PeriodBudget {
-  const { incomes, fixedExpenses, creditCards, cardPurchases, transactions, today } = input;
+  const { incomes, incomeReceipts = [], fixedExpenses, creditCards, cardPurchases, transactions, today } = input;
   const { periodStart, periodEnd } = getPeriodBounds(incomes, today);
 
-  const incomeTotal = incomes
-    .filter((inc) => {
-      const occurrence = latestOccurrenceOnOrBefore(inc.dayOfMonth, today);
-      return occurrence.getTime() === periodStart.getTime() && isOccurrenceValid(occurrence, inc.createdAt);
-    })
-    .reduce((sum, inc) => sum + inc.amount, 0);
+  /**
+   * Only incomes whose latest occurrence lands exactly on periodStart are
+   * relevant to this period — that's the payday that opened it. Such an
+   * occurrence only counts once the user has confirmed receiving it
+   * (IncomeReceipt); until then it sits in incomeReminders instead of
+   * incomeTotal, so a registered-but-not-yet-received payday doesn't
+   * inflate the available budget.
+   */
+  const dueIncomes = incomes.flatMap((inc) => {
+    const occurrence = latestOccurrenceOnOrBefore(inc.dayOfMonth, today);
+    if (occurrence.getTime() !== periodStart.getTime()) return [];
+    if (!isOccurrenceValid(occurrence, inc.createdAt)) return [];
+    return [{ income: inc, occurrence }];
+  });
+
+  const incomeReminders: IncomeReminder[] = [];
+  let incomeTotal = 0;
+  for (const { income, occurrence } of dueIncomes) {
+    const receipt = incomeReceipts.find(
+      (r) => r.incomeId === income.id && startOfDay(r.occurrenceDate).getTime() === occurrence.getTime(),
+    );
+    if (receipt) {
+      incomeTotal += receipt.amount;
+    } else {
+      incomeReminders.push({ incomeId: income.id, dueDate: occurrence, amount: income.amount });
+    }
+  }
 
   const standaloneFixedExpenses = fixedExpenses.filter((exp) => !exp.cardId);
   const cardFixedExpenses = fixedExpenses.filter((exp) => exp.cardId);
 
   const fixedExpenseReminders: FixedExpenseReminder[] = standaloneFixedExpenses.flatMap((exp) => {
+    if (exp.dueDay == null) return [];
     const occurrences = occurrencesInRange(exp.dueDay, periodStart, periodEnd).filter((occ) =>
       isOccurrenceValid(occ, exp.createdAt),
     );
@@ -300,6 +321,7 @@ export function calculateDailyBudget(input: {
     dailyAvailable,
     cardBillReminders,
     fixedExpenseReminders,
+    incomeReminders,
   };
 }
 

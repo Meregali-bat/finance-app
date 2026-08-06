@@ -48,17 +48,21 @@ const purchaseSchema = z.object({
   description: z.string().trim().min(1, "Informe uma descrição").max(120),
   amount: z.coerce.number().positive("Valor deve ser maior que zero"),
   date: z.coerce.date(),
+  categoryId: z.string().trim().optional().nullable(),
 });
 
 export async function createCardPurchase(cardId: string, formData: FormData) {
   const userId = await requireUserId();
-  const data = purchaseSchema.parse({
+  const { categoryId, ...data } = purchaseSchema.parse({
     description: formData.get("description"),
     amount: formData.get("amount"),
     date: formData.get("date"),
+    categoryId: formData.get("categoryId"),
   });
 
-  await prisma.cardPurchase.create({ data: { ...data, cardId, userId } });
+  await prisma.cardPurchase.create({
+    data: { ...data, categoryId: categoryId || null, cardId, userId },
+  });
   revalidatePath(`/cartoes/${cardId}`);
   revalidatePath("/cartoes");
   revalidatePath("/");

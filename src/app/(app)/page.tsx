@@ -7,6 +7,7 @@ import { formatCurrency, formatDate } from "@/lib/format";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { MovementFormDialog } from "@/components/forms/movement-form-dialog";
+import { MarkIncomeReceivedDialog } from "@/components/mark-income-received-dialog";
 import { DeleteIconButton } from "@/components/delete-icon-button";
 import { deleteTransaction } from "@/lib/actions/transaction";
 import { PeriodCloseCheck } from "@/components/period-close-check";
@@ -19,11 +20,13 @@ export default async function DashboardPage() {
   const userId = await requireUserId();
   const today = new Date();
 
-  const [incomes, fixedExpenses, creditCards, transactions] = await Promise.all([
+  const [incomes, incomeReceipts, fixedExpenses, creditCards, transactions, categories] = await Promise.all([
     prisma.income.findMany({ where: { userId, active: true } }),
+    prisma.incomeReceipt.findMany({ where: { userId } }),
     prisma.fixedExpense.findMany({ where: { userId, active: true } }),
     prisma.creditCard.findMany({ where: { userId, active: true }, include: { purchases: true } }),
     prisma.transaction.findMany({ where: { userId }, orderBy: { date: "desc" } }),
+    prisma.category.findMany({ where: { userId, active: true }, orderBy: { name: "asc" } }),
   ]);
 
   const budget = calculateDailyBudget({
@@ -33,10 +36,15 @@ export default async function DashboardPage() {
       dayOfMonth: i.dayOfMonth,
       createdAt: i.createdAt,
     })),
+    incomeReceipts: incomeReceipts.map((r) => ({
+      incomeId: r.incomeId,
+      occurrenceDate: r.occurrenceDate,
+      amount: Number(r.amount),
+    })),
     fixedExpenses: fixedExpenses.map((e) => ({
       id: e.id,
       amount: Number(e.amount),
-      dueDay: e.dueDay,
+      dueDay: e.dueDay ?? undefined,
       createdAt: e.createdAt,
       cardId: e.cardId ?? undefined,
     })),
@@ -67,19 +75,30 @@ export default async function DashboardPage() {
 
   const cardNameById = new Map(creditCards.map((c) => [c.id, c.name]));
   const expenseLabelById = new Map(fixedExpenses.map((e) => [e.id, e.label]));
+  const incomeLabelById = new Map(incomes.map((i) => [i.id, i.label]));
 
   const reminders = [
     ...budget.cardBillReminders.map((bill) => ({
+      kind: "due" as const,
       key: `card-${bill.cardId}-${bill.dueDate.toISOString()}`,
       label: `Fatura do ${cardNameById.get(bill.cardId) ?? "cartão"}`,
       amount: bill.amount,
       dueDate: bill.dueDate,
     })),
     ...budget.fixedExpenseReminders.map((exp) => ({
+      kind: "due" as const,
       key: `expense-${exp.expenseId}-${exp.dueDate.toISOString()}`,
       label: expenseLabelById.get(exp.expenseId) ?? "Despesa fixa",
       amount: exp.amount,
       dueDate: exp.dueDate,
+    })),
+    ...budget.incomeReminders.map((inc) => ({
+      kind: "income" as const,
+      key: `income-${inc.incomeId}-${inc.dueDate.toISOString()}`,
+      label: incomeLabelById.get(inc.incomeId) ?? "Receita fixa",
+      amount: inc.amount,
+      dueDate: inc.dueDate,
+      incomeId: inc.incomeId,
     })),
   ].sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime());
 
@@ -131,26 +150,43 @@ export default async function DashboardPage() {
         <div className="flex flex-col gap-3">
           <h2 className="text-sm font-medium text-muted-foreground">Lembretes</h2>
           <div className="flex flex-col gap-2">
-            {reminders.map((reminder) => (
-              <Card key={reminder.key} className="border-white/5">
-                <CardContent className="flex items-center gap-3 py-3">
-                  <AlertTriangle className="size-4 shrink-0 text-negative" aria-hidden="true" />
-                  <p className="text-sm">
-                    {reminder.label}: {formatCurrency(reminder.amount)} vence em{" "}
-                    {formatDate(reminder.dueDate)}
-                  </p>
-                </CardContent>
-              </Card>
-            ))}
+            {reminders.map((reminder) =>
+              reminder.kind === "income" ? (
+                <Card key={reminder.key} className="border-white/5">
+                  <CardContent className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="text-sm">
+                      {reminder.label}: {formatCurrency(reminder.amount)} previsto em{" "}
+                      {formatDate(reminder.dueDate)}
+                    </p>
+                    <MarkIncomeReceivedDialog
+                      incomeId={reminder.incomeId}
+                      label={reminder.label}
+                      dueDate={reminder.dueDate}
+                      amount={reminder.amount}
+                    />
+                  </CardContent>
+                </Card>
+              ) : (
+                <Card key={reminder.key} className="border-white/5">
+                  <CardContent className="flex items-center gap-3 py-3">
+                    <AlertTriangle className="size-4 shrink-0 text-negative" aria-hidden="true" />
+                    <p className="text-sm">
+                      {reminder.label}: {formatCurrency(reminder.amount)} vence em{" "}
+                      {formatDate(reminder.dueDate)}
+                    </p>
+                  </CardContent>
+                </Card>
+              ),
+            )}
           </div>
         </div>
       )}
 
       <div className="flex flex-col gap-3">
-        <h2 className="text-sm font-medium text-muted-foreground">Gastos de hoje</h2>
+        <h2 className="text-sm font-medium text-muted-foreground">Movimentações de hoje</h2>
         {todaysTransactions.length === 0 ? (
           <p className="rounded-lg border border-dashed border-border py-6 text-center text-sm text-muted-foreground">
-            Nenhum gasto lançado hoje ainda.
+            Nenhuma movimentação lançada hoje ainda.
           </p>
         ) : (
           <div className="flex flex-col gap-2">
@@ -159,10 +195,14 @@ export default async function DashboardPage() {
                 <CardContent className="flex items-center justify-between gap-3 py-3">
                   <p className="min-w-0 truncate font-medium">{t.description}</p>
                   <div className="flex shrink-0 items-center gap-2">
-                    <span className="font-medium tabular-nums">{formatCurrency(Number(t.amount))}</span>
+                    <span
+                      className={`font-medium tabular-nums ${Number(t.amount) < 0 ? "text-primary" : ""}`}
+                    >
+                      {formatCurrency(Number(t.amount))}
+                    </span>
                     <DeleteIconButton
                       action={deleteTransaction.bind(null, t.id)}
-                      confirmMessage={`Excluir o gasto "${t.description}"?`}
+                      confirmMessage={`Excluir o lançamento "${t.description}"?`}
                     />
                   </div>
                 </CardContent>
@@ -181,7 +221,11 @@ export default async function DashboardPage() {
                 <CardContent className="flex items-center justify-between gap-3 py-3">
                   <p className="min-w-0 truncate font-medium">{t.description}</p>
                   <div className="flex shrink-0 items-center gap-2">
-                    <span className="font-medium tabular-nums">{formatCurrency(Number(t.amount))}</span>
+                    <span
+                      className={`font-medium tabular-nums ${Number(t.amount) < 0 ? "text-primary" : ""}`}
+                    >
+                      {formatCurrency(Number(t.amount))}
+                    </span>
                     <DeleteIconButton
                       action={deleteTransaction.bind(null, t.id)}
                       confirmMessage={`Excluir o lançamento "${t.description}"?`}
@@ -195,7 +239,10 @@ export default async function DashboardPage() {
       )}
 
       <div className="fixed bottom-20 right-4 z-10">
-        <MovementFormDialog cards={creditCards.map((c) => ({ id: c.id, name: c.name }))} />
+        <MovementFormDialog
+          cards={creditCards.map((c) => ({ id: c.id, name: c.name }))}
+          categories={categories.map((c) => ({ id: c.id, name: c.name }))}
+        />
       </div>
     </div>
   );

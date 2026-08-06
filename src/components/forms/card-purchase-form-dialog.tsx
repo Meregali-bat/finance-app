@@ -13,12 +13,28 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from "@/components/ui/select";
 import { CurrencyInput } from "@/components/currency-input";
 import { createCardPurchase } from "@/lib/actions/card";
 import { todayInputValue } from "@/lib/format";
 
-export function CardPurchaseFormDialog({ cardId }: { cardId: string }) {
+const NONE = "__none__";
+
+export function CardPurchaseFormDialog({
+  cardId,
+  categories = [],
+}: {
+  cardId: string;
+  categories?: { id: string; name: string }[];
+}) {
   const [open, setOpen] = useState(false);
+  const [categoryId, setCategoryId] = useState<string>(NONE);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
@@ -28,6 +44,7 @@ export function CardPurchaseFormDialog({ cardId }: { cardId: string }) {
       try {
         await createCardPurchase(cardId, formData);
         setOpen(false);
+        setCategoryId(NONE);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Erro ao salvar");
       }
@@ -58,6 +75,29 @@ export function CardPurchaseFormDialog({ cardId }: { cardId: string }) {
               <Input id="date" name="date" type="date" defaultValue={todayInputValue()} required />
             </div>
           </div>
+          {categories.length > 0 && (
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="categoryId">Categoria</Label>
+              <input type="hidden" name="categoryId" value={categoryId === NONE ? "" : categoryId} />
+              <Select value={categoryId} onValueChange={(v) => setCategoryId(v as string)}>
+                <SelectTrigger id="categoryId" className="w-full">
+                  <SelectValue>
+                    {(value: string) =>
+                      value === NONE ? "Sem categoria" : categories.find((c) => c.id === value)?.name
+                    }
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NONE}>Sem categoria</SelectItem>
+                  {categories.map((category) => (
+                    <SelectItem key={category.id} value={category.id}>
+                      {category.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           {error && (
             <p role="alert" className="text-sm text-negative">
               {error}

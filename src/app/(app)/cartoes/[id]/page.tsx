@@ -19,10 +19,13 @@ export default async function CardDetailPage({
   const { id } = await params;
   const userId = await requireUserId();
 
-  const card = await prisma.creditCard.findUnique({
-    where: { id, userId },
-    include: { purchases: { orderBy: { date: "desc" } } },
-  });
+  const [card, categories] = await Promise.all([
+    prisma.creditCard.findUnique({
+      where: { id, userId },
+      include: { purchases: { orderBy: { date: "desc" } } },
+    }),
+    prisma.category.findMany({ where: { userId, active: true }, orderBy: { name: "asc" } }),
+  ]);
 
   if (!card) notFound();
 
@@ -78,7 +81,10 @@ export default async function CardDetailPage({
         </CardContent>
       </Card>
 
-      <CardPurchaseFormDialog cardId={card.id} />
+      <CardPurchaseFormDialog
+        cardId={card.id}
+        categories={categories.map((c) => ({ id: c.id, name: c.name }))}
+      />
 
       {card.purchases.length === 0 ? (
         <p className="rounded-lg border border-dashed border-border py-8 text-center text-sm text-muted-foreground">

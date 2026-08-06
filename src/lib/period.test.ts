@@ -81,11 +81,13 @@ describe("getPeriodBounds", () => {
 
 describe("calculateDailyBudget", () => {
   const incomes = [{ id: "i1", amount: 3000, dayOfMonth: 1 }];
+  const receivedJan1 = [{ incomeId: "i1", occurrenceDate: new Date(2026, 0, 1), amount: 3000 }];
 
   it("splits the full income evenly with no expenses", () => {
     const today = new Date(2026, 0, 1); // period is exactly Jan 1 - Feb 1 (31 days)
     const result = calculateDailyBudget({
       incomes,
+      incomeReceipts: receivedJan1,
       fixedExpenses: [],
       creditCards: [],
       cardPurchases: [],
@@ -95,6 +97,37 @@ describe("calculateDailyBudget", () => {
     expect(result.periodBalance).toBe(3000);
     expect(result.daysRemaining).toBe(31);
     expect(result.dailyAvailable).toBeCloseTo(3000 / 31);
+  });
+
+  it("doesn't count a fixed income's occurrence until it's confirmed received", () => {
+    const today = new Date(2026, 0, 1);
+    const result = calculateDailyBudget({
+      incomes,
+      incomeReceipts: [],
+      fixedExpenses: [],
+      creditCards: [],
+      cardPurchases: [],
+      transactions: [],
+      today,
+    });
+    expect(result.incomeTotal).toBe(0);
+    expect(result.periodBalance).toBe(0);
+    expect(result.incomeReminders).toEqual([{ incomeId: "i1", dueDate: new Date(2026, 0, 1), amount: 3000 }]);
+  });
+
+  it("uses the confirmed receipt amount instead of the registered amount", () => {
+    const today = new Date(2026, 0, 1);
+    const result = calculateDailyBudget({
+      incomes,
+      incomeReceipts: [{ incomeId: "i1", occurrenceDate: new Date(2026, 0, 1), amount: 3200 }],
+      fixedExpenses: [],
+      creditCards: [],
+      cardPurchases: [],
+      transactions: [],
+      today,
+    });
+    expect(result.incomeTotal).toBe(3200);
+    expect(result.incomeReminders).toEqual([]);
   });
 
   it("doesn't count an income registered today toward today's balance if payday is tomorrow", () => {
@@ -116,6 +149,7 @@ describe("calculateDailyBudget", () => {
     const today = new Date(2026, 0, 20);
     const result = calculateDailyBudget({
       incomes,
+      incomeReceipts: receivedJan1,
       fixedExpenses: [{ id: "netflix", amount: 50, dueDay: 5, createdAt: today }],
       creditCards: [],
       cardPurchases: [],
@@ -130,6 +164,7 @@ describe("calculateDailyBudget", () => {
     const today = new Date(2026, 0, 1);
     const result = calculateDailyBudget({
       incomes,
+      incomeReceipts: receivedJan1,
       fixedExpenses: [{ id: "rent", amount: 1200, dueDay: 10, createdAt: today }],
       creditCards: [],
       cardPurchases: [],
@@ -172,6 +207,7 @@ describe("calculateDailyBudget", () => {
     const today = new Date(2026, 0, 1);
     const result = calculateDailyBudget({
       incomes,
+      incomeReceipts: receivedJan1,
       fixedExpenses: [{ id: "rent", amount: 1200, dueDay: 10 }],
       creditCards: [],
       cardPurchases: [],
@@ -185,6 +221,7 @@ describe("calculateDailyBudget", () => {
     const today = new Date(2026, 0, 1);
     const base = {
       incomes,
+      incomeReceipts: receivedJan1,
       fixedExpenses: [],
       creditCards: [],
       cardPurchases: [],
@@ -235,6 +272,7 @@ describe("calculateDailyBudget", () => {
     // Purchased before this cycle's Jan-20 close, so it bills on Jan 27 (this period).
     const result = calculateDailyBudget({
       incomes,
+      incomeReceipts: receivedJan1,
       fixedExpenses: [],
       creditCards: [card],
       cardPurchases: [{ cardId: "c1", amount: 200, date: new Date(2026, 0, 5) }],
@@ -252,6 +290,7 @@ describe("calculateDailyBudget", () => {
 
     const beforeDue = calculateDailyBudget({
       incomes,
+      incomeReceipts: receivedJan1,
       fixedExpenses: [],
       creditCards: [card],
       cardPurchases: [purchase],
@@ -272,12 +311,12 @@ describe("calculateDailyBudget", () => {
     expect(afterDue.cardBillTotal).toBe(0);
   });
 
-  it("folds a card-linked fixed expense into the card bill instead of the fixed expense total", () => {
+  it("folds a card-linked fixed expense into the card bill instead of the fixed expense total, with no due day of its own", () => {
     const today = new Date(2026, 0, 1);
     const card = { id: "c1", closingDay: 20, dueDay: 27 };
     const result = calculateDailyBudget({
       incomes,
-      fixedExpenses: [{ id: "youtube", amount: 34.9, dueDay: 10, cardId: "c1" }],
+      fixedExpenses: [{ id: "youtube", amount: 34.9, cardId: "c1" }],
       creditCards: [card],
       cardPurchases: [],
       transactions: [],
@@ -291,13 +330,15 @@ describe("calculateDailyBudget", () => {
     ]);
   });
 
-  it("excludes a card-linked fixed expense's occurrence if it predates the expense's creation", () => {
+  it("excludes a card-linked fixed expense from a cycle that already closed before it was created", () => {
     const today = new Date(2026, 0, 1);
     const card = { id: "c1", closingDay: 20, dueDay: 27 };
+    // This cycle closes Jan 20, but the subscription was only added Jan 25 —
+    // after the close — so it shouldn't retroactively bill on Jan 27.
     const result = calculateDailyBudget({
       incomes,
       fixedExpenses: [
-        { id: "youtube", amount: 34.9, dueDay: 5, cardId: "c1", createdAt: new Date(2026, 0, 6) },
+        { id: "youtube", amount: 34.9, cardId: "c1", createdAt: new Date(2026, 0, 25) },
       ],
       creditCards: [card],
       cardPurchases: [],
@@ -306,6 +347,22 @@ describe("calculateDailyBudget", () => {
     });
     expect(result.cardBillTotal).toBe(0);
     expect(result.cardBillReminders).toEqual([]);
+  });
+
+  it("includes a card-linked fixed expense created before the cycle closes", () => {
+    const today = new Date(2026, 0, 1);
+    const card = { id: "c1", closingDay: 20, dueDay: 27 };
+    const result = calculateDailyBudget({
+      incomes,
+      fixedExpenses: [
+        { id: "youtube", amount: 34.9, cardId: "c1", createdAt: new Date(2026, 0, 10) },
+      ],
+      creditCards: [card],
+      cardPurchases: [],
+      transactions: [],
+      today,
+    });
+    expect(result.cardBillTotal).toBe(34.9);
   });
 });
 
@@ -362,7 +419,7 @@ describe("getCardBillsInPeriod", () => {
 
   it("adds a card-linked fixed expense's occurrence to the purchases in the same cycle", () => {
     const purchase = { cardId: "c1", amount: 100, date: new Date(2026, 0, 15) };
-    const subscription = { id: "youtube", amount: 34.9, dueDay: 10, cardId: "c1" };
+    const subscription = { id: "youtube", amount: 34.9, cardId: "c1" };
 
     const result = getCardBillsInPeriod(
       [card],
@@ -375,7 +432,7 @@ describe("getCardBillsInPeriod", () => {
   });
 
   it("ignores a fixed expense linked to a different card", () => {
-    const subscription = { id: "youtube", amount: 34.9, dueDay: 10, cardId: "other-card" };
+    const subscription = { id: "youtube", amount: 34.9, cardId: "other-card" };
     const result = getCardBillsInPeriod(
       [card],
       [],

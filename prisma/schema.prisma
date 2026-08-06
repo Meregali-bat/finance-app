@@ -15,6 +15,7 @@ model User {
   email             String             @unique
   passwordHash      String
   incomes           Income[]
+  incomeReceipts    IncomeReceipt[]
   fixedExpenses     FixedExpense[]
   transactions      Transaction[]
   creditCards       CreditCard[]
@@ -22,19 +23,51 @@ model User {
   jars              Jar[]
   jarDeposits       JarDeposit[]
   periodAllocations PeriodAllocation[]
+  categories        Category[]
   createdAt         DateTime           @default(now())
 }
 
+model Category {
+  id            String         @id @default(cuid())
+  userId        String
+  name          String
+  active        Boolean        @default(true)
+  createdAt     DateTime       @default(now())
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions  Transaction[]
+  cardPurchases CardPurchase[]
+
+  @@index([userId])
+}
+
 model Income {
-  id         String   @id @default(cuid())
+  id         String          @id @default(cuid())
   userId     String
   label      String
   amount     Decimal
   dayOfMonth Int
-  active     Boolean  @default(true)
-  createdAt  DateTime @default(now())
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  active     Boolean         @default(true)
+  createdAt  DateTime        @default(now())
+  user       User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  receipts   IncomeReceipt[]
 
+  @@index([userId])
+}
+
+/// Confirmation that a specific monthly occurrence of a fixed income was
+/// actually received. Unconfirmed occurrences don't count toward the
+/// period budget — see calculateDailyBudget in src/lib/period.ts.
+model IncomeReceipt {
+  id             String   @id @default(cuid())
+  incomeId       String
+  userId         String
+  occurrenceDate DateTime
+  amount         Decimal
+  createdAt      DateTime @default(now())
+  income         Income   @relation(fields: [incomeId], references: [id], onDelete: Cascade)
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([incomeId, occurrenceDate])
   @@index([userId])
 }
 
@@ -43,7 +76,7 @@ model FixedExpense {
   userId    String
   label     String
   amount    Decimal
-  dueDay    Int
+  dueDay    Int?
   active    Boolean     @default(true)
   createdAt DateTime    @default(now())
   cardId    String?
@@ -55,14 +88,17 @@ model FixedExpense {
 }
 
 model Transaction {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   userId      String
   amount      Decimal
   description String
-  date        DateTime @default(now())
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date        DateTime  @default(now())
+  categoryId  String?
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category    Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
 
   @@index([userId, date])
+  @@index([categoryId])
 }
 
 model CreditCard {
@@ -87,11 +123,14 @@ model CardPurchase {
   amount      Decimal
   description String
   date        DateTime   @default(now())
+  categoryId  String?
   card        CreditCard @relation(fields: [cardId], references: [id], onDelete: Cascade)
   user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category    Category?  @relation(fields: [categoryId], references: [id], onDelete: SetNull)
 
   @@index([cardId, date])
   @@index([userId])
+  @@index([categoryId])
 }
 
 model Jar {
