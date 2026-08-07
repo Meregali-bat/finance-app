@@ -8,8 +8,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { MovementFormDialog } from "@/components/forms/movement-form-dialog";
 import { MarkIncomeReceivedDialog } from "@/components/mark-income-received-dialog";
+import { ConfirmPaymentDialog } from "@/components/confirm-payment-dialog";
 import { DeleteIconButton } from "@/components/delete-icon-button";
 import { deleteTransaction } from "@/lib/actions/transaction";
+import { markCardBillPaid, markFixedExpensePaid } from "@/lib/actions/expense-payment";
 import { PeriodCloseCheck } from "@/components/period-close-check";
 
 function startOfDay(date: Date) {
@@ -20,14 +22,16 @@ export default async function DashboardPage() {
   const userId = await requireUserId();
   const today = new Date();
 
-  const [incomes, incomeReceipts, fixedExpenses, creditCards, transactions, categories] = await Promise.all([
-    prisma.income.findMany({ where: { userId, active: true } }),
-    prisma.incomeReceipt.findMany({ where: { userId } }),
-    prisma.fixedExpense.findMany({ where: { userId, active: true } }),
-    prisma.creditCard.findMany({ where: { userId, active: true }, include: { purchases: true } }),
-    prisma.transaction.findMany({ where: { userId }, orderBy: { date: "desc" } }),
-    prisma.category.findMany({ where: { userId, active: true }, orderBy: { name: "asc" } }),
-  ]);
+  const [incomes, incomeReceipts, fixedExpenses, creditCards, transactions, categories, expensePayments] =
+    await Promise.all([
+      prisma.income.findMany({ where: { userId, active: true } }),
+      prisma.incomeReceipt.findMany({ where: { userId } }),
+      prisma.fixedExpense.findMany({ where: { userId, active: true } }),
+      prisma.creditCard.findMany({ where: { userId, active: true }, include: { purchases: true } }),
+      prisma.transaction.findMany({ where: { userId }, orderBy: { date: "desc" } }),
+      prisma.category.findMany({ where: { userId, active: true }, orderBy: { name: "asc" } }),
+      prisma.expensePayment.findMany({ where: { userId } }),
+    ]);
 
   const budget = calculateDailyBudget({
     incomes: incomes.map((i) => ({
@@ -52,6 +56,14 @@ export default async function DashboardPage() {
     cardPurchases: creditCards.flatMap((c) =>
       c.purchases.map((p) => ({ cardId: c.id, amount: Number(p.amount), date: p.date })),
     ),
+    expensePayments: expensePayments.map((p) => ({
+      // null vira undefined: period.ts compara os dois lados por igualdade
+      // estrita, e null !== undefined faria o pagamento nunca casar.
+      fixedExpenseId: p.fixedExpenseId ?? undefined,
+      cardId: p.cardId ?? undefined,
+      dueDate: p.dueDate,
+      amount: Number(p.amount),
+    })),
     transactions: transactions.map((t) => ({ amount: Number(t.amount), date: t.date })),
     today,
   });
@@ -84,6 +96,7 @@ export default async function DashboardPage() {
       label: `Fatura do ${cardNameById.get(bill.cardId) ?? "cartão"}`,
       amount: bill.amount,
       dueDate: bill.dueDate,
+      payAction: markCardBillPaid.bind(null, bill.cardId),
     })),
     ...budget.fixedExpenseReminders.map((exp) => ({
       kind: "due" as const,
@@ -91,6 +104,7 @@ export default async function DashboardPage() {
       label: expenseLabelById.get(exp.expenseId) ?? "Despesa fixa",
       amount: exp.amount,
       dueDate: exp.dueDate,
+      payAction: markFixedExpensePaid.bind(null, exp.expenseId),
     })),
     ...budget.incomeReminders.map((inc) => ({
       kind: "income" as const,
@@ -168,12 +182,20 @@ export default async function DashboardPage() {
                 </Card>
               ) : (
                 <Card key={reminder.key} className="border-white/5">
-                  <CardContent className="flex items-center gap-3 py-3">
-                    <AlertTriangle className="size-4 shrink-0 text-negative" aria-hidden="true" />
-                    <p className="text-sm">
-                      {reminder.label}: {formatCurrency(reminder.amount)} vence em{" "}
-                      {formatDate(reminder.dueDate)}
-                    </p>
+                  <CardContent className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex items-center gap-3">
+                      <AlertTriangle className="size-4 shrink-0 text-negative" aria-hidden="true" />
+                      <p className="text-sm">
+                        {reminder.label}: {formatCurrency(reminder.amount)} vence em{" "}
+                        {formatDate(reminder.dueDate)}
+                      </p>
+                    </div>
+                    <ConfirmPaymentDialog
+                      action={reminder.payAction}
+                      label={reminder.label}
+                      dueDate={reminder.dueDate}
+                      amount={reminder.amount}
+                    />
                   </CardContent>
                 </Card>
               ),
