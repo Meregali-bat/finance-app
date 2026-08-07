@@ -37,6 +37,7 @@ model Category {
   user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   transactions  Transaction[]
   cardPurchases CardPurchase[]
+  fixedExpenses FixedExpense[]
 
   @@index([userId])
 }
@@ -73,20 +74,23 @@ model IncomeReceipt {
 }
 
 model FixedExpense {
-  id        String      @id @default(cuid())
-  userId    String
-  label     String
-  amount    Decimal
-  dueDay    Int?
-  active    Boolean     @default(true)
-  createdAt DateTime    @default(now())
-  cardId    String?
-  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  card      CreditCard? @relation(fields: [cardId], references: [id], onDelete: SetNull)
-  payments  ExpensePayment[]
+  id         String      @id @default(cuid())
+  userId     String
+  label      String
+  amount     Decimal
+  dueDay     Int?
+  active     Boolean     @default(true)
+  createdAt  DateTime    @default(now())
+  cardId     String?
+  categoryId String?
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  card       CreditCard? @relation(fields: [cardId], references: [id], onDelete: SetNull)
+  category   Category?   @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  payments   ExpensePayment[]
 
   @@index([userId])
   @@index([cardId])
+  @@index([categoryId])
 }
 
 /// Confirmação de que uma ocorrência específica de despesa (fatura de cartão

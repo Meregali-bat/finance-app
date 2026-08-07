@@ -14,6 +14,7 @@ const expenseSchema = z
       z.coerce.number().int().min(1).max(31).optional(),
     ),
     cardId: z.string().trim().optional().nullable(),
+    categoryId: z.string().trim().optional().nullable(),
   })
   .superRefine((data, ctx) => {
     if (!data.cardId && data.dueDay == null) {
@@ -23,35 +24,50 @@ const expenseSchema = z
 
 export async function createFixedExpense(formData: FormData) {
   const userId = await requireUserId();
-  const { cardId, dueDay, ...data } = expenseSchema.parse({
+  const { cardId, dueDay, categoryId, ...data } = expenseSchema.parse({
     label: formData.get("label"),
     amount: formData.get("amount"),
     dueDay: formData.get("dueDay"),
     cardId: formData.get("cardId"),
+    categoryId: formData.get("categoryId"),
   });
 
   await prisma.fixedExpense.create({
-    data: { ...data, dueDay: cardId ? null : (dueDay ?? null), cardId: cardId || null, userId },
+    data: {
+      ...data,
+      dueDay: cardId ? null : (dueDay ?? null),
+      cardId: cardId || null,
+      categoryId: categoryId || null,
+      userId,
+    },
   });
   revalidatePath("/despesas");
   revalidatePath("/");
+  revalidatePath("/historico");
 }
 
 export async function updateFixedExpense(id: string, formData: FormData) {
   const userId = await requireUserId();
-  const { cardId, dueDay, ...data } = expenseSchema.parse({
+  const { cardId, dueDay, categoryId, ...data } = expenseSchema.parse({
     label: formData.get("label"),
     amount: formData.get("amount"),
     dueDay: formData.get("dueDay"),
     cardId: formData.get("cardId"),
+    categoryId: formData.get("categoryId"),
   });
 
   await prisma.fixedExpense.update({
     where: { id, userId },
-    data: { ...data, dueDay: cardId ? null : (dueDay ?? null), cardId: cardId || null },
+    data: {
+      ...data,
+      dueDay: cardId ? null : (dueDay ?? null),
+      cardId: cardId || null,
+      categoryId: categoryId || null,
+    },
   });
   revalidatePath("/despesas");
   revalidatePath("/");
+  revalidatePath("/historico");
 }
 
 export async function deleteFixedExpense(id: string) {

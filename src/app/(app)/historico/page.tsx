@@ -1,39 +1,15 @@
 import Link from "next/link";
-import {
-  ChevronLeft,
-  ChevronRight,
-  CreditCard as CardIcon,
-  Receipt,
-  CircleCheck,
-} from "lucide-react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/auth-helpers";
-import { formatCurrency, formatDate } from "@/lib/format";
+import { formatCurrency } from "@/lib/format";
 import { parseMonthParam, monthParam, monthLabel, getMonthRange } from "@/lib/month-range";
-import { Card, CardContent } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { DeleteIconButton } from "@/components/delete-icon-button";
-import { deleteTransaction } from "@/lib/actions/transaction";
-import { deleteCardPurchase } from "@/lib/actions/card";
-import { unmarkExpensePayment } from "@/lib/actions/expense-payment";
+import { HistoryRow } from "@/components/movement-row";
+import { CategoryBreakdown, type CategoryGroup } from "@/components/category-breakdown";
+import { historyItemKey, type HistoryItem } from "@/lib/history-item";
 
-type HistoryItem = {
-  id: string;
-  kind: "transaction" | "card" | "fixedExpensePayment" | "cardBillPayment";
-  description: string;
-  amount: number;
-  date: Date;
-  cardId?: string;
-  cardName?: string;
-};
-
-type CategoryGroup = {
-  key: string;
-  name: string;
-  amount: number;
-  percent: number;
-};
+const UNCATEGORIZED = "__none__";
 
 export default async function HistoryPage({
   searchParams,
@@ -45,25 +21,40 @@ export default async function HistoryPage({
   const { year, monthIndex } = parseMonthParam(month);
   const { rangeStart, rangeEnd } = getMonthRange(year, monthIndex);
 
-  const [transactions, cardPurchases, expensePayments] = await Promise.all([
+  const [transactions, cardPurchases, expensePayments, categories, creditCards] = await Promise.all([
     prisma.transaction.findMany({
       where: { userId, date: { gte: rangeStart, lt: rangeEnd } },
-      include: { category: { select: { name: true } } },
+      include: { category: { select: { id: true, name: true } } },
     }),
     prisma.cardPurchase.findMany({
       where: { userId, date: { gte: rangeStart, lt: rangeEnd } },
-      include: { card: { select: { name: true } }, category: { select: { name: true } } },
+      include: {
+        card: { select: { name: true } },
+        category: { select: { id: true, name: true } },
+      },
     }),
     // Agrupado pela data em que foi pago, não pelo vencimento: pagar antes do
     // vencimento faz o registro cair no mês em que o dinheiro de fato saiu.
     prisma.expensePayment.findMany({
       where: { userId, paidAt: { gte: rangeStart, lt: rangeEnd } },
       include: {
-        fixedExpense: { select: { label: true } },
+        fixedExpense: {
+          select: { label: true, category: { select: { id: true, name: true } } },
+        },
         card: { select: { name: true } },
       },
     }),
+    prisma.category.findMany({ where: { userId, active: true }, orderBy: { name: "asc" } }),
+    prisma.creditCard.findMany({ where: { userId, active: true }, orderBy: { name: "asc" } }),
   ]);
+
+  // O nome vem junto de cada lançamento, e não só da lista de categorias
+  // ativas: um lançamento pode apontar para uma categoria já desativada.
+  const categoryNameById = new Map<string, string>(categories.map((c) => [c.id, c.name]));
+  const rememberCategory = (category: { id: string; name: string } | null | undefined) => {
+    if (category) categoryNameById.set(category.id, category.name);
+    return category?.id ?? null;
+  };
 
   const items: HistoryItem[] = [
     ...transactions.map((t) => ({
@@ -72,6 +63,7 @@ export default async function HistoryPage({
       description: t.description,
       amount: Number(t.amount),
       date: t.date,
+      categoryId: rememberCategory(t.category),
     })),
     ...cardPurchases.map((p) => ({
       id: p.id,
@@ -79,6 +71,7 @@ export default async function HistoryPage({
       description: p.description,
       amount: Number(p.amount),
       date: p.date,
+      categoryId: rememberCategory(p.category),
       cardId: p.cardId,
       cardName: p.card.name,
     })),
@@ -90,6 +83,7 @@ export default async function HistoryPage({
         : (p.fixedExpense?.label ?? "Despesa fixa"),
       amount: Number(p.amount),
       date: p.paidAt,
+      categoryId: rememberCategory(p.fixedExpense?.category),
       cardId: p.cardId ?? undefined,
       cardName: p.card?.name,
     })),
@@ -108,27 +102,30 @@ export default async function HistoryPage({
 
   const expenseTotal = items.filter(countsAsSpending).reduce((sum, i) => sum + i.amount, 0);
 
-  const categorized = [
-    ...transactions.map((t) => ({ amount: Number(t.amount), categoryName: t.category?.name })),
-    ...cardPurchases.map((p) => ({ amount: Number(p.amount), categoryName: p.category?.name })),
-    // Despesa fixa não tem categoria no modelo, então cai em "Sem categoria".
-    ...expensePayments
-      .filter((p) => !p.cardId)
-      .map((p) => ({ amount: Number(p.amount), categoryName: undefined })),
-  ].filter((item) => item.amount > 0);
-  const amountByCategory = new Map<string, number>();
-  for (const item of categorized) {
-    const key = item.categoryName ?? "Sem categoria";
-    amountByCategory.set(key, (amountByCategory.get(key) ?? 0) + item.amount);
+  // Agrupado por id, não por nome: nada impede duas categorias homônimas, e
+  // fundi-las num balde só esconderia a diferença.
+  const byCategory = new Map<string, { amount: number; items: HistoryItem[] }>();
+  for (const item of items.filter(countsAsSpending)) {
+    const key = item.categoryId ?? UNCATEGORIZED;
+    const group = byCategory.get(key) ?? { amount: 0, items: [] };
+    group.amount += item.amount;
+    group.items.push(item);
+    byCategory.set(key, group);
   }
-  const categoryGroups: CategoryGroup[] = Array.from(amountByCategory.entries())
-    .map(([name, amount]) => ({
-      key: name,
-      name,
-      amount,
-      percent: expenseTotal !== 0 ? Math.max(0, Math.round((amount / expenseTotal) * 100)) : 0,
+
+  const categoryGroups: CategoryGroup[] = Array.from(byCategory.entries())
+    .map(([key, group]) => ({
+      key,
+      name: key === UNCATEGORIZED ? "Sem categoria" : (categoryNameById.get(key) ?? "Sem categoria"),
+      amount: group.amount,
+      items: group.items,
+      percent:
+        expenseTotal !== 0 ? Math.max(0, Math.round((group.amount / expenseTotal) * 100)) : 0,
     }))
     .sort((a, b) => b.amount - a.amount);
+
+  const categoryOptions = categories.map((c) => ({ id: c.id, name: c.name }));
+  const cardOptions = creditCards.map((c) => ({ id: c.id, name: c.name }));
 
   const prevMonth = monthIndex === 0 ? { year: year - 1, monthIndex: 11 } : { year, monthIndex: monthIndex - 1 };
   const nextMonth = monthIndex === 11 ? { year: year + 1, monthIndex: 0 } : { year, monthIndex: monthIndex + 1 };
@@ -173,73 +170,25 @@ export default async function HistoryPage({
             <EmptyState text="Nenhum lançamento neste mês." />
           ) : (
             items.map((item) => (
-              <Card key={`${item.kind}-${item.id}`}>
-                <CardContent className="flex items-center justify-between gap-3 py-3">
-                  <div className="flex min-w-0 items-center gap-3">
-                    {item.kind === "card" ? (
-                      <CardIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-                    ) : item.kind === "transaction" ? (
-                      <Receipt className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-                    ) : (
-                      <CircleCheck className="size-4 shrink-0 text-primary" aria-hidden="true" />
-                    )}
-                    <div className="min-w-0">
-                      <p className="truncate font-medium">{item.description}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {item.kind === "fixedExpensePayment" || item.kind === "cardBillPayment"
-                          ? `Pago em ${formatDate(item.date)}`
-                          : formatDate(item.date)}
-                        {item.kind === "card" && item.cardName ? ` · ${item.cardName}` : ""}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    <span
-                      className={`font-medium tabular-nums ${item.amount < 0 ? "text-primary" : ""}`}
-                    >
-                      {formatCurrency(Math.abs(item.amount))}
-                    </span>
-                    {item.kind === "transaction" ? (
-                      <DeleteIconButton
-                        action={deleteTransaction.bind(null, item.id)}
-                        confirmMessage={`Excluir o gasto "${item.description}"?`}
-                      />
-                    ) : item.kind === "card" ? (
-                      <DeleteIconButton
-                        action={deleteCardPurchase.bind(null, item.id, item.cardId!)}
-                        confirmMessage={`Excluir a compra "${item.description}"?`}
-                      />
-                    ) : (
-                      <DeleteIconButton
-                        action={unmarkExpensePayment.bind(null, item.id)}
-                        confirmMessage={`Desfazer o pagamento de "${item.description}"? O lembrete volta a aparecer no início.`}
-                      />
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
+              <HistoryRow
+                key={historyItemKey(item)}
+                item={item}
+                cards={cardOptions}
+                categories={categoryOptions}
+              />
             ))
           )}
         </TabsContent>
 
-        <TabsContent value="categorias" className="flex flex-col gap-2 pt-4">
+        <TabsContent value="categorias" className="pt-4">
           {categoryGroups.length === 0 ? (
             <EmptyState text="Nenhum lançamento neste mês." />
           ) : (
-            categoryGroups.map((group) => (
-              <Card key={group.key}>
-                <CardContent className="flex flex-col gap-2 py-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="min-w-0 truncate font-medium">{group.name}</p>
-                    <div className="flex shrink-0 items-center gap-2 text-sm">
-                      <span className="font-medium tabular-nums">{formatCurrency(group.amount)}</span>
-                      <span className="text-muted-foreground tabular-nums">{group.percent}%</span>
-                    </div>
-                  </div>
-                  <Progress value={group.percent} />
-                </CardContent>
-              </Card>
-            ))
+            <CategoryBreakdown
+              groups={categoryGroups}
+              cards={cardOptions}
+              categories={categoryOptions}
+            />
           )}
         </TabsContent>
       </Tabs>

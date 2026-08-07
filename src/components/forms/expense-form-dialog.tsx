@@ -31,17 +31,21 @@ type ExpenseValues = {
   amount: number;
   dueDay: number | null;
   cardId?: string | null;
+  categoryId?: string | null;
 };
 
 export function ExpenseFormDialog({
   expense,
   cards = [],
+  categories = [],
 }: {
   expense?: ExpenseValues;
   cards?: { id: string; name: string }[];
+  categories?: { id: string; name: string }[];
 }) {
   const [open, setOpen] = useState(false);
   const [cardId, setCardId] = useState<string>(expense?.cardId ?? NONE);
+  const [categoryId, setCategoryId] = useState<string>(expense?.categoryId ?? NONE);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const isEdit = !!expense;
@@ -145,6 +149,29 @@ export function ExpenseFormDialog({
             <p className="text-sm text-muted-foreground">
               O vencimento segue a fatura do cartão selecionado.
             </p>
+          )}
+          {categories.length > 0 && (
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="categoryId">Categoria</Label>
+              <input type="hidden" name="categoryId" value={categoryId === NONE ? "" : categoryId} />
+              <Select value={categoryId} onValueChange={(v) => setCategoryId(v as string)}>
+                <SelectTrigger id="categoryId" className="w-full">
+                  <SelectValue>
+                    {(value: string) =>
+                      value === NONE ? "Sem categoria" : categories.find((c) => c.id === value)?.name
+                    }
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NONE}>Sem categoria</SelectItem>
+                  {categories.map((category) => (
+                    <SelectItem key={category.id} value={category.id}>
+                      {category.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           )}
           {error && (
             <p role="alert" className="text-sm text-negative">
