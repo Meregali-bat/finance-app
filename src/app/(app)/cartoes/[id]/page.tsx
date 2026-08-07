@@ -3,13 +3,15 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/auth-helpers";
-import { formatCurrency, formatDate } from "@/lib/format";
+import { formatCurrency, formatDate, formatDateOnly } from "@/lib/format";
 import { getCardBillsInPeriod } from "@/lib/period";
 import { Card, CardContent } from "@/components/ui/card";
 import { CardFormDialog } from "@/components/forms/card-form-dialog";
 import { CardPurchaseFormDialog } from "@/components/forms/card-purchase-form-dialog";
+import { MovementRow } from "@/components/movement-row";
+import { toMovementValues } from "@/lib/history-item";
 import { DeleteIconButton } from "@/components/delete-icon-button";
-import { deleteCreditCard, deleteCardPurchase } from "@/lib/actions/card";
+import { deleteCreditCard } from "@/lib/actions/card";
 
 export default async function CardDetailPage({
   params,
@@ -28,6 +30,8 @@ export default async function CardDetailPage({
   ]);
 
   if (!card) notFound();
+
+  const categoryOptions = categories.map((c) => ({ id: c.id, name: c.name }));
 
   const today = new Date();
   const farFuture = new Date(today);
@@ -81,10 +85,7 @@ export default async function CardDetailPage({
         </CardContent>
       </Card>
 
-      <CardPurchaseFormDialog
-        cardId={card.id}
-        categories={categories.map((c) => ({ id: c.id, name: c.name }))}
-      />
+      <CardPurchaseFormDialog cardId={card.id} categories={categoryOptions} />
 
       {card.purchases.length === 0 ? (
         <p className="rounded-lg border border-dashed border-border py-8 text-center text-sm text-muted-foreground">
@@ -93,23 +94,21 @@ export default async function CardDetailPage({
       ) : (
         <div className="flex flex-col gap-2">
           {card.purchases.map((purchase) => (
-            <Card key={purchase.id}>
-              <CardContent className="flex items-center justify-between gap-3 py-3">
-                <div className="min-w-0">
-                  <p className="truncate font-medium">{purchase.description}</p>
-                  <p className="text-sm text-muted-foreground">{formatDate(purchase.date)}</p>
-                </div>
-                <div className="flex shrink-0 items-center gap-2">
-                  <span className="font-medium tabular-nums">
-                    {formatCurrency(Number(purchase.amount))}
-                  </span>
-                  <DeleteIconButton
-                    action={deleteCardPurchase.bind(null, purchase.id, card.id)}
-                    confirmMessage={`Excluir a compra "${purchase.description}"?`}
-                  />
-                </div>
-              </CardContent>
-            </Card>
+            <MovementRow
+              key={purchase.id}
+              movement={toMovementValues({
+                id: purchase.id,
+                kind: "card",
+                description: purchase.description,
+                amount: Number(purchase.amount),
+                date: purchase.date,
+                categoryId: purchase.categoryId,
+                cardId: card.id,
+              })}
+              subtitle={formatDateOnly(purchase.date)}
+              cards={[{ id: card.id, name: card.name }]}
+              categories={categoryOptions}
+            />
           ))}
         </div>
       )}

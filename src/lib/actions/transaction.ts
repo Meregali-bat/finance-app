@@ -36,6 +36,29 @@ export async function createTransaction(formData: FormData) {
   revalidatePath("/historico");
 }
 
+export async function updateTransaction(id: string, formData: FormData) {
+  const userId = await requireUserId();
+  const data = transactionSchema.parse({
+    description: formData.get("description"),
+    amount: formData.get("amount"),
+    type: formData.get("type") || undefined,
+    date: formData.get("date") || undefined,
+    categoryId: formData.get("categoryId"),
+  });
+
+  await prisma.transaction.update({
+    where: { id, userId },
+    data: {
+      description: data.description,
+      amount: data.type === "income" ? -data.amount : data.amount,
+      categoryId: data.categoryId || null,
+      ...(data.date ? { date: data.date } : {}),
+    },
+  });
+  revalidatePath("/");
+  revalidatePath("/historico");
+}
+
 export async function deleteTransaction(id: string) {
   const userId = await requireUserId();
   await prisma.transaction.delete({ where: { id, userId } });

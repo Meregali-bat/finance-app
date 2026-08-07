@@ -7,10 +7,10 @@ import { formatCurrency, formatDate } from "@/lib/format";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { MovementFormDialog } from "@/components/forms/movement-form-dialog";
+import { MovementRow } from "@/components/movement-row";
+import { toMovementValues } from "@/lib/history-item";
 import { MarkIncomeReceivedDialog } from "@/components/mark-income-received-dialog";
 import { ConfirmPaymentDialog } from "@/components/confirm-payment-dialog";
-import { DeleteIconButton } from "@/components/delete-icon-button";
-import { deleteTransaction } from "@/lib/actions/transaction";
 import { markCardBillPaid, markFixedExpensePaid } from "@/lib/actions/expense-payment";
 import { PeriodCloseCheck } from "@/components/period-close-check";
 
@@ -84,6 +84,9 @@ export default async function DashboardPage() {
     .sort((a, b) => a.date.getTime() - b.date.getTime());
 
   const isOverBudget = budget.dailyAvailable < 0;
+
+  const cardOptions = creditCards.map((c) => ({ id: c.id, name: c.name }));
+  const categoryOptions = categories.map((c) => ({ id: c.id, name: c.name }));
 
   const cardNameById = new Map(creditCards.map((c) => [c.id, c.name]));
   const expenseLabelById = new Map(fixedExpenses.map((e) => [e.id, e.label]));
@@ -213,22 +216,19 @@ export default async function DashboardPage() {
         ) : (
           <div className="flex flex-col gap-2">
             {todaysTransactions.map((t) => (
-              <Card key={t.id}>
-                <CardContent className="flex items-center justify-between gap-3 py-3">
-                  <p className="min-w-0 truncate font-medium">{t.description}</p>
-                  <div className="flex shrink-0 items-center gap-2">
-                    <span
-                      className={`font-medium tabular-nums ${Number(t.amount) < 0 ? "text-primary" : ""}`}
-                    >
-                      {formatCurrency(Math.abs(Number(t.amount)))}
-                    </span>
-                    <DeleteIconButton
-                      action={deleteTransaction.bind(null, t.id)}
-                      confirmMessage={`Excluir o lançamento "${t.description}"?`}
-                    />
-                  </div>
-                </CardContent>
-              </Card>
+              <MovementRow
+                key={t.id}
+                movement={toMovementValues({
+                  id: t.id,
+                  kind: "transaction",
+                  description: t.description,
+                  amount: Number(t.amount),
+                  date: t.date,
+                  categoryId: t.categoryId,
+                })}
+                cards={cardOptions}
+                categories={categoryOptions}
+              />
             ))}
           </div>
         )}
@@ -239,32 +239,26 @@ export default async function DashboardPage() {
           <h2 className="text-sm font-medium text-muted-foreground">Amanhã</h2>
           <div className="flex flex-col gap-2">
             {tomorrowsTransactions.map((t) => (
-              <Card key={t.id}>
-                <CardContent className="flex items-center justify-between gap-3 py-3">
-                  <p className="min-w-0 truncate font-medium">{t.description}</p>
-                  <div className="flex shrink-0 items-center gap-2">
-                    <span
-                      className={`font-medium tabular-nums ${Number(t.amount) < 0 ? "text-primary" : ""}`}
-                    >
-                      {formatCurrency(Math.abs(Number(t.amount)))}
-                    </span>
-                    <DeleteIconButton
-                      action={deleteTransaction.bind(null, t.id)}
-                      confirmMessage={`Excluir o lançamento "${t.description}"?`}
-                    />
-                  </div>
-                </CardContent>
-              </Card>
+              <MovementRow
+                key={t.id}
+                movement={toMovementValues({
+                  id: t.id,
+                  kind: "transaction",
+                  description: t.description,
+                  amount: Number(t.amount),
+                  date: t.date,
+                  categoryId: t.categoryId,
+                })}
+                cards={cardOptions}
+                categories={categoryOptions}
+              />
             ))}
           </div>
         </div>
       )}
 
       <div className="fixed bottom-20 right-4 z-10">
-        <MovementFormDialog
-          cards={creditCards.map((c) => ({ id: c.id, name: c.name }))}
-          categories={categories.map((c) => ({ id: c.id, name: c.name }))}
-        />
+        <MovementFormDialog cards={cardOptions} categories={categoryOptions} />
       </div>
     </div>
   );

@@ -69,6 +69,25 @@ export async function createCardPurchase(cardId: string, formData: FormData) {
   revalidatePath("/historico");
 }
 
+export async function updateCardPurchase(id: string, cardId: string, formData: FormData) {
+  const userId = await requireUserId();
+  const { categoryId, ...data } = purchaseSchema.parse({
+    description: formData.get("description"),
+    amount: formData.get("amount"),
+    date: formData.get("date"),
+    categoryId: formData.get("categoryId"),
+  });
+
+  await prisma.cardPurchase.update({
+    where: { id, userId },
+    data: { ...data, categoryId: categoryId || null },
+  });
+  revalidatePath(`/cartoes/${cardId}`);
+  revalidatePath("/cartoes");
+  revalidatePath("/");
+  revalidatePath("/historico");
+}
+
 export async function deleteCardPurchase(id: string, cardId: string) {
   const userId = await requireUserId();
   await prisma.cardPurchase.delete({ where: { id, userId } });
