@@ -1,5 +1,11 @@
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, CreditCard as CardIcon, Receipt } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  CreditCard as CardIcon,
+  Receipt,
+  CircleCheck,
+} from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/auth-helpers";
 import { formatCurrency, formatDate } from "@/lib/format";
@@ -10,10 +16,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DeleteIconButton } from "@/components/delete-icon-button";
 import { deleteTransaction } from "@/lib/actions/transaction";
 import { deleteCardPurchase } from "@/lib/actions/card";
+import { unmarkExpensePayment } from "@/lib/actions/expense-payment";
 
 type HistoryItem = {
   id: string;
-  kind: "transaction" | "card";
+  kind: "transaction" | "card" | "fixedExpensePayment" | "cardBillPayment";
   description: string;
   amount: number;
   date: Date;
@@ -38,7 +45,7 @@ export default async function HistoryPage({
   const { year, monthIndex } = parseMonthParam(month);
   const { rangeStart, rangeEnd } = getMonthRange(year, monthIndex);
 
-  const [transactions, cardPurchases] = await Promise.all([
+  const [transactions, cardPurchases, expensePayments] = await Promise.all([
     prisma.transaction.findMany({
       where: { userId, date: { gte: rangeStart, lt: rangeEnd } },
       include: { category: { select: { name: true } } },
@@ -46,6 +53,15 @@ export default async function HistoryPage({
     prisma.cardPurchase.findMany({
       where: { userId, date: { gte: rangeStart, lt: rangeEnd } },
       include: { card: { select: { name: true } }, category: { select: { name: true } } },
+    }),
+    // Agrupado pela data em que foi pago, não pelo vencimento: pagar antes do
+    // vencimento faz o registro cair no mês em que o dinheiro de fato saiu.
+    prisma.expensePayment.findMany({
+      where: { userId, paidAt: { gte: rangeStart, lt: rangeEnd } },
+      include: {
+        fixedExpense: { select: { label: true } },
+        card: { select: { name: true } },
+      },
     }),
   ]);
 
@@ -66,16 +82,39 @@ export default async function HistoryPage({
       cardId: p.cardId,
       cardName: p.card.name,
     })),
+    ...expensePayments.map((p) => ({
+      id: p.id,
+      kind: p.cardId ? ("cardBillPayment" as const) : ("fixedExpensePayment" as const),
+      description: p.cardId
+        ? `Fatura do ${p.card?.name ?? "cartão"}`
+        : (p.fixedExpense?.label ?? "Despesa fixa"),
+      amount: Number(p.amount),
+      date: p.paidAt,
+      cardId: p.cardId ?? undefined,
+      cardName: p.card?.name,
+    })),
   ].sort((a, b) => b.date.getTime() - a.date.getTime());
 
   // Income is stored as a negative amount, so it has to be left out of the
   // spending figures — otherwise it would land in a category bucket as if it
   // were an expense, and cancel out part of the month's total.
-  const expenseTotal = items.filter((i) => i.amount > 0).reduce((sum, i) => sum + i.amount, 0);
+  //
+  // A fatura de cartão paga também fica de fora: as compras dela já estão
+  // listadas uma a uma acima, e somar a fatura contaria o mesmo dinheiro duas
+  // vezes. A despesa fixa paga, essa entra — ela não aparece em nenhum outro
+  // lugar do Histórico.
+  const countsAsSpending = (item: HistoryItem) =>
+    item.amount > 0 && item.kind !== "cardBillPayment";
+
+  const expenseTotal = items.filter(countsAsSpending).reduce((sum, i) => sum + i.amount, 0);
 
   const categorized = [
     ...transactions.map((t) => ({ amount: Number(t.amount), categoryName: t.category?.name })),
     ...cardPurchases.map((p) => ({ amount: Number(p.amount), categoryName: p.category?.name })),
+    // Despesa fixa não tem categoria no modelo, então cai em "Sem categoria".
+    ...expensePayments
+      .filter((p) => !p.cardId)
+      .map((p) => ({ amount: Number(p.amount), categoryName: undefined })),
   ].filter((item) => item.amount > 0);
   const amountByCategory = new Map<string, number>();
   for (const item of categorized) {
@@ -139,14 +178,18 @@ export default async function HistoryPage({
                   <div className="flex min-w-0 items-center gap-3">
                     {item.kind === "card" ? (
                       <CardIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-                    ) : (
+                    ) : item.kind === "transaction" ? (
                       <Receipt className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                    ) : (
+                      <CircleCheck className="size-4 shrink-0 text-primary" aria-hidden="true" />
                     )}
                     <div className="min-w-0">
                       <p className="truncate font-medium">{item.description}</p>
                       <p className="text-sm text-muted-foreground">
-                        {formatDate(item.date)}
-                        {item.cardName ? ` · ${item.cardName}` : ""}
+                        {item.kind === "fixedExpensePayment" || item.kind === "cardBillPayment"
+                          ? `Pago em ${formatDate(item.date)}`
+                          : formatDate(item.date)}
+                        {item.kind === "card" && item.cardName ? ` · ${item.cardName}` : ""}
                       </p>
                     </div>
                   </div>
@@ -161,10 +204,15 @@ export default async function HistoryPage({
                         action={deleteTransaction.bind(null, item.id)}
                         confirmMessage={`Excluir o gasto "${item.description}"?`}
                       />
-                    ) : (
+                    ) : item.kind === "card" ? (
                       <DeleteIconButton
                         action={deleteCardPurchase.bind(null, item.id, item.cardId!)}
                         confirmMessage={`Excluir a compra "${item.description}"?`}
+                      />
+                    ) : (
+                      <DeleteIconButton
+                        action={unmarkExpensePayment.bind(null, item.id)}
+                        confirmMessage={`Desfazer o pagamento de "${item.description}"? O lembrete volta a aparecer no início.`}
                       />
                     )}
                   </div>

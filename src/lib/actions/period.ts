@@ -13,13 +13,15 @@ import {
 } from "@/lib/period";
 
 async function loadBudgetInputs(userId: string) {
-  const [incomes, incomeReceipts, fixedExpenses, creditCards, transactions] = await Promise.all([
-    prisma.income.findMany({ where: { userId } }),
-    prisma.incomeReceipt.findMany({ where: { userId } }),
-    prisma.fixedExpense.findMany({ where: { userId } }),
-    prisma.creditCard.findMany({ where: { userId }, include: { purchases: true } }),
-    prisma.transaction.findMany({ where: { userId } }),
-  ]);
+  const [incomes, incomeReceipts, fixedExpenses, creditCards, transactions, expensePayments] =
+    await Promise.all([
+      prisma.income.findMany({ where: { userId } }),
+      prisma.incomeReceipt.findMany({ where: { userId } }),
+      prisma.fixedExpense.findMany({ where: { userId } }),
+      prisma.creditCard.findMany({ where: { userId }, include: { purchases: true } }),
+      prisma.transaction.findMany({ where: { userId } }),
+      prisma.expensePayment.findMany({ where: { userId } }),
+    ]);
 
   const incomeInputs: IncomeInput[] = incomes.map((i) => ({
     id: i.id,
@@ -54,6 +56,12 @@ async function loadBudgetInputs(userId: string) {
     fixedExpenses: fixedExpenseInputs,
     creditCards: creditCardInputs,
     cardPurchases: cardPurchaseInputs,
+    expensePayments: expensePayments.map((p) => ({
+      fixedExpenseId: p.fixedExpenseId ?? undefined,
+      cardId: p.cardId ?? undefined,
+      dueDate: p.dueDate,
+      amount: Number(p.amount),
+    })),
     transactions: transactionInputs,
   };
 }
