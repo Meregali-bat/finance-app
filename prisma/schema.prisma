@@ -24,6 +24,7 @@ model User {
   jarDeposits       JarDeposit[]
   periodAllocations PeriodAllocation[]
   categories        Category[]
+  expensePayments   ExpensePayment[]
   createdAt         DateTime           @default(now())
 }
 
@@ -82,9 +83,38 @@ model FixedExpense {
   cardId    String?
   user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   card      CreditCard? @relation(fields: [cardId], references: [id], onDelete: SetNull)
+  payments  ExpensePayment[]
 
   @@index([userId])
   @@index([cardId])
+}
+
+/// Confirmação de que uma ocorrência específica de despesa (fatura de cartão
+/// ou despesa fixa) foi paga. Uma ocorrência paga sai dos lembretes mas
+/// continua somando no total do período — ver calculateDailyBudget em
+/// src/lib/period.ts.
+model ExpensePayment {
+  id             String        @id @default(cuid())
+  userId         String
+  /// Preenchido quando o pagamento quita uma despesa fixa avulsa.
+  fixedExpenseId String?
+  /// Preenchido quando o pagamento quita a fatura de um cartão.
+  cardId         String?
+  /// O vencimento da ocorrência quitada — a identidade do pagamento, mesmo
+  /// quando ele acontece antes do vencimento.
+  dueDate        DateTime
+  amount         Decimal
+  /// Quando o pagamento foi confirmado. É por esta data que o Histórico
+  /// agrupa o pagamento em um mês.
+  paidAt         DateTime      @default(now())
+  createdAt      DateTime      @default(now())
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fixedExpense   FixedExpense? @relation(fields: [fixedExpenseId], references: [id], onDelete: Cascade)
+  card           CreditCard?   @relation(fields: [cardId], references: [id], onDelete: Cascade)
+
+  @@unique([fixedExpenseId, dueDate])
+  @@unique([cardId, dueDate])
+  @@index([userId, paidAt])
 }
 
 model Transaction {
@@ -112,6 +142,7 @@ model CreditCard {
   user       User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   purchases  CardPurchase[]
   fixedExpenses FixedExpense[]
+  payments      ExpensePayment[]
 
   @@index([userId])
 }
