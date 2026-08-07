@@ -594,3 +594,103 @@ describe("getPreviousPeriodBounds", () => {
     expect(periodEnd).toEqual(new Date(2026, 1, 5));
   });
 });
+
+describe("calculateDailyBudget com pagamentos confirmados", () => {
+  const baseInput = {
+    incomes: [{ id: "i1", amount: 3000, dayOfMonth: 5 }],
+    incomeReceipts: [{ incomeId: "i1", occurrenceDate: new Date(2026, 0, 5), amount: 3000 }],
+    creditCards: [],
+    cardPurchases: [],
+    transactions: [],
+    today: new Date(2026, 0, 10),
+  };
+
+  it("tira a despesa fixa paga dos lembretes", () => {
+    const budget = calculateDailyBudget({
+      ...baseInput,
+      fixedExpenses: [{ id: "e1", amount: 500, dueDay: 20 }],
+      expensePayments: [{ fixedExpenseId: "e1", dueDate: new Date(2026, 0, 20), amount: 500 }],
+    });
+    expect(budget.fixedExpenseReminders).toEqual([]);
+  });
+
+  it("mantém a despesa fixa paga no total do período", () => {
+    // Confirmar o pagamento não devolve dinheiro: o valor já estava reservado.
+    const unpaid = calculateDailyBudget({
+      ...baseInput,
+      fixedExpenses: [{ id: "e1", amount: 500, dueDay: 20 }],
+    });
+    const paid = calculateDailyBudget({
+      ...baseInput,
+      fixedExpenses: [{ id: "e1", amount: 500, dueDay: 20 }],
+      expensePayments: [{ fixedExpenseId: "e1", dueDate: new Date(2026, 0, 20), amount: 500 }],
+    });
+    expect(paid.fixedExpenseTotal).toBe(500);
+    expect(paid.periodBalance).toBe(unpaid.periodBalance);
+  });
+
+  it("usa o valor pago no lugar da estimativa quando eles diferem", () => {
+    const budget = calculateDailyBudget({
+      ...baseInput,
+      fixedExpenses: [{ id: "e1", amount: 500, dueDay: 20 }],
+      expensePayments: [{ fixedExpenseId: "e1", dueDate: new Date(2026, 0, 20), amount: 620 }],
+    });
+    expect(budget.fixedExpenseTotal).toBe(620);
+    expect(budget.periodBalance).toBe(3000 - 620);
+  });
+
+  it("não confunde o pagamento de uma ocorrência com o de outro mês", () => {
+    const budget = calculateDailyBudget({
+      ...baseInput,
+      fixedExpenses: [{ id: "e1", amount: 500, dueDay: 20 }],
+      // Pagamento do vencimento de dezembro, não o de janeiro.
+      expensePayments: [{ fixedExpenseId: "e1", dueDate: new Date(2025, 11, 20), amount: 500 }],
+    });
+    expect(budget.fixedExpenseReminders).toHaveLength(1);
+    expect(budget.fixedExpenseReminders[0].dueDate).toEqual(new Date(2026, 0, 20));
+  });
+
+  it("ignora a hora do dia ao casar o pagamento com a ocorrência", () => {
+    const budget = calculateDailyBudget({
+      ...baseInput,
+      fixedExpenses: [{ id: "e1", amount: 500, dueDay: 20 }],
+      expensePayments: [
+        { fixedExpenseId: "e1", dueDate: new Date(2026, 0, 20, 15, 30), amount: 500 },
+      ],
+    });
+    expect(budget.fixedExpenseReminders).toEqual([]);
+  });
+
+  it("tira a fatura paga dos lembretes sem mexer no total", () => {
+    const input = {
+      ...baseInput,
+      fixedExpenses: [],
+      creditCards: [{ id: "c1", closingDay: 28, dueDay: 8 }],
+      // Dentro do ciclo (28/nov, 28/dez] que gera a fatura vencendo em 8/jan.
+      cardPurchases: [{ cardId: "c1", amount: 200, date: new Date(2025, 11, 20) }],
+      today: new Date(2026, 0, 6),
+    };
+    const unpaid = calculateDailyBudget(input);
+    expect(unpaid.cardBillReminders).toHaveLength(1);
+
+    const paid = calculateDailyBudget({
+      ...input,
+      expensePayments: [
+        { cardId: "c1", dueDate: unpaid.cardBillReminders[0].dueDate, amount: 200 },
+      ],
+    });
+    expect(paid.cardBillReminders).toEqual([]);
+    expect(paid.cardBillTotal).toBe(unpaid.cardBillTotal);
+  });
+
+  it("não deixa o pagamento de uma despesa fixa quitar a fatura de um cartão de mesmo id", () => {
+    // fixedExpenseId e cardId vivem em espaços de id diferentes; casar só por
+    // data quitaria a coisa errada.
+    const budget = calculateDailyBudget({
+      ...baseInput,
+      fixedExpenses: [{ id: "x", amount: 500, dueDay: 20 }],
+      expensePayments: [{ cardId: "x", dueDate: new Date(2026, 0, 20), amount: 500 }],
+    });
+    expect(budget.fixedExpenseReminders).toHaveLength(1);
+  });
+});

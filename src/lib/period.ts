@@ -45,6 +45,19 @@ export interface CardPurchaseInput {
   date: Date;
 }
 
+/**
+ * Confirmação de que uma ocorrência de despesa foi paga. Exatamente um entre
+ * fixedExpenseId e cardId vem preenchido.
+ */
+export interface ExpensePaymentInput {
+  fixedExpenseId?: string;
+  cardId?: string;
+  /** O vencimento da ocorrência quitada — não a data em que o usuário pagou. */
+  dueDate: Date;
+  /** O valor realmente pago, que pode diferir da estimativa. */
+  amount: number;
+}
+
 export interface TransactionInput {
   amount: number;
   date: Date;
@@ -184,6 +197,25 @@ function isPaydayConfirmed(
 }
 
 /**
+ * O pagamento que quita uma ocorrência, se houver. A chave é o par
+ * (de quem é a despesa, qual vencimento) — comparar só por data quitaria a
+ * ocorrência errada quando duas despesas vencem no mesmo dia.
+ */
+function findExpensePayment(
+  payments: ExpensePaymentInput[],
+  key: { fixedExpenseId?: string; cardId?: string },
+  dueDate: Date,
+): ExpensePaymentInput | undefined {
+  const day = startOfDay(dueDate).getTime();
+  return payments.find(
+    (p) =>
+      p.fixedExpenseId === key.fixedExpenseId &&
+      p.cardId === key.cardId &&
+      startOfDay(p.dueDate).getTime() === day,
+  );
+}
+
+/**
  * The current period's boundaries, derived from every active income's
  * recurring day-of-month. periodStart is the most recent payday across all
  * sources; periodEnd is the soonest upcoming one (exclusive). If no income
@@ -283,10 +315,20 @@ export function calculateDailyBudget(input: {
   fixedExpenses: FixedExpenseInput[];
   creditCards: CreditCardInput[];
   cardPurchases: CardPurchaseInput[];
+  expensePayments?: ExpensePaymentInput[];
   transactions: TransactionInput[];
   today: Date;
 }): PeriodBudget {
-  const { incomes, incomeReceipts = [], fixedExpenses, creditCards, cardPurchases, transactions, today } = input;
+  const {
+    incomes,
+    incomeReceipts = [],
+    fixedExpenses,
+    creditCards,
+    cardPurchases,
+    expensePayments = [],
+    transactions,
+    today,
+  } = input;
   const { periodStart, periodEnd } = getPeriodBounds(incomes, today, incomeReceipts);
 
   /**
@@ -331,23 +373,49 @@ export function calculateDailyBudget(input: {
   const standaloneFixedExpenses = fixedExpenses.filter((exp) => !exp.cardId);
   const cardFixedExpenses = fixedExpenses.filter((exp) => exp.cardId);
 
-  const fixedExpenseReminders: FixedExpenseReminder[] = standaloneFixedExpenses.flatMap((exp) => {
+  /**
+   * Toda ocorrência de despesa fixa no período, paga ou não. Os totais saem
+   * daqui, não dos lembretes: confirmar um pagamento tira o lembrete da tela
+   * mas o dinheiro continua comprometido — se o total caísse junto, o
+   * orçamento diário daria um salto na hora do "marcar como paga".
+   */
+  const fixedExpenseOccurrences = standaloneFixedExpenses.flatMap((exp) => {
     if (exp.dueDay == null) return [];
-    const occurrences = occurrencesInRange(exp.dueDay, periodStart, periodEnd).filter((occ) =>
-      isOccurrenceValid(occ, exp.createdAt),
-    );
-    return occurrences.map((dueDate) => ({ expenseId: exp.id, dueDate, amount: exp.amount }));
+    return occurrencesInRange(exp.dueDay, periodStart, periodEnd)
+      .filter((occ) => isOccurrenceValid(occ, exp.createdAt))
+      .map((dueDate) => ({
+        expenseId: exp.id,
+        dueDate,
+        estimate: exp.amount,
+        payment: findExpensePayment(expensePayments, { fixedExpenseId: exp.id }, dueDate),
+      }));
   });
-  const fixedExpenseTotal = fixedExpenseReminders.reduce((sum, r) => sum + r.amount, 0);
 
-  const cardBillReminders = getCardBillsInPeriod(
+  const fixedExpenseReminders: FixedExpenseReminder[] = fixedExpenseOccurrences
+    .filter((occ) => !occ.payment)
+    .map((occ) => ({ expenseId: occ.expenseId, dueDate: occ.dueDate, amount: occ.estimate }));
+
+  const fixedExpenseTotal = fixedExpenseOccurrences.reduce(
+    (sum, occ) => sum + (occ.payment ? occ.payment.amount : occ.estimate),
+    0,
+  );
+
+  const cardBills = getCardBillsInPeriod(
     creditCards,
     cardPurchases,
     periodStart,
     periodEnd,
     cardFixedExpenses,
   );
-  const cardBillTotal = cardBillReminders.reduce((sum, r) => sum + r.amount, 0);
+  const cardBillPayments = cardBills.map((bill) =>
+    findExpensePayment(expensePayments, { cardId: bill.cardId }, bill.dueDate),
+  );
+
+  const cardBillReminders = cardBills.filter((_, i) => !cardBillPayments[i]);
+  const cardBillTotal = cardBills.reduce(
+    (sum, bill, i) => sum + (cardBillPayments[i]?.amount ?? bill.amount),
+    0,
+  );
 
   const transactionTotal = transactions
     .filter((t) => t.date.getTime() >= periodStart.getTime() && t.date.getTime() < periodEnd.getTime())
