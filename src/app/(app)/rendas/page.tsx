@@ -23,6 +23,8 @@ export default async function FixedPage() {
   ]);
 
   const cards = creditCards.map((c) => ({ id: c.id, name: c.name }));
+  // A aba Categorias lista todas para gerenciar; os formulários só oferecem as ativas.
+  const activeCategories = categories.filter((c) => c.active).map((c) => ({ id: c.id, name: c.name }));
   const cardNameById = new Map(cards.map((c) => [c.id, c.name]));
 
   return (
@@ -83,7 +85,7 @@ export default async function FixedPage() {
         </TabsContent>
 
         <TabsContent value="despesas" className="flex flex-col gap-4">
-          <ExpenseFormDialog cards={cards} />
+          <ExpenseFormDialog cards={cards} categories={activeCategories} />
           {expenses.length === 0 ? (
             <EmptyState text="Nenhuma despesa fixa cadastrada ainda." />
           ) : (
@@ -114,8 +116,10 @@ export default async function FixedPage() {
                             amount: Number(expense.amount),
                             dueDay: expense.dueDay,
                             cardId: expense.cardId,
+                            categoryId: expense.categoryId,
                           }}
                           cards={cards}
+                          categories={activeCategories}
                         />
                         <DeleteIconButton
                           action={deleteFixedExpense.bind(null, expense.id)}
