@@ -1,10 +1,12 @@
 import Link from "next/link";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, CreditCard as CardIcon } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/auth-helpers";
 import { formatCurrency } from "@/lib/format";
 import { getCardBillsInPeriod } from "@/lib/period";
 import { Card, CardContent } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
+import { PageHeader } from "@/components/page-header";
 import { CardFormDialog } from "@/components/forms/card-form-dialog";
 
 export default async function CardsPage() {
@@ -21,14 +23,16 @@ export default async function CardsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-xl font-heading font-semibold">Cartões de crédito</h1>
+      <PageHeader title="Cartões de crédito" />
 
       <CardFormDialog />
 
       {cards.length === 0 ? (
-        <p className="rounded-lg border border-dashed border-border py-8 text-center text-sm text-muted-foreground">
-          Nenhum cartão cadastrado ainda.
-        </p>
+        <EmptyState
+          icon={CardIcon}
+          text="Nenhum cartão cadastrado ainda."
+          hint="Cadastre um para acompanhar a fatura."
+        />
       ) : (
         <div className="flex flex-col gap-2">
           {cards.map((card) => {
@@ -42,7 +46,7 @@ export default async function CardsPage() {
 
             return (
               <Link key={card.id} href={`/cartoes/${card.id}`}>
-                <Card className="transition-colors hover:bg-accent/40">
+                <Card variant="interactive">
                   <CardContent className="flex items-center justify-between gap-3 py-3">
                     <div className="min-w-0">
                       <p className="truncate font-medium">{card.name}</p>
@@ -50,12 +54,15 @@ export default async function CardsPage() {
                         Fecha dia {card.closingDay} · vence dia {card.dueDay}
                       </p>
                       {nextBill && (
-                        <p className="mt-1 text-sm text-negative">
+                        <p className="mt-1.5 text-sm font-medium text-negative tabular-nums">
                           Próxima fatura: {formatCurrency(nextBill.amount)}
                         </p>
                       )}
                     </div>
-                    <ChevronRight className="size-5 shrink-0 text-muted-foreground" />
+                    <ChevronRight
+                      className="size-5 shrink-0 text-muted-foreground/60 transition-transform duration-150 group-hover/card:translate-x-0.5"
+                      aria-hidden="true"
+                    />
                   </CardContent>
                 </Card>
               </Link>

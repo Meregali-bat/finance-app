@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/auth-helpers";
 import { formatCurrency } from "@/lib/format";
 import { Card, CardContent } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
+import { PageHeader } from "@/components/page-header";
 import { JarFormDialog } from "@/components/forms/jar-form-dialog";
 import { JarDepositDialog } from "@/components/forms/jar-deposit-dialog";
 import { DeleteIconButton } from "@/components/delete-icon-button";
@@ -14,14 +16,16 @@ export default async function JarsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-xl font-heading font-semibold">Caixinhas</h1>
+      <PageHeader title="Caixinhas" subtitle="Onde a sobra do período vai parar" />
 
       <JarFormDialog />
 
       {jars.length === 0 ? (
-        <p className="rounded-lg border border-dashed border-border py-8 text-center text-sm text-muted-foreground">
-          Nenhuma caixinha criada ainda.
-        </p>
+        <EmptyState
+          icon={PiggyBank}
+          text="Nenhuma caixinha criada ainda."
+          hint="Crie uma para guardar o que sobrar no fim do período."
+        />
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {jars.map((jar) => (
@@ -37,7 +41,7 @@ export default async function JarsPage() {
                     confirmMessage={`Excluir a caixinha "${jar.name}"? O saldo guardado será perdido do histórico.`}
                   />
                 </div>
-                <p className="text-2xl font-semibold tabular-nums">
+                <p className="font-heading text-2xl leading-tight font-semibold tracking-[-0.02em] tabular-nums">
                   {formatCurrency(Number(jar.balance))}
                 </p>
                 <JarDepositDialog jarId={jar.id} jarName={jar.name} />

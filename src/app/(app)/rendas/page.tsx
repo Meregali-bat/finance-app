@@ -2,6 +2,8 @@ import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/auth-helpers";
 import { formatCurrency } from "@/lib/format";
 import { Card, CardContent } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
+import { PageHeader } from "@/components/page-header";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { IncomeFormDialog } from "@/components/forms/income-form-dialog";
 import { ExpenseFormDialog } from "@/components/forms/expense-form-dialog";
@@ -29,7 +31,10 @@ export default async function FixedPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-xl font-heading font-semibold">Rendas e despesas fixas</h1>
+      <PageHeader
+        title="Rendas e despesas fixas"
+        subtitle="O que se repete todo mês"
+      />
 
       <Tabs defaultValue="rendas">
         <TabsList className="w-full">
@@ -163,13 +168,5 @@ export default async function FixedPage() {
         </TabsContent>
       </Tabs>
     </div>
-  );
-}
-
-function EmptyState({ text }: { text: string }) {
-  return (
-    <p className="rounded-lg border border-dashed border-border py-8 text-center text-sm text-muted-foreground">
-      {text}
-    </p>
   );
 }

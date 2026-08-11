@@ -1,10 +1,13 @@
 import { differenceInCalendarDays } from "date-fns";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, ArrowDownLeft, Receipt } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/auth-helpers";
 import { calculateDailyBudget } from "@/lib/period";
-import { formatCurrency, formatDate } from "@/lib/format";
+import { formatCurrency, formatDate, formatDateLong } from "@/lib/format";
 import { Card, CardContent } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
+import { SectionLabel } from "@/components/page-header";
+import { AnimatedCurrency } from "@/components/ui/animated-number";
 import { Progress } from "@/components/ui/progress";
 import { MovementFormDialog } from "@/components/forms/movement-form-dialog";
 import { MovementRow } from "@/components/movement-row";
@@ -123,24 +126,30 @@ export default async function DashboardPage() {
     <div className="flex flex-col gap-6">
       <PeriodCloseCheck />
 
-      <Card className="border-white/5">
-        <CardContent className="flex flex-col gap-4 py-6">
-          <div>
+      <p className="text-sm text-muted-foreground first-letter:uppercase">
+        {formatDateLong(today)}
+      </p>
+
+      <Card variant="elevated">
+        <CardContent className="flex flex-col gap-5 py-6">
+          <div className="flex flex-col gap-1">
             <p className="text-sm text-muted-foreground">
               {isOverBudget ? "Você já estourou o orçamento de hoje" : "Você pode gastar hoje"}
             </p>
-            <p
-              className={`font-heading text-4xl font-bold tabular-nums ${
+            <AnimatedCurrency
+              value={budget.dailyAvailable}
+              className={`font-heading text-[2.75rem] leading-[1.02] font-bold tracking-[-0.03em] tabular-nums ${
                 isOverBudget ? "text-negative" : "text-primary"
               }`}
-            >
-              {formatCurrency(budget.dailyAvailable)}
-            </p>
+            />
           </div>
 
-          <div className="flex flex-col gap-1.5">
-            <Progress value={progressPercent} />
-            <div className="flex justify-between text-xs text-muted-foreground">
+          <div className="flex flex-col gap-2">
+            <Progress
+              value={progressPercent}
+              indicatorClassName={isOverBudget ? "bg-negative" : undefined}
+            />
+            <div className="flex justify-between text-xs text-muted-foreground tabular-nums">
               <span>
                 Dia {Math.max(1, elapsedDays)} de {Math.max(1, totalDays)}
               </span>
@@ -150,13 +159,13 @@ export default async function DashboardPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 border-t border-border pt-4 text-sm">
-            <div>
-              <p className="text-muted-foreground">Saldo do período</p>
+          <div className="grid grid-cols-2 gap-3 border-t border-border/60 pt-4">
+            <div className="flex flex-col gap-1">
+              <SectionLabel>Saldo do período</SectionLabel>
               <p className="font-medium tabular-nums">{formatCurrency(budget.periodBalance)}</p>
             </div>
-            <div>
-              <p className="text-muted-foreground">Recebe em</p>
+            <div className="flex flex-col gap-1">
+              <SectionLabel>Recebe em</SectionLabel>
               <p className="font-medium">{formatDate(budget.periodEnd)}</p>
             </div>
           </div>
@@ -165,54 +174,75 @@ export default async function DashboardPage() {
 
       {reminders.length > 0 && (
         <div className="flex flex-col gap-3">
-          <h2 className="text-sm font-medium text-muted-foreground">Lembretes</h2>
+          <SectionLabel>Lembretes</SectionLabel>
           <div className="flex flex-col gap-2">
-            {reminders.map((reminder) =>
-              reminder.kind === "income" ? (
-                <Card key={reminder.key} className="border-white/5">
-                  <CardContent className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between">
-                    <p className="text-sm">
-                      {reminder.label}: {formatCurrency(reminder.amount)} previsto em{" "}
-                      {formatDate(reminder.dueDate)}
-                    </p>
-                    <MarkIncomeReceivedDialog
-                      incomeId={reminder.incomeId}
-                      label={reminder.label}
-                      dueDate={reminder.dueDate}
-                      amount={reminder.amount}
-                    />
-                  </CardContent>
-                </Card>
-              ) : (
-                <Card key={reminder.key} className="border-white/5">
-                  <CardContent className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="flex items-center gap-3">
-                      <AlertTriangle className="size-4 shrink-0 text-negative" aria-hidden="true" />
-                      <p className="text-sm">
-                        {reminder.label}: {formatCurrency(reminder.amount)} vence em{" "}
-                        {formatDate(reminder.dueDate)}
-                      </p>
+            {reminders.map((reminder) => {
+              const isIncome = reminder.kind === "income";
+              return (
+                <Card
+                  key={reminder.key}
+                  // Faixa lateral em vez de só um ícone: a cor identifica o
+                  // tipo do lembrete de relance, antes de ler o texto.
+                  className={`pl-1 before:absolute before:inset-y-0 before:left-0 before:w-1 ${
+                    isIncome ? "before:bg-primary" : "before:bg-negative"
+                  }`}
+                >
+                  {/* A ação fica numa linha própria no celular: espremida ao
+                      lado do texto, ela quebrava o valor em duas linhas. */}
+                  <CardContent className="flex flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex min-w-0 items-center gap-3">
+                      {isIncome ? (
+                        <ArrowDownLeft
+                          className="size-4 shrink-0 text-primary"
+                          aria-hidden="true"
+                        />
+                      ) : (
+                        <AlertTriangle
+                          className="size-4 shrink-0 text-negative"
+                          aria-hidden="true"
+                        />
+                      )}
+                      <div className="min-w-0">
+                        <p className="truncate font-medium">{reminder.label}</p>
+                        <p className="truncate text-sm text-muted-foreground tabular-nums">
+                          {formatCurrency(reminder.amount)} ·{" "}
+                          {isIncome ? "previsto em" : "vence em"} {formatDate(reminder.dueDate)}
+                        </p>
+                      </div>
                     </div>
-                    <ConfirmPaymentDialog
-                      action={reminder.payAction}
-                      label={reminder.label}
-                      dueDate={reminder.dueDate}
-                      amount={reminder.amount}
-                    />
+                    <div className="shrink-0 [&>button]:w-full sm:[&>button]:w-auto">
+                      {reminder.kind === "income" ? (
+                        <MarkIncomeReceivedDialog
+                          incomeId={reminder.incomeId}
+                          label={reminder.label}
+                          dueDate={reminder.dueDate}
+                          amount={reminder.amount}
+                        />
+                      ) : (
+                        <ConfirmPaymentDialog
+                          action={reminder.payAction}
+                          label={reminder.label}
+                          dueDate={reminder.dueDate}
+                          amount={reminder.amount}
+                        />
+                      )}
+                    </div>
                   </CardContent>
                 </Card>
-              ),
-            )}
+              );
+            })}
           </div>
         </div>
       )}
 
       <div className="flex flex-col gap-3">
-        <h2 className="text-sm font-medium text-muted-foreground">Movimentações de hoje</h2>
+        <SectionLabel>Movimentações de hoje</SectionLabel>
         {todaysTransactions.length === 0 ? (
-          <p className="rounded-lg border border-dashed border-border py-6 text-center text-sm text-muted-foreground">
-            Nenhuma movimentação lançada hoje ainda.
-          </p>
+          <EmptyState
+            icon={Receipt}
+            text="Nenhuma movimentação lançada hoje ainda."
+            hint="Toque no + para lançar a primeira."
+          />
         ) : (
           <div className="flex flex-col gap-2">
             {todaysTransactions.map((t) => (
@@ -236,7 +266,7 @@ export default async function DashboardPage() {
 
       {tomorrowsTransactions.length > 0 && (
         <div className="flex flex-col gap-3">
-          <h2 className="text-sm font-medium text-muted-foreground">Amanhã</h2>
+          <SectionLabel>Amanhã</SectionLabel>
           <div className="flex flex-col gap-2">
             {tomorrowsTransactions.map((t) => (
               <MovementRow

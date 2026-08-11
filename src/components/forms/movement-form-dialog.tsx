@@ -125,7 +125,7 @@ export function MovementFormDialog({
             ) : (
               <Button
                 size="lg"
-                className="h-14 w-14 rounded-full p-0 shadow-lg shadow-primary/20"
+                className="size-14 rounded-full p-0 shadow-float ring-1 ring-primary/30 active:scale-90"
               />
             )
           }
@@ -147,13 +147,15 @@ export function MovementFormDialog({
               controlados voltem aos valores do lançamento. */}
           <form key={String(open)} action={handleSubmit} className="flex flex-col gap-4">
             {(!isEdit || movement?.kind === "transaction") && (
-              <div className="grid grid-cols-2 gap-2 rounded-lg bg-muted p-1">
+              <div className="grid grid-cols-2 gap-1 rounded-xl bg-muted p-1">
                 <button
                   type="button"
                   onClick={() => setKind("expense")}
                   className={cn(
-                    "rounded-md py-1.5 text-sm font-medium transition-colors",
-                    kind === "expense" ? "bg-background shadow-sm" : "text-muted-foreground",
+                    "rounded-lg py-2 text-sm font-medium transition-colors duration-150",
+                    kind === "expense"
+                      ? "bg-card text-negative shadow-surface ring-1 ring-foreground/10"
+                      : "text-muted-foreground",
                   )}
                 >
                   Despesa
@@ -165,8 +167,10 @@ export function MovementFormDialog({
                     setCardId(CASH);
                   }}
                   className={cn(
-                    "rounded-md py-1.5 text-sm font-medium transition-colors",
-                    kind === "income" ? "bg-background shadow-sm" : "text-muted-foreground",
+                    "rounded-lg py-2 text-sm font-medium transition-colors duration-150",
+                    kind === "income"
+                      ? "bg-card text-primary shadow-surface ring-1 ring-foreground/10"
+                      : "text-muted-foreground",
                   )}
                 >
                   Receita

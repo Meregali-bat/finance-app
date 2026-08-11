@@ -39,6 +39,7 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
+  --color-card-elevated: var(--card-elevated);
   --color-positive: var(--positive);
   --color-positive-foreground: var(--positive-foreground);
   --color-negative: var(--negative);
@@ -50,12 +51,25 @@
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
+
+  /* Elevação. O fundo é quase preto, então a sombra precisa ser preta e muito
+     difusa para ler como profundidade em vez de sujeira. */
+  --shadow-surface: 0 1px 2px oklch(0 0 0 / 0.4);
+  --shadow-raised: 0 1px 2px oklch(0 0 0 / 0.4), 0 8px 24px -12px oklch(0 0 0 / 0.7);
+  --shadow-float: 0 2px 4px oklch(0 0 0 / 0.5), 0 16px 40px -12px oklch(0 0 0 / 0.8);
+  --shadow-nav: 0 -8px 24px -12px oklch(0 0 0 / 0.8);
+
+  /* Par espelhado: a saída de uma transição reversível usa o inverso da
+     entrada, para o caminho de volta bater com o de ida. */
+  --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-quint: cubic-bezier(0.64, 0, 0.78, 0);
 }
 
 :root {
   --background: oklch(0.07 0.012 264);
   --foreground: oklch(0.984 0.003 247.858);
   --card: oklch(0.115 0.016 264);
+  --card-elevated: oklch(0.145 0.02 264);
   --card-foreground: oklch(0.984 0.003 247.858);
   --popover: oklch(0.115 0.016 264);
   --popover-foreground: oklch(0.984 0.003 247.858);
@@ -95,6 +109,7 @@
   --background: oklch(0.07 0.012 264);
   --foreground: oklch(0.984 0.003 247.858);
   --card: oklch(0.115 0.016 264);
+  --card-elevated: oklch(0.145 0.02 264);
   --card-foreground: oklch(0.984 0.003 247.858);
   --popover: oklch(0.115 0.016 264);
   --popover-foreground: oklch(0.984 0.003 247.858);
@@ -138,5 +153,31 @@
   }
   html {
     @apply font-sans;
+    font-optical-sizing: auto;
+  }
+}
+
+/* Movimento reduzido não é "sem feedback": as trocas de cor e opacidade
+   continuam, só o deslocamento e o spring é que somem. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Sem translucidez, as camadas flutuantes viram superfícies sólidas — o blur
+   sozinho deixaria o texto por baixo aparecendo. */
+@media (prefers-reduced-transparency: reduce) {
+  [data-slot="bottom-nav"],
+  [data-slot="dialog-overlay"] {
+    backdrop-filter: none;
+  }
+  [data-slot="bottom-nav"] {
+    background: var(--card);
   }
 }
