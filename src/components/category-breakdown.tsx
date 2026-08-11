@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { ChevronDown } from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
+import { springDefault } from "@/lib/motion";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { HistoryRow } from "@/components/movement-row";
@@ -39,7 +41,7 @@ export function CategoryBreakdown({
                 type="button"
                 onClick={() => setOpenKey(isOpen ? null : group.key)}
                 aria-expanded={isOpen}
-                className="flex flex-col gap-2 text-left"
+                className="flex flex-col gap-2 py-1 text-left"
               >
                 <div className="flex items-center justify-between gap-3">
                   <p className="min-w-0 truncate font-medium">{group.name}</p>
@@ -48,7 +50,7 @@ export function CategoryBreakdown({
                     <span className="text-muted-foreground tabular-nums">{group.percent}%</span>
                     <ChevronDown
                       className={cn(
-                        "size-4 text-muted-foreground transition-transform",
+                        "size-4 text-muted-foreground transition-transform duration-300 ease-out-quint",
                         isOpen && "rotate-180",
                       )}
                       aria-hidden="true"
@@ -57,18 +59,31 @@ export function CategoryBreakdown({
                 </div>
                 <Progress value={group.percent} />
               </button>
-              {isOpen && (
-                <div className="flex flex-col gap-2 border-t border-border pt-2">
-                  {group.items.map((item) => (
-                    <HistoryRow
-                      key={historyItemKey(item)}
-                      item={item}
-                      cards={cards}
-                      categories={categories}
-                    />
-                  ))}
-                </div>
-              )}
+              {/* Altura animada: fechar no meio da abertura reverte de onde
+                  está, em vez de esperar terminar para então voltar. */}
+              <AnimatePresence initial={false}>
+                {isOpen && (
+                  <motion.div
+                    key="items"
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: "auto", opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={springDefault}
+                    className="overflow-hidden"
+                  >
+                    <div className="flex flex-col gap-2 border-t border-border pt-3">
+                      {group.items.map((item) => (
+                        <HistoryRow
+                          key={historyItemKey(item)}
+                          item={item}
+                          cards={cards}
+                          categories={categories}
+                        />
+                      ))}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </CardContent>
           </Card>
         );

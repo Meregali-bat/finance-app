@@ -1,11 +1,12 @@
 import { notFound } from "next/navigation";
-import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { Receipt } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/auth-helpers";
 import { formatCurrency, formatDate, formatDateOnly } from "@/lib/format";
 import { getCardBillsInPeriod } from "@/lib/period";
 import { Card, CardContent } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
+import { PageHeader, SectionLabel } from "@/components/page-header";
 import { CardFormDialog } from "@/components/forms/card-form-dialog";
 import { CardPurchaseFormDialog } from "@/components/forms/card-purchase-form-dialog";
 import { MovementRow } from "@/components/movement-row";
@@ -47,50 +48,44 @@ export default async function CardDetailPage({
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center gap-2">
-        <Link
-          href="/cartoes"
-          className="flex size-9 items-center justify-center rounded-md text-muted-foreground hover:text-foreground"
-          aria-label="Voltar para cartões"
-        >
-          <ArrowLeft className="size-5" />
-        </Link>
-        <h1 className="min-w-0 truncate text-xl font-heading font-semibold">{card.name}</h1>
-      </div>
-
-      <Card>
-        <CardContent className="flex items-center justify-between gap-3 py-4">
-          <div>
-            <p className="text-sm text-muted-foreground">
-              Fecha dia {card.closingDay} · vence dia {card.dueDay}
-            </p>
-            {nextBill ? (
-              <p className="mt-1 text-lg font-semibold text-negative">
-                {formatCurrency(nextBill.amount)}{" "}
-                <span className="text-sm font-normal text-muted-foreground">
-                  vence {formatDate(nextBill.dueDate)}
-                </span>
-              </p>
-            ) : (
-              <p className="mt-1 text-sm text-muted-foreground">Sem fatura em aberto.</p>
-            )}
-          </div>
-          <div className="flex shrink-0 items-center gap-1">
+      <PageHeader
+        title={card.name}
+        subtitle={`Fecha dia ${card.closingDay} · vence dia ${card.dueDay}`}
+        backHref="/cartoes"
+        backLabel="Voltar para cartões"
+        action={
+          <div className="flex items-center gap-1">
             <CardFormDialog card={card} />
             <DeleteIconButton
               action={deleteCreditCard.bind(null, card.id)}
               confirmMessage={`Excluir o cartão "${card.name}" e todas as suas compras?`}
             />
           </div>
+        }
+      />
+
+      <Card variant="elevated">
+        <CardContent className="flex flex-col gap-1 py-5">
+          <SectionLabel>Próxima fatura</SectionLabel>
+          {nextBill ? (
+            <>
+              <p className="font-heading text-3xl leading-tight font-bold tracking-[-0.02em] text-negative tabular-nums">
+                {formatCurrency(nextBill.amount)}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Vence {formatDate(nextBill.dueDate)}
+              </p>
+            </>
+          ) : (
+            <p className="text-sm text-muted-foreground">Sem fatura em aberto.</p>
+          )}
         </CardContent>
       </Card>
 
       <CardPurchaseFormDialog cardId={card.id} categories={categoryOptions} />
 
       {card.purchases.length === 0 ? (
-        <p className="rounded-lg border border-dashed border-border py-8 text-center text-sm text-muted-foreground">
-          Nenhuma compra lançada ainda.
-        </p>
+        <EmptyState icon={Receipt} text="Nenhuma compra lançada ainda." />
       ) : (
         <div className="flex flex-col gap-2">
           {card.purchases.map((purchase) => (

@@ -36,8 +36,8 @@ export function MovementRow({
 }) {
   return (
     <MovementFormDialog movement={movement} cards={cards} categories={categories}>
-      <Card className="transition-colors hover:border-primary/40">
-        <CardContent className="flex items-center justify-between gap-3 py-3">
+      <Card variant="interactive">
+        <CardContent className="flex min-h-[3rem] items-center justify-between gap-3 py-3">
           <div className="flex min-w-0 items-center gap-3">
             {icon}
             <div className="min-w-0">
@@ -53,7 +53,10 @@ export function MovementRow({
             >
               {formatCurrency(movement.amount)}
             </span>
-            <ChevronRight className="size-4 text-muted-foreground" aria-hidden="true" />
+            <ChevronRight
+              className="size-4 text-muted-foreground/60 transition-transform duration-150 group-hover/card:translate-x-0.5"
+              aria-hidden="true"
+            />
           </div>
         </CardContent>
       </Card>

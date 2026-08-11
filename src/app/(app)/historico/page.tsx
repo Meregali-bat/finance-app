@@ -5,6 +5,8 @@ import { requireUserId } from "@/lib/auth-helpers";
 import { formatCurrency } from "@/lib/format";
 import { parseMonthParam, monthParam, monthLabel, getMonthRange } from "@/lib/month-range";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { EmptyState } from "@/components/ui/empty-state";
+import { PageHeader } from "@/components/page-header";
 import { HistoryRow } from "@/components/movement-row";
 import { CategoryBreakdown, type CategoryGroup } from "@/components/category-breakdown";
 import { historyItemKey, type HistoryItem } from "@/lib/history-item";
@@ -132,26 +134,33 @@ export default async function HistoryPage({
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-xl font-heading font-semibold">Histórico</h1>
+      <PageHeader title="Histórico" />
 
-      <div className="flex items-center justify-between">
+      {/* O seletor de mês é o controle principal desta tela, então ele ganha
+          uma superfície própria em vez de flutuar solto sobre o fundo. */}
+      <div className="flex items-center justify-between gap-2 rounded-2xl bg-card p-2 shadow-surface ring-1 ring-foreground/10">
         <Link
           href={`/historico?month=${monthParam(prevMonth.year, prevMonth.monthIndex)}`}
-          className="flex size-9 items-center justify-center rounded-md text-muted-foreground hover:text-foreground"
+          className="flex size-10 shrink-0 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           aria-label="Mês anterior"
         >
-          <ChevronLeft className="size-5" />
+          <ChevronLeft className="size-5" aria-hidden="true" />
         </Link>
-        <div className="text-center">
-          <p className="font-medium capitalize">{monthLabel(year, monthIndex)}</p>
-          <p className="text-sm text-muted-foreground">{formatCurrency(expenseTotal)} em gastos</p>
+        <div className="min-w-0 text-center">
+          {/* `capitalize` maiusculiza toda palavra e viraria "Agosto De 2026". */}
+          <p className="truncate font-heading font-medium first-letter:uppercase">
+            {monthLabel(year, monthIndex)}
+          </p>
+          <p className="text-sm text-muted-foreground tabular-nums">
+            {formatCurrency(expenseTotal)} em gastos
+          </p>
         </div>
         <Link
           href={`/historico?month=${monthParam(nextMonth.year, nextMonth.monthIndex)}`}
-          className="flex size-9 items-center justify-center rounded-md text-muted-foreground hover:text-foreground"
+          className="flex size-10 shrink-0 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           aria-label="Próximo mês"
         >
-          <ChevronRight className="size-5" />
+          <ChevronRight className="size-5" aria-hidden="true" />
         </Link>
       </div>
 
@@ -193,13 +202,5 @@ export default async function HistoryPage({
         </TabsContent>
       </Tabs>
     </div>
-  );
-}
-
-function EmptyState({ text }: { text: string }) {
-  return (
-    <p className="rounded-lg border border-dashed border-border py-8 text-center text-sm text-muted-foreground">
-      {text}
-    </p>
   );
 }

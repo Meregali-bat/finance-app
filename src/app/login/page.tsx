@@ -31,9 +31,9 @@ export default async function LoginPage({
 
   return (
     <div className="flex min-h-screen w-full items-center justify-center p-4">
-      <Card className="w-full max-w-sm border-white/5">
+      <Card variant="elevated" className="w-full max-w-sm">
         <CardHeader>
-          <CardTitle className="text-2xl">Entrar</CardTitle>
+          <CardTitle className="text-2xl tracking-[-0.02em]">Entrar</CardTitle>
         </CardHeader>
         <CardContent>
           <form action={authenticate} className="flex flex-col gap-4">
@@ -45,7 +45,6 @@ export default async function LoginPage({
                 type="email"
                 autoComplete="email"
                 required
-                className="h-11"
               />
             </div>
             <div className="flex flex-col gap-2">
@@ -56,7 +55,6 @@ export default async function LoginPage({
                 type="password"
                 autoComplete="current-password"
                 required
-                className="h-11"
               />
             </div>
             {error && (
@@ -64,7 +62,7 @@ export default async function LoginPage({
                 Email ou senha inválidos.
               </p>
             )}
-            <Button type="submit" className="h-11 mt-2">
+            <Button type="submit" size="lg" className="mt-2 w-full">
               Entrar
             </Button>
           </form>
