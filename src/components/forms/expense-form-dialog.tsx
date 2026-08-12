@@ -74,7 +74,7 @@ export function ExpenseFormDialog({
           isEdit ? (
             <Button variant="ghost" size="icon" aria-label="Editar despesa" />
           ) : (
-            <Button className="gap-2" />
+            <Button className="gap-2 lg:w-fit" />
           )
         }
       >

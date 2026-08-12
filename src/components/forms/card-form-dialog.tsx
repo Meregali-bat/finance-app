@@ -51,7 +51,9 @@ export function CardFormDialog({ card }: { card?: CardValues }) {
           isEdit ? (
             <Button variant="ghost" size="icon" aria-label="Editar cartão" />
           ) : (
-            <Button className="gap-2" />
+            // Largura cheia no celular (alvo de toque); em telas largas volta
+            // ao tamanho do texto, senão vira uma faixa verde de ponta a ponta.
+            <Button className="gap-2 lg:w-fit" />
           )
         }
       >

@@ -17,7 +17,9 @@ export function EmptyState({
   action?: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-col items-center gap-2 rounded-2xl border border-dashed border-border/70 px-6 py-10 text-center">
+    // O `max-w` em telas largas evita a caixa de mil e poucos pixels com três
+    // palavras perdidas no meio.
+    <div className="flex flex-col items-center gap-2 rounded-2xl border border-dashed border-border/70 px-6 py-10 text-center lg:max-w-lg">
       {Icon && (
         <Icon className="size-6 text-muted-foreground/60" aria-hidden="true" strokeWidth={1.5} />
       )}

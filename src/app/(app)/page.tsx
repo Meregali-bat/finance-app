@@ -126,25 +126,37 @@ export default async function DashboardPage() {
     <div className="flex flex-col gap-6">
       <PeriodCloseCheck />
 
-      <p className="text-sm text-muted-foreground first-letter:uppercase">
-        {formatDateLong(today)}
-      </p>
+      <div className="flex items-center justify-between gap-4">
+        <p className="text-sm text-muted-foreground first-letter:uppercase">
+          {formatDateLong(today)}
+        </p>
+        {/* Fora de `lg` o botão é fixo no canto da viewport, então a posição
+            dele aqui no DOM não importa; em `lg` ele volta ao fluxo e fica
+            como ação do cabeçalho. */}
+        <div className="fixed bottom-20 right-4 z-10 lg:static lg:z-auto">
+          <MovementFormDialog cards={cardOptions} categories={categoryOptions} />
+        </div>
+      </div>
 
       <Card variant="elevated">
-        <CardContent className="flex flex-col gap-5 py-6">
-          <div className="flex flex-col gap-1">
+        {/* Empilhado até `xl`. Só a partir daí os três blocos viram regiões
+            lado a lado separadas por divisores verticais — em `lg` a barra de
+            sidebar come 240px e sobrariam 200px por região, o que esmaga a
+            barra de progresso e quebra os contadores de dia em duas linhas. */}
+        <CardContent className="flex flex-col gap-5 py-6 xl:grid xl:grid-cols-[1fr_1fr_16rem] xl:gap-8">
+          <div className="flex flex-col gap-1 xl:justify-center">
             <p className="text-sm text-muted-foreground">
               {isOverBudget ? "Você já estourou o orçamento de hoje" : "Você pode gastar hoje"}
             </p>
             <AnimatedCurrency
               value={budget.dailyAvailable}
-              className={`font-heading text-[2.75rem] leading-[1.02] font-bold tracking-[-0.03em] tabular-nums ${
+              className={`font-heading text-[2.75rem] leading-[1.02] font-bold tracking-[-0.03em] tabular-nums lg:text-[3.25rem] ${
                 isOverBudget ? "text-negative" : "text-primary"
               }`}
             />
           </div>
 
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-2 xl:justify-center xl:border-l xl:border-border/60 xl:pl-8">
             <Progress
               value={progressPercent}
               indicatorClassName={isOverBudget ? "bg-negative" : undefined}
@@ -154,12 +166,13 @@ export default async function DashboardPage() {
                 Dia {Math.max(1, elapsedDays)} de {Math.max(1, totalDays)}
               </span>
               <span>
-                {budget.daysRemaining} {budget.daysRemaining === 1 ? "dia restante" : "dias restantes"}
+                {budget.daysRemaining}{" "}
+                {budget.daysRemaining === 1 ? "dia restante" : "dias restantes"}
               </span>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 border-t border-border/60 pt-4">
+          <div className="grid grid-cols-2 gap-3 border-t border-border/60 pt-4 xl:grid-cols-1 xl:content-center xl:gap-6 xl:border-t-0 xl:border-l xl:pt-0 xl:pl-8">
             <div className="flex flex-col gap-1">
               <SectionLabel>Saldo do período</SectionLabel>
               <p className="font-medium tabular-nums">{formatCurrency(budget.periodBalance)}</p>
@@ -172,123 +185,129 @@ export default async function DashboardPage() {
         </CardContent>
       </Card>
 
-      {reminders.length > 0 && (
-        <div className="flex flex-col gap-3">
-          <SectionLabel>Lembretes</SectionLabel>
-          <div className="flex flex-col gap-2">
-            {reminders.map((reminder) => {
-              const isIncome = reminder.kind === "income";
-              return (
-                <Card
-                  key={reminder.key}
-                  // Faixa lateral em vez de só um ícone: a cor identifica o
-                  // tipo do lembrete de relance, antes de ler o texto.
-                  className={`pl-1 before:absolute before:inset-y-0 before:left-0 before:w-1 ${
-                    isIncome ? "before:bg-primary" : "before:bg-negative"
-                  }`}
-                >
-                  {/* A ação fica numa linha própria no celular: espremida ao
-                      lado do texto, ela quebrava o valor em duas linhas. */}
-                  <CardContent className="flex flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="flex min-w-0 items-center gap-3">
-                      {isIncome ? (
-                        <ArrowDownLeft
-                          className="size-4 shrink-0 text-primary"
-                          aria-hidden="true"
-                        />
-                      ) : (
-                        <AlertTriangle
-                          className="size-4 shrink-0 text-negative"
-                          aria-hidden="true"
-                        />
-                      )}
-                      <div className="min-w-0">
-                        <p className="truncate font-medium">{reminder.label}</p>
-                        <p className="truncate text-sm text-muted-foreground tabular-nums">
-                          {formatCurrency(reminder.amount)} ·{" "}
-                          {isIncome ? "previsto em" : "vence em"} {formatDate(reminder.dueDate)}
-                        </p>
+      {/* As duas listas ficam lado a lado a partir de `xl`. Em `lg` sobrariam
+          ~340px por coluna, o que trunca o valor dos lembretes. `items-start`
+          impede que a coluna mais curta esticasse até a altura da outra. */}
+      <div className="flex flex-col gap-6 xl:grid xl:grid-cols-2 xl:items-start">
+        {reminders.length > 0 && (
+          <div className="flex flex-col gap-3">
+            <SectionLabel>Lembretes</SectionLabel>
+            <div className="flex flex-col gap-2">
+              {reminders.map((reminder) => {
+                const isIncome = reminder.kind === "income";
+                return (
+                  <Card
+                    key={reminder.key}
+                    // Faixa lateral em vez de só um ícone: a cor identifica o
+                    // tipo do lembrete de relance, antes de ler o texto.
+                    className={`pl-1 before:absolute before:inset-y-0 before:left-0 before:w-1 ${
+                      isIncome ? "before:bg-primary" : "before:bg-negative"
+                    }`}
+                  >
+                    {/* A ação fica numa linha própria no celular: espremida ao
+                        lado do texto, ela quebrava o valor em duas linhas. */}
+                    <CardContent className="flex flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex min-w-0 items-center gap-3">
+                        {isIncome ? (
+                          <ArrowDownLeft
+                            className="size-4 shrink-0 text-primary"
+                            aria-hidden="true"
+                          />
+                        ) : (
+                          <AlertTriangle
+                            className="size-4 shrink-0 text-negative"
+                            aria-hidden="true"
+                          />
+                        )}
+                        <div className="min-w-0">
+                          <p className="truncate font-medium">{reminder.label}</p>
+                          {/* Sem `truncate`: quando o texto não cabe ao lado do
+                              botão, quebrar numa segunda linha preserva a data
+                              do lembrete, que era o que o "…" comia. */}
+                          <p className="text-sm text-muted-foreground tabular-nums">
+                            {formatCurrency(reminder.amount)} ·{" "}
+                            {isIncome ? "previsto em" : "vence em"} {formatDate(reminder.dueDate)}
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                    <div className="shrink-0 [&>button]:w-full sm:[&>button]:w-auto">
-                      {reminder.kind === "income" ? (
-                        <MarkIncomeReceivedDialog
-                          incomeId={reminder.incomeId}
-                          label={reminder.label}
-                          dueDate={reminder.dueDate}
-                          amount={reminder.amount}
-                        />
-                      ) : (
-                        <ConfirmPaymentDialog
-                          action={reminder.payAction}
-                          label={reminder.label}
-                          dueDate={reminder.dueDate}
-                          amount={reminder.amount}
-                        />
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      <div className="flex flex-col gap-3">
-        <SectionLabel>Movimentações de hoje</SectionLabel>
-        {todaysTransactions.length === 0 ? (
-          <EmptyState
-            icon={Receipt}
-            text="Nenhuma movimentação lançada hoje ainda."
-            hint="Toque no + para lançar a primeira."
-          />
-        ) : (
-          <div className="flex flex-col gap-2">
-            {todaysTransactions.map((t) => (
-              <MovementRow
-                key={t.id}
-                movement={toMovementValues({
-                  id: t.id,
-                  kind: "transaction",
-                  description: t.description,
-                  amount: Number(t.amount),
-                  date: t.date,
-                  categoryId: t.categoryId,
-                })}
-                cards={cardOptions}
-                categories={categoryOptions}
-              />
-            ))}
+                      <div className="shrink-0 [&>button]:w-full sm:[&>button]:w-auto">
+                        {reminder.kind === "income" ? (
+                          <MarkIncomeReceivedDialog
+                            incomeId={reminder.incomeId}
+                            label={reminder.label}
+                            dueDate={reminder.dueDate}
+                            amount={reminder.amount}
+                          />
+                        ) : (
+                          <ConfirmPaymentDialog
+                            action={reminder.payAction}
+                            label={reminder.label}
+                            dueDate={reminder.dueDate}
+                            amount={reminder.amount}
+                          />
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
           </div>
         )}
-      </div>
 
-      {tomorrowsTransactions.length > 0 && (
-        <div className="flex flex-col gap-3">
-          <SectionLabel>Amanhã</SectionLabel>
-          <div className="flex flex-col gap-2">
-            {tomorrowsTransactions.map((t) => (
-              <MovementRow
-                key={t.id}
-                movement={toMovementValues({
-                  id: t.id,
-                  kind: "transaction",
-                  description: t.description,
-                  amount: Number(t.amount),
-                  date: t.date,
-                  categoryId: t.categoryId,
-                })}
-                cards={cardOptions}
-                categories={categoryOptions}
+        <div className="flex flex-col gap-6">
+          <div className="flex flex-col gap-3">
+            <SectionLabel>Movimentações de hoje</SectionLabel>
+            {todaysTransactions.length === 0 ? (
+              <EmptyState
+                icon={Receipt}
+                text="Nenhuma movimentação lançada hoje ainda."
+                hint="Toque no + para lançar a primeira."
               />
-            ))}
+            ) : (
+              <div className="flex flex-col gap-2">
+                {todaysTransactions.map((t) => (
+                  <MovementRow
+                    key={t.id}
+                    movement={toMovementValues({
+                      id: t.id,
+                      kind: "transaction",
+                      description: t.description,
+                      amount: Number(t.amount),
+                      date: t.date,
+                      categoryId: t.categoryId,
+                    })}
+                    cards={cardOptions}
+                    categories={categoryOptions}
+                  />
+                ))}
+              </div>
+            )}
           </div>
-        </div>
-      )}
 
-      <div className="fixed bottom-20 right-4 z-10">
-        <MovementFormDialog cards={cardOptions} categories={categoryOptions} />
+          {tomorrowsTransactions.length > 0 && (
+            <div className="flex flex-col gap-3">
+              <SectionLabel>Amanhã</SectionLabel>
+              <div className="flex flex-col gap-2">
+                {tomorrowsTransactions.map((t) => (
+                  <MovementRow
+                    key={t.id}
+                    movement={toMovementValues({
+                      id: t.id,
+                      kind: "transaction",
+                      description: t.description,
+                      amount: Number(t.amount),
+                      date: t.date,
+                      categoryId: t.categoryId,
+                    })}
+                    cards={cardOptions}
+                    categories={categoryOptions}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

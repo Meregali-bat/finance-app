@@ -55,7 +55,17 @@ export default async function CardDetailPage({
         backLabel="Voltar para cartões"
         action={
           <div className="flex items-center gap-1">
-            <CardFormDialog card={card} />
+            {/* Só os campos do formulário: o objeto do Prisma carrega as
+                compras com `amount` em Decimal, e Decimal não atravessa a
+                fronteira para um client component. */}
+            <CardFormDialog
+              card={{
+                id: card.id,
+                name: card.name,
+                closingDay: card.closingDay,
+                dueDay: card.dueDay,
+              }}
+            />
             <DeleteIconButton
               action={deleteCreditCard.bind(null, card.id)}
               confirmMessage={`Excluir o cartão "${card.name}" e todas as suas compras?`}
@@ -64,49 +74,55 @@ export default async function CardDetailPage({
         }
       />
 
-      <Card variant="elevated">
-        <CardContent className="flex flex-col gap-1 py-5">
-          <SectionLabel>Próxima fatura</SectionLabel>
-          {nextBill ? (
-            <>
-              <p className="font-heading text-3xl leading-tight font-bold tracking-[-0.02em] text-negative tabular-nums">
-                {formatCurrency(nextBill.amount)}
-              </p>
-              <p className="text-sm text-muted-foreground">
-                Vence {formatDate(nextBill.dueDate)}
-              </p>
-            </>
-          ) : (
-            <p className="text-sm text-muted-foreground">Sem fatura em aberto.</p>
-          )}
-        </CardContent>
-      </Card>
+      {/* Em telas largas o resumo da fatura fica ao lado da lista em vez de
+          empurrá-la para baixo. */}
+      <div className="flex flex-col gap-6 xl:grid xl:grid-cols-[20rem_1fr] xl:items-start">
+        <div className="flex flex-col gap-6">
+          <Card variant="elevated">
+            <CardContent className="flex flex-col gap-1 py-5">
+              <SectionLabel>Próxima fatura</SectionLabel>
+              {nextBill ? (
+                <>
+                  <p className="font-heading text-3xl leading-tight font-bold tracking-[-0.02em] text-negative tabular-nums">
+                    {formatCurrency(nextBill.amount)}
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    Vence {formatDate(nextBill.dueDate)}
+                  </p>
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground">Sem fatura em aberto.</p>
+              )}
+            </CardContent>
+          </Card>
 
-      <CardPurchaseFormDialog cardId={card.id} categories={categoryOptions} />
-
-      {card.purchases.length === 0 ? (
-        <EmptyState icon={Receipt} text="Nenhuma compra lançada ainda." />
-      ) : (
-        <div className="flex flex-col gap-2">
-          {card.purchases.map((purchase) => (
-            <MovementRow
-              key={purchase.id}
-              movement={toMovementValues({
-                id: purchase.id,
-                kind: "card",
-                description: purchase.description,
-                amount: Number(purchase.amount),
-                date: purchase.date,
-                categoryId: purchase.categoryId,
-                cardId: card.id,
-              })}
-              subtitle={formatDateOnly(purchase.date)}
-              cards={[{ id: card.id, name: card.name }]}
-              categories={categoryOptions}
-            />
-          ))}
+          <CardPurchaseFormDialog cardId={card.id} categories={categoryOptions} />
         </div>
-      )}
+
+        {card.purchases.length === 0 ? (
+          <EmptyState icon={Receipt} text="Nenhuma compra lançada ainda." />
+        ) : (
+          <div className="flex flex-col gap-2">
+            {card.purchases.map((purchase) => (
+              <MovementRow
+                key={purchase.id}
+                movement={toMovementValues({
+                  id: purchase.id,
+                  kind: "card",
+                  description: purchase.description,
+                  amount: Number(purchase.amount),
+                  date: purchase.date,
+                  categoryId: purchase.categoryId,
+                  cardId: card.id,
+                })}
+                subtitle={formatDateOnly(purchase.date)}
+                cards={[{ id: card.id, name: card.name }]}
+                categories={categoryOptions}
+              />
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

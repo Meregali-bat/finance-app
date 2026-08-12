@@ -34,7 +34,7 @@ export function JarFormDialog() {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={<Button className="gap-2" />}>
+      <DialogTrigger render={<Button className="gap-2 lg:w-fit" />}>
         <Plus className="size-4" /> Nova caixinha
       </DialogTrigger>
       <DialogContent>
