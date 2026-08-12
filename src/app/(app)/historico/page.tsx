@@ -138,7 +138,7 @@ export default async function HistoryPage({
 
       {/* O seletor de mês é o controle principal desta tela, então ele ganha
           uma superfície própria em vez de flutuar solto sobre o fundo. */}
-      <div className="flex items-center justify-between gap-2 rounded-2xl bg-card p-2 shadow-surface ring-1 ring-foreground/10">
+      <div className="flex items-center justify-between gap-2 rounded-2xl bg-card p-2 shadow-surface ring-1 ring-foreground/10 lg:w-fit lg:gap-6 lg:self-start">
         <Link
           href={`/historico?month=${monthParam(prevMonth.year, prevMonth.monthIndex)}`}
           className="flex size-10 shrink-0 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
@@ -165,16 +165,16 @@ export default async function HistoryPage({
       </div>
 
       <Tabs defaultValue="lancamentos">
-        <TabsList className="w-full">
-          <TabsTrigger value="lancamentos" className="flex-1">
+        <TabsList className="w-full lg:w-fit">
+          <TabsTrigger value="lancamentos" className="flex-1 lg:flex-none">
             Lançamentos
           </TabsTrigger>
-          <TabsTrigger value="categorias" className="flex-1">
+          <TabsTrigger value="categorias" className="flex-1 lg:flex-none">
             Por categoria
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="lancamentos" className="flex flex-col gap-2 pt-4">
+        <TabsContent value="lancamentos" className="grid gap-2 pt-4 lg:grid-cols-2">
           {items.length === 0 ? (
             <EmptyState text="Nenhum lançamento neste mês." />
           ) : (
@@ -189,7 +189,10 @@ export default async function HistoryPage({
           )}
         </TabsContent>
 
-        <TabsContent value="categorias" className="pt-4">
+        {/* Coluna única de propósito: o acordeão anima a altura ao expandir, e
+            em grid isso faria a coluna vizinha pular. Barra de progresso muito
+            larga também perde a leitura. */}
+        <TabsContent value="categorias" className="pt-4 lg:max-w-2xl">
           {categoryGroups.length === 0 ? (
             <EmptyState text="Nenhum lançamento neste mês." />
           ) : (

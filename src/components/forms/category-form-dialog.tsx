@@ -49,7 +49,7 @@ export function CategoryFormDialog({ category }: { category?: CategoryValues }) 
           isEdit ? (
             <Button variant="ghost" size="icon" aria-label="Editar categoria" />
           ) : (
-            <Button className="gap-2" />
+            <Button className="gap-2 lg:w-fit" />
           )
         }
       >

@@ -27,7 +27,7 @@ export default async function JarsPage() {
           hint="Crie uma para guardar o que sobrar no fim do período."
         />
       ) : (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {jars.map((jar) => (
             <Card key={jar.id}>
               <CardContent className="flex flex-col gap-3 py-4">

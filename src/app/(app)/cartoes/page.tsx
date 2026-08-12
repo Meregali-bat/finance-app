@@ -34,7 +34,7 @@ export default async function CardsPage() {
           hint="Cadastre um para acompanhar a fatura."
         />
       ) : (
-        <div className="flex flex-col gap-2">
+        <div className="grid gap-2 lg:grid-cols-2">
           {cards.map((card) => {
             const purchases = card.purchases.map((p) => ({
               cardId: card.id,
@@ -45,8 +45,11 @@ export default async function CardsPage() {
             const nextBill = bills.sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime())[0];
 
             return (
-              <Link key={card.id} href={`/cartoes/${card.id}`}>
-                <Card variant="interactive">
+              // `h-full` porque em grid a linha "Próxima fatura" só aparece em
+              // alguns cartões, e sem isso os cards de uma mesma linha ficariam
+              // com alturas diferentes.
+              <Link key={card.id} href={`/cartoes/${card.id}`} className="h-full">
+                <Card variant="interactive" className="h-full">
                   <CardContent className="flex items-center justify-between gap-3 py-3">
                     <div className="min-w-0">
                       <p className="truncate font-medium">{card.name}</p>

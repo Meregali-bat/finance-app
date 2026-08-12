@@ -2,18 +2,10 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, CreditCard, PiggyBank, ListChecks, History } from "lucide-react";
 import { motion } from "motion/react";
 import { cn } from "@/lib/utils";
 import { springDefault } from "@/lib/motion";
-
-const items = [
-  { href: "/", label: "Início", icon: Home },
-  { href: "/cartoes", label: "Cartões", icon: CreditCard },
-  { href: "/caixinhas", label: "Caixinhas", icon: PiggyBank },
-  { href: "/rendas", label: "Fixos", icon: ListChecks },
-  { href: "/historico", label: "Histórico", icon: History },
-];
+import { navItems, isNavItemActive } from "@/components/nav-items";
 
 export function BottomNav() {
   const pathname = usePathname();
@@ -24,19 +16,16 @@ export function BottomNav() {
           duro: a chrome flutua sobre a página, não corta uma faixa dela. */}
       <div
         aria-hidden="true"
-        className="pointer-events-none fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+3.5rem)] z-20 h-8 bg-linear-to-t from-background to-transparent"
+        className="pointer-events-none fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+3.5rem)] z-20 h-8 bg-linear-to-t from-background to-transparent lg:hidden"
       />
       <nav
         aria-label="Navegação principal"
         data-slot="bottom-nav"
-        className="fixed inset-x-0 bottom-0 z-20 border-t border-white/8 bg-card/70 shadow-nav backdrop-blur-xl backdrop-saturate-150 pb-[env(safe-area-inset-bottom)]"
+        className="fixed inset-x-0 bottom-0 z-20 border-t border-white/8 bg-card/70 shadow-nav backdrop-blur-xl backdrop-saturate-150 pb-[env(safe-area-inset-bottom)] lg:hidden"
       >
         <ul className="mx-auto flex max-w-lg items-stretch justify-between px-2">
-          {items.map(({ href, label, icon: Icon }) => {
-            const isActive =
-              href === "/rendas"
-                ? pathname === "/rendas" || pathname === "/despesas"
-                : pathname === href;
+          {navItems.map(({ href, label, icon: Icon }) => {
+            const isActive = isNavItemActive(href, pathname);
             return (
               <li key={href} className="flex-1">
                 <Link

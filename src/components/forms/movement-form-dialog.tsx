@@ -123,9 +123,12 @@ export function MovementFormDialog({
             isEdit ? (
               <button type="button" className="block w-full text-left" />
             ) : (
+              // Botão flutuante circular no celular; no desktop ele entra no
+              // fluxo do cabeçalho e ganha rótulo, porque um círculo solto no
+              // canto da tela larga fica desligado do conteúdo.
               <Button
                 size="lg"
-                className="size-14 rounded-full p-0 shadow-float ring-1 ring-primary/30 active:scale-90"
+                className="size-14 rounded-full p-0 shadow-float ring-1 ring-primary/30 active:scale-90 lg:size-auto lg:h-10 lg:w-auto lg:gap-2 lg:rounded-xl lg:px-4"
               />
             )
           }
@@ -134,8 +137,8 @@ export function MovementFormDialog({
             children
           ) : (
             <>
-              <Plus className="size-6" />
-              <span className="sr-only">Nova movimentação</span>
+              <Plus className="size-6 lg:size-4" />
+              <span className="sr-only lg:not-sr-only">Nova movimentação</span>
             </>
           )}
         </DialogTrigger>

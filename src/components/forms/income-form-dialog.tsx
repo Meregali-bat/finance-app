@@ -52,7 +52,7 @@ export function IncomeFormDialog({ income }: { income?: IncomeValues }) {
           isEdit ? (
             <Button variant="ghost" size="icon" aria-label="Editar renda" />
           ) : (
-            <Button className="gap-2" />
+            <Button className="gap-2 lg:w-fit" />
           )
         }
       >

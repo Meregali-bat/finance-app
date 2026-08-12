@@ -174,10 +174,12 @@
    sozinho deixaria o texto por baixo aparecendo. */
 @media (prefers-reduced-transparency: reduce) {
   [data-slot="bottom-nav"],
+  [data-slot="sidebar-nav"],
   [data-slot="dialog-overlay"] {
     backdrop-filter: none;
   }
-  [data-slot="bottom-nav"] {
+  [data-slot="bottom-nav"],
+  [data-slot="sidebar-nav"] {
     background: var(--card);
   }
 }
