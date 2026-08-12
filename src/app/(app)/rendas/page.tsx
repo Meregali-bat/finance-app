@@ -56,7 +56,7 @@ export default async function FixedPage() {
           {incomes.length === 0 ? (
             <EmptyState text="Nenhuma renda cadastrada ainda." />
           ) : (
-            <div className="grid gap-2 lg:grid-cols-2">
+            <div className="grid gap-2 xl:grid-cols-2">
               {incomes.map((income) => (
                 <Card key={income.id}>
                   <CardContent className="flex items-center justify-between gap-3 py-3">
@@ -96,7 +96,7 @@ export default async function FixedPage() {
           {expenses.length === 0 ? (
             <EmptyState text="Nenhuma despesa fixa cadastrada ainda." />
           ) : (
-            <div className="grid gap-2 lg:grid-cols-2">
+            <div className="grid gap-2 xl:grid-cols-2">
               {expenses.map((expense) => {
                 const cardName = expense.cardId ? cardNameById.get(expense.cardId) : undefined;
                 return (
@@ -146,7 +146,7 @@ export default async function FixedPage() {
           {categories.length === 0 ? (
             <EmptyState text="Nenhuma categoria cadastrada ainda." />
           ) : (
-            <div className="grid gap-2 lg:grid-cols-2">
+            <div className="grid gap-2 xl:grid-cols-2">
               {categories.map((category) => (
                 <Card key={category.id}>
                   <CardContent className="flex items-center justify-between gap-3 py-3">

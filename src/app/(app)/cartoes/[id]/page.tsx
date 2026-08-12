@@ -76,7 +76,7 @@ export default async function CardDetailPage({
 
       {/* Em telas largas o resumo da fatura fica ao lado da lista em vez de
           empurrá-la para baixo. */}
-      <div className="flex flex-col gap-6 lg:grid lg:grid-cols-[20rem_1fr] lg:items-start">
+      <div className="flex flex-col gap-6 xl:grid xl:grid-cols-[20rem_1fr] xl:items-start">
         <div className="flex flex-col gap-6">
           <Card variant="elevated">
             <CardContent className="flex flex-col gap-1 py-5">

@@ -139,12 +139,12 @@ export default async function DashboardPage() {
       </div>
 
       <Card variant="elevated">
-        {/* No celular os três blocos empilham. Em telas largas eles viram três
-            regiões lado a lado, separadas por divisores verticais: sem isso o
-            número grande e a barra de progresso ficariam esticados sozinhos
-            numa faixa de mais de mil pixels. */}
-        <CardContent className="flex flex-col gap-5 py-6 lg:grid lg:grid-cols-[1fr_1fr_16rem] lg:gap-8">
-          <div className="flex flex-col gap-1 lg:justify-center">
+        {/* Empilhado até `xl`. Só a partir daí os três blocos viram regiões
+            lado a lado separadas por divisores verticais — em `lg` a barra de
+            sidebar come 240px e sobrariam 200px por região, o que esmaga a
+            barra de progresso e quebra os contadores de dia em duas linhas. */}
+        <CardContent className="flex flex-col gap-5 py-6 xl:grid xl:grid-cols-[1fr_1fr_16rem] xl:gap-8">
+          <div className="flex flex-col gap-1 xl:justify-center">
             <p className="text-sm text-muted-foreground">
               {isOverBudget ? "Você já estourou o orçamento de hoje" : "Você pode gastar hoje"}
             </p>
@@ -156,7 +156,7 @@ export default async function DashboardPage() {
             />
           </div>
 
-          <div className="flex flex-col gap-2 lg:justify-center lg:border-l lg:border-border/60 lg:pl-8">
+          <div className="flex flex-col gap-2 xl:justify-center xl:border-l xl:border-border/60 xl:pl-8">
             <Progress
               value={progressPercent}
               indicatorClassName={isOverBudget ? "bg-negative" : undefined}
@@ -172,7 +172,7 @@ export default async function DashboardPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 border-t border-border/60 pt-4 lg:grid-cols-1 lg:content-center lg:gap-6 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-8">
+          <div className="grid grid-cols-2 gap-3 border-t border-border/60 pt-4 xl:grid-cols-1 xl:content-center xl:gap-6 xl:border-t-0 xl:border-l xl:pt-0 xl:pl-8">
             <div className="flex flex-col gap-1">
               <SectionLabel>Saldo do período</SectionLabel>
               <p className="font-medium tabular-nums">{formatCurrency(budget.periodBalance)}</p>
@@ -185,10 +185,10 @@ export default async function DashboardPage() {
         </CardContent>
       </Card>
 
-      {/* Em telas largas as duas listas ficam lado a lado em vez de empilhadas.
-          `items-start` impede que a coluna mais curta esticasse até a altura da
-          outra. */}
-      <div className="flex flex-col gap-6 lg:grid lg:grid-cols-2 lg:items-start">
+      {/* As duas listas ficam lado a lado a partir de `xl`. Em `lg` sobrariam
+          ~340px por coluna, o que trunca o valor dos lembretes. `items-start`
+          impede que a coluna mais curta esticasse até a altura da outra. */}
+      <div className="flex flex-col gap-6 xl:grid xl:grid-cols-2 xl:items-start">
         {reminders.length > 0 && (
           <div className="flex flex-col gap-3">
             <SectionLabel>Lembretes</SectionLabel>
@@ -221,7 +221,10 @@ export default async function DashboardPage() {
                         )}
                         <div className="min-w-0">
                           <p className="truncate font-medium">{reminder.label}</p>
-                          <p className="truncate text-sm text-muted-foreground tabular-nums">
+                          {/* Sem `truncate`: quando o texto não cabe ao lado do
+                              botão, quebrar numa segunda linha preserva a data
+                              do lembrete, que era o que o "…" comia. */}
+                          <p className="text-sm text-muted-foreground tabular-nums">
                             {formatCurrency(reminder.amount)} ·{" "}
                             {isIncome ? "previsto em" : "vence em"} {formatDate(reminder.dueDate)}
                           </p>

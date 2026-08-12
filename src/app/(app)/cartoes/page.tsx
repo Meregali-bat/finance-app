@@ -34,7 +34,7 @@ export default async function CardsPage() {
           hint="Cadastre um para acompanhar a fatura."
         />
       ) : (
-        <div className="grid gap-2 lg:grid-cols-2">
+        <div className="grid gap-2 xl:grid-cols-2">
           {cards.map((card) => {
             const purchases = card.purchases.map((p) => ({
               cardId: card.id,

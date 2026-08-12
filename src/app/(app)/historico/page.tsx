@@ -174,7 +174,7 @@ export default async function HistoryPage({
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="lancamentos" className="grid gap-2 pt-4 lg:grid-cols-2">
+        <TabsContent value="lancamentos" className="grid gap-2 pt-4 xl:grid-cols-2">
           {items.length === 0 ? (
             <EmptyState text="Nenhum lançamento neste mês." />
           ) : (
