@@ -190,9 +190,8 @@ export default async function HistoryPage({
         </TabsContent>
 
         {/* Coluna única de propósito: o acordeão anima a altura ao expandir, e
-            em grid isso faria a coluna vizinha pular. Barra de progresso muito
-            larga também perde a leitura. */}
-        <TabsContent value="categorias" className="pt-4 lg:max-w-2xl">
+            em grid isso faria a coluna vizinha pular. */}
+        <TabsContent value="categorias" className="pt-4">
           {categoryGroups.length === 0 ? (
             <EmptyState text="Nenhum lançamento neste mês." />
           ) : (

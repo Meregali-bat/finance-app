@@ -55,7 +55,17 @@ export default async function CardDetailPage({
         backLabel="Voltar para cartões"
         action={
           <div className="flex items-center gap-1">
-            <CardFormDialog card={card} />
+            {/* Só os campos do formulário: o objeto do Prisma carrega as
+                compras com `amount` em Decimal, e Decimal não atravessa a
+                fronteira para um client component. */}
+            <CardFormDialog
+              card={{
+                id: card.id,
+                name: card.name,
+                closingDay: card.closingDay,
+                dueDay: card.dueDay,
+              }}
+            />
             <DeleteIconButton
               action={deleteCreditCard.bind(null, card.id)}
               confirmMessage={`Excluir o cartão "${card.name}" e todas as suas compras?`}
