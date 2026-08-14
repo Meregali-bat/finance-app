@@ -1,10 +1,9 @@
-import Link from "next/link";
-import { ChevronLeft, ChevronRight } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/auth-helpers";
-import { formatCurrency } from "@/lib/format";
-import { monthParam, resolveRange, type RangeParams } from "@/lib/date-range";
+import { resolveRange, type RangeParams } from "@/lib/date-range";
 import { calculateReportTotals } from "@/lib/report-totals";
+import { PeriodPicker } from "@/components/period-picker";
+import { ReportTotalsCard } from "@/components/report-totals-card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/page-header";
@@ -21,8 +20,8 @@ export default async function HistoryPage({
 }) {
   const params = await searchParams;
   const userId = await requireUserId();
-  const { rangeStart, rangeEnd, label, month } = resolveRange(params);
-  const { year, monthIndex } = month;
+  const range = resolveRange(params);
+  const { rangeStart, rangeEnd } = range;
 
   const [transactions, cardPurchases, expensePayments, categories, creditCards] = await Promise.all([
     prisma.transaction.findMany({
@@ -125,38 +124,15 @@ export default async function HistoryPage({
   const categoryOptions = categories.map((c) => ({ id: c.id, name: c.name }));
   const cardOptions = creditCards.map((c) => ({ id: c.id, name: c.name }));
 
-  const prevMonth = monthIndex === 0 ? { year: year - 1, monthIndex: 11 } : { year, monthIndex: monthIndex - 1 };
-  const nextMonth = monthIndex === 11 ? { year: year + 1, monthIndex: 0 } : { year, monthIndex: monthIndex + 1 };
-
   return (
     <div className="flex flex-col gap-6">
       <PageHeader title="Histórico" />
 
-      {/* O seletor de mês é o controle principal desta tela, então ele ganha
-          uma superfície própria em vez de flutuar solto sobre o fundo. */}
-      <div className="flex items-center justify-between gap-2 rounded-2xl bg-card p-2 shadow-surface ring-1 ring-foreground/10 lg:w-fit lg:gap-6 lg:self-start">
-        <Link
-          href={`/historico?month=${monthParam(prevMonth.year, prevMonth.monthIndex)}`}
-          className="flex size-10 shrink-0 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-          aria-label="Mês anterior"
-        >
-          <ChevronLeft className="size-5" aria-hidden="true" />
-        </Link>
-        <div className="min-w-0 text-center">
-          {/* `capitalize` maiusculiza toda palavra e viraria "Agosto De 2026". */}
-          <p className="truncate font-heading font-medium first-letter:uppercase">{label}</p>
-          <p className="text-sm text-muted-foreground tabular-nums">
-            {formatCurrency(totals.spent)} em gastos
-          </p>
-        </div>
-        <Link
-          href={`/historico?month=${monthParam(nextMonth.year, nextMonth.monthIndex)}`}
-          className="flex size-10 shrink-0 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-          aria-label="Próximo mês"
-        >
-          <ChevronRight className="size-5" aria-hidden="true" />
-        </Link>
-      </div>
+      {/* O seletor de período é o controle principal desta tela, então ele
+          ganha uma superfície própria em vez de flutuar solto sobre o fundo. */}
+      <PeriodPicker range={range} />
+
+      <ReportTotalsCard totals={totals} />
 
       <Tabs defaultValue="lancamentos">
         <TabsList className="w-full lg:w-fit">
