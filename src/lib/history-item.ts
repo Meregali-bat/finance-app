@@ -3,7 +3,7 @@ import { dateOnlyInputValue } from "@/lib/format";
 /** Um lançamento do mês, vindo de qualquer uma das três tabelas de gasto. */
 export type HistoryItem = {
   id: string;
-  kind: "transaction" | "card" | "fixedExpensePayment" | "cardBillPayment";
+  kind: "transaction" | "card" | "fixedExpensePayment" | "cardBillPayment" | "incomeReceipt";
   description: string;
   /** Assinado: receita é negativa, como está no banco. */
   amount: number;
@@ -11,6 +11,8 @@ export type HistoryItem = {
   categoryId: string | null;
   cardId?: string;
   cardName?: string;
+  /** Presente quando kind === "incomeReceipt": a receita fixa que foi confirmada. */
+  incomeId?: string;
 };
 
 /** Os valores que o formulário de edição espera. */

@@ -10,6 +10,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { DeleteIconButton } from "@/components/delete-icon-button";
 import { MovementFormDialog } from "@/components/forms/movement-form-dialog";
 import { unmarkExpensePayment } from "@/lib/actions/expense-payment";
+import { unmarkIncomeReceived } from "@/lib/actions/income-receipt";
 import { formatCurrency, formatDate, formatDateOnly } from "@/lib/format";
 import { toMovementValues, type HistoryItem, type MovementValues } from "@/lib/history-item";
 
@@ -70,13 +71,21 @@ export function MovementRow({
  */
 export function HistoryRow({ item, cards, categories }: Options & { item: HistoryItem }) {
   const isPayment = item.kind === "fixedExpensePayment" || item.kind === "cardBillPayment";
+  const isReceipt = item.kind === "incomeReceipt";
+  // Confirmação, como as de pagamento: não se edita um recebimento, só se
+  // desfaz — e desfazer devolve o lembrete à tela inicial.
+  const isConfirmation = isPayment || isReceipt;
   // paidAt é um instante de verdade, então segue o fuso local; a data de um
   // lançamento é um dia do calendário e é lida em UTC.
   const subtitle =
-    (isPayment ? `Pago em ${formatDate(item.date)}` : formatDateOnly(item.date)) +
+    (isPayment
+      ? `Pago em ${formatDate(item.date)}`
+      : isReceipt
+        ? `Recebido em ${formatDate(item.date)}`
+        : formatDateOnly(item.date)) +
     (item.kind === "card" && item.cardName ? ` · ${item.cardName}` : "");
 
-  const icon = isPayment ? (
+  const icon = isConfirmation ? (
     <CircleCheck className="size-4 shrink-0 text-primary" aria-hidden="true" />
   ) : item.kind === "card" ? (
     <CardIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
@@ -84,7 +93,7 @@ export function HistoryRow({ item, cards, categories }: Options & { item: Histor
     <Receipt className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
   );
 
-  if (isPayment) {
+  if (isConfirmation) {
     return (
       <Card>
         <CardContent className="flex items-center justify-between gap-3 py-3">
@@ -96,10 +105,20 @@ export function HistoryRow({ item, cards, categories }: Options & { item: Histor
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-2">
-            <span className="font-medium tabular-nums">{formatCurrency(Math.abs(item.amount))}</span>
+            <span className={`font-medium tabular-nums ${isReceipt ? "text-primary" : ""}`}>
+              {formatCurrency(Math.abs(item.amount))}
+            </span>
             <DeleteIconButton
-              action={unmarkExpensePayment.bind(null, item.id)}
-              confirmMessage={`Desfazer o pagamento de "${item.description}"? O lembrete volta a aparecer no início.`}
+              action={
+                isReceipt && item.incomeId
+                  ? unmarkIncomeReceived.bind(null, item.incomeId, item.date)
+                  : unmarkExpensePayment.bind(null, item.id)
+              }
+              confirmMessage={
+                isReceipt
+                  ? `Desfazer o recebimento de "${item.description}"? O lembrete volta a aparecer no início.`
+                  : `Desfazer o pagamento de "${item.description}"? O lembrete volta a aparecer no início.`
+              }
             />
           </div>
         </CardContent>
