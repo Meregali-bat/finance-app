@@ -95,7 +95,14 @@ export function PeriodPicker({ range }: { range: ResolvedRange }) {
           <DialogHeader>
             <DialogTitle>Período</DialogTitle>
           </DialogHeader>
-          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          {/* Remonta os campos a cada abertura e a cada período: eles são não
+              controlados, e trocar o `defaultValue` de um input já montado não
+              muda o que está escrito nele. */}
+          <form
+            key={`${open}-${range.rangeStart.getTime()}`}
+            onSubmit={handleSubmit}
+            className="flex flex-col gap-4"
+          >
             <div className="grid grid-cols-3 gap-1 rounded-xl bg-muted p-1">
               {MODES.map((option) => (
                 <button
