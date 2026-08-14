@@ -3,7 +3,8 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/auth-helpers";
 import { formatCurrency } from "@/lib/format";
-import { parseMonthParam, monthParam, monthLabel, getMonthRange } from "@/lib/month-range";
+import { monthParam, resolveRange, type RangeParams } from "@/lib/date-range";
+import { calculateReportTotals } from "@/lib/report-totals";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/page-header";
@@ -16,12 +17,12 @@ const UNCATEGORIZED = "__none__";
 export default async function HistoryPage({
   searchParams,
 }: {
-  searchParams: Promise<{ month?: string }>;
+  searchParams: Promise<RangeParams>;
 }) {
-  const { month } = await searchParams;
+  const params = await searchParams;
   const userId = await requireUserId();
-  const { year, monthIndex } = parseMonthParam(month);
-  const { rangeStart, rangeEnd } = getMonthRange(year, monthIndex);
+  const { rangeStart, rangeEnd, label, month } = resolveRange(params);
+  const { year, monthIndex } = month;
 
   const [transactions, cardPurchases, expensePayments, categories, creditCards] = await Promise.all([
     prisma.transaction.findMany({
@@ -91,18 +92,13 @@ export default async function HistoryPage({
     })),
   ].sort((a, b) => b.date.getTime() - a.date.getTime());
 
-  // Income is stored as a negative amount, so it has to be left out of the
-  // spending figures — otherwise it would land in a category bucket as if it
-  // were an expense, and cancel out part of the month's total.
-  //
-  // A fatura de cartão paga também fica de fora: as compras dela já estão
-  // listadas uma a uma acima, e somar a fatura contaria o mesmo dinheiro duas
-  // vezes. A despesa fixa paga, essa entra — ela não aparece em nenhum outro
-  // lugar do Histórico.
+  const totals = calculateReportTotals({ items, rangeStart, rangeEnd, today: new Date() });
+
+  // Mesmo critério que os totais usam: a receita é negativa e cairia num balde
+  // de categoria como se fosse gasto, e a fatura paga repetiria compras que já
+  // estão listadas uma a uma.
   const countsAsSpending = (item: HistoryItem) =>
     item.amount > 0 && item.kind !== "cardBillPayment";
-
-  const expenseTotal = items.filter(countsAsSpending).reduce((sum, i) => sum + i.amount, 0);
 
   // Agrupado por id, não por nome: nada impede duas categorias homônimas, e
   // fundi-las num balde só esconderia a diferença.
@@ -122,7 +118,7 @@ export default async function HistoryPage({
       amount: group.amount,
       items: group.items,
       percent:
-        expenseTotal !== 0 ? Math.max(0, Math.round((group.amount / expenseTotal) * 100)) : 0,
+        totals.spent !== 0 ? Math.max(0, Math.round((group.amount / totals.spent) * 100)) : 0,
     }))
     .sort((a, b) => b.amount - a.amount);
 
@@ -148,11 +144,9 @@ export default async function HistoryPage({
         </Link>
         <div className="min-w-0 text-center">
           {/* `capitalize` maiusculiza toda palavra e viraria "Agosto De 2026". */}
-          <p className="truncate font-heading font-medium first-letter:uppercase">
-            {monthLabel(year, monthIndex)}
-          </p>
+          <p className="truncate font-heading font-medium first-letter:uppercase">{label}</p>
           <p className="text-sm text-muted-foreground tabular-nums">
-            {formatCurrency(expenseTotal)} em gastos
+            {formatCurrency(totals.spent)} em gastos
           </p>
         </div>
         <Link
@@ -176,7 +170,7 @@ export default async function HistoryPage({
 
         <TabsContent value="lancamentos" className="grid gap-2 pt-4 xl:grid-cols-2">
           {items.length === 0 ? (
-            <EmptyState text="Nenhum lançamento neste mês." />
+            <EmptyState text="Nenhum lançamento neste período." />
           ) : (
             items.map((item) => (
               <HistoryRow
@@ -193,7 +187,7 @@ export default async function HistoryPage({
             em grid isso faria a coluna vizinha pular. */}
         <TabsContent value="categorias" className="pt-4">
           {categoryGroups.length === 0 ? (
-            <EmptyState text="Nenhum lançamento neste mês." />
+            <EmptyState text="Nenhum lançamento neste período." />
           ) : (
             <CategoryBreakdown
               groups={categoryGroups}
