@@ -122,34 +122,39 @@ export function PeriodPicker({ range }: { range: ResolvedRange }) {
               ))}
             </div>
 
-            {/* Os campos ficam desabilitados fora do personalizado — assim eles
-                não entram no FormData e não ancoram um período que o usuário
-                acabou de trocar por "esta semana". */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="from">De</Label>
-                <Input
-                  id="from"
-                  name="from"
-                  type="date"
-                  required
-                  disabled={mode !== "custom"}
-                  defaultValue={dayParam(range.rangeStart)}
-                />
+            {/* Só o personalizado tem datas para escolher. Nos outros modos os
+                campos apareciam desabilitados, o que parecia uma data que se
+                recusa a mudar — e fora do FormData eles já estavam de qualquer
+                jeito.
+
+                Empilhados até `sm`: lado a lado num celular sobra pouco mais de
+                170px por campo, e o `<input type="date">` do iOS desenha a data
+                nativa sem truncar, então ela vazava por cima do campo vizinho. */}
+            {mode === "custom" && (
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="from">De</Label>
+                  <Input
+                    id="from"
+                    name="from"
+                    type="date"
+                    required
+                    defaultValue={dayParam(range.rangeStart)}
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="to">Até</Label>
+                  <Input
+                    id="to"
+                    name="to"
+                    type="date"
+                    required
+                    // O fim é exclusivo: o campo mostra o último dia de dentro.
+                    defaultValue={dayParam(new Date(range.rangeEnd.getTime() - 1))}
+                  />
+                </div>
               </div>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="to">Até</Label>
-                <Input
-                  id="to"
-                  name="to"
-                  type="date"
-                  required
-                  disabled={mode !== "custom"}
-                  // O fim é exclusivo: o campo mostra o último dia de dentro.
-                  defaultValue={dayParam(new Date(range.rangeEnd.getTime() - 1))}
-                />
-              </div>
-            </div>
+            )}
 
             <DialogFooter>
               <Button type="submit">Aplicar</Button>
