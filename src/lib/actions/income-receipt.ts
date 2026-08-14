@@ -43,4 +43,7 @@ export async function unmarkIncomeReceived(incomeId: string, occurrenceDate: Dat
     where: { incomeId, userId, occurrenceDate },
   });
   revalidatePath("/");
+  // O recebimento também é uma linha do Histórico, e o total de recebido de lá
+  // sai dele.
+  revalidatePath("/historico");
 }

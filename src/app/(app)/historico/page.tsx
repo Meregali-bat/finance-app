@@ -23,7 +23,8 @@ export default async function HistoryPage({
   const range = resolveRange(params);
   const { rangeStart, rangeEnd } = range;
 
-  const [transactions, cardPurchases, expensePayments, categories, creditCards] = await Promise.all([
+  const [transactions, cardPurchases, expensePayments, incomeReceipts, categories, creditCards] =
+    await Promise.all([
     prisma.transaction.findMany({
       where: { userId, date: { gte: rangeStart, lt: rangeEnd } },
       include: { category: { select: { id: true, name: true } } },
@@ -45,6 +46,12 @@ export default async function HistoryPage({
         },
         card: { select: { name: true } },
       },
+    }),
+    // Agrupado pelo dia do pagamento — é quando o dinheiro entrou. Não existe
+    // "recebido em" separado: confirmar é dizer que aquele pagamento chegou.
+    prisma.incomeReceipt.findMany({
+      where: { userId, occurrenceDate: { gte: rangeStart, lt: rangeEnd } },
+      include: { income: { select: { label: true } } },
     }),
     prisma.category.findMany({ where: { userId, active: true }, orderBy: { name: "asc" } }),
     prisma.creditCard.findMany({ where: { userId, active: true }, orderBy: { name: "asc" } }),
@@ -88,6 +95,17 @@ export default async function HistoryPage({
       categoryId: rememberCategory(p.fixedExpense?.category),
       cardId: p.cardId ?? undefined,
       cardName: p.card?.name,
+    })),
+    // Negativo porque é receita, que é como o HistoryItem marca dinheiro que
+    // entra — é assim que o total de recebido enxerga a receita fixa.
+    ...incomeReceipts.map((r) => ({
+      id: r.id,
+      kind: "incomeReceipt" as const,
+      description: r.income.label,
+      amount: -Number(r.amount),
+      date: r.occurrenceDate,
+      categoryId: null,
+      incomeId: r.incomeId,
     })),
   ].sort((a, b) => b.date.getTime() - a.date.getTime());
 

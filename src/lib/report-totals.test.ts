@@ -45,6 +45,16 @@ describe("calculateReportTotals", () => {
     expect(totals.spent).toBe(800);
   });
 
+  it("conta a receita fixa confirmada como recebida", () => {
+    const totals = calculateReportTotals({
+      items: [item({ kind: "incomeReceipt", amount: -4500 })],
+      ...august,
+      today: afterAugust,
+    });
+    expect(totals.received).toBe(4500);
+    expect(totals.spent).toBe(0);
+  });
+
   it("separa a receita do gasto e a devolve positiva", () => {
     const totals = calculateReportTotals({
       items: [item({ amount: -2000 }), item({ amount: 300 })],
