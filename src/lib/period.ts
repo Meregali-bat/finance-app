@@ -96,8 +96,28 @@ export interface PeriodBudget {
   incomeReminders: IncomeReminder[];
 }
 
+/** O dia de um instante real — agora, ou quando um registro foi criado. */
 function startOfDay(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+/**
+ * O dia de uma data que o banco guarda como dia de calendário: vencimento,
+ * ocorrência de recebimento, data de lançamento.
+ *
+ * Elas são gravadas como meia-noite do fuso de quem gravou, então o dia
+ * pretendido está na parte **UTC** do valor — e não na parte local, que
+ * depende de quem está lendo. Um vencimento no dia 10 aparece como
+ * `2026-08-10 00:00` nas linhas gravadas por um servidor em UTC e como
+ * `2026-08-10 03:00` nas gravadas em horário de Brasília; lidas em UTC as
+ * duas dizem dia 10, e é isso que faz uma confirmação continuar casando com
+ * a ocorrência calculada mesmo que o servidor mude de fuso.
+ *
+ * O retorno é meia-noite local, a mesma forma que `dateForDayInMonth`
+ * produz, para os dois lados da comparação falarem a mesma língua.
+ */
+function storedDay(date: Date): Date {
+  return new Date(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
 }
 
 function daysInMonth(year: number, month: number): number {
@@ -192,7 +212,7 @@ function isPaydayConfirmed(
   occurrence: Date,
 ): boolean {
   return receipts.some(
-    (r) => r.incomeId === incomeId && startOfDay(r.occurrenceDate).getTime() === occurrence.getTime(),
+    (r) => r.incomeId === incomeId && storedDay(r.occurrenceDate).getTime() === occurrence.getTime(),
   );
 }
 
@@ -206,12 +226,12 @@ function findExpensePayment(
   key: { fixedExpenseId?: string; cardId?: string },
   dueDate: Date,
 ): ExpensePaymentInput | undefined {
-  const day = startOfDay(dueDate).getTime();
+  const day = storedDay(dueDate).getTime();
   return payments.find(
     (p) =>
       p.fixedExpenseId === key.fixedExpenseId &&
       p.cardId === key.cardId &&
-      startOfDay(p.dueDate).getTime() === day,
+      storedDay(p.dueDate).getTime() === day,
   );
 }
 
@@ -283,9 +303,8 @@ export function getCardBillsInPeriod(
       const purchaseAmount = purchases
         .filter((p) => p.cardId === card.id)
         .filter((p) => {
-          // Normalize to day granularity: purchase.date carries a time-of-day,
-          // while cycleStart/cycleEnd are always midnight.
-          const purchaseDay = startOfDay(p.date);
+          // A compra guarda um dia do calendário; o ciclo é sempre meia-noite.
+          const purchaseDay = storedDay(p.date);
           return purchaseDay.getTime() > cycleStart.getTime() && purchaseDay.getTime() <= cycleEnd.getTime();
         })
         .reduce((sum, p) => sum + p.amount, 0);
@@ -365,7 +384,7 @@ export function calculateDailyBudget(input: {
    */
   const incomeTotal = incomeReceipts
     .filter((r) => {
-      const payday = startOfDay(r.occurrenceDate);
+      const payday = storedDay(r.occurrenceDate);
       return payday.getTime() >= periodStart.getTime() && payday.getTime() < periodEnd.getTime();
     })
     .reduce((sum, r) => sum + r.amount, 0);
@@ -418,7 +437,10 @@ export function calculateDailyBudget(input: {
   );
 
   const transactionTotal = transactions
-    .filter((t) => t.date.getTime() >= periodStart.getTime() && t.date.getTime() < periodEnd.getTime())
+    .filter((t) => {
+      const day = storedDay(t.date).getTime();
+      return day >= periodStart.getTime() && day < periodEnd.getTime();
+    })
     .reduce((sum, t) => sum + t.amount, 0);
 
   const periodBalance = incomeTotal - fixedExpenseTotal - cardBillTotal - transactionTotal;

@@ -694,3 +694,57 @@ describe("calculateDailyBudget com pagamentos confirmados", () => {
     expect(budget.fixedExpenseReminders).toHaveLength(1);
   });
 });
+
+describe("confirmações gravadas por servidores de fusos diferentes", () => {
+  // O banco guarda o vencimento como meia-noite do fuso de quem gravou. Um
+  // vencimento no dia 20 vale `2026-01-20 00:00` quando o servidor roda em UTC
+  // e `2026-01-20 03:00` quando roda em Brasília. As duas formas dizem dia 20,
+  // e as duas precisam quitar a mesma ocorrência — senão um lembrete já
+  // confirmado reaparece assim que o fuso do servidor muda.
+  const gravadoPorServidorUtc = new Date("2026-01-20T00:00:00.000Z");
+  const gravadoPorServidorBrt = new Date("2026-01-20T03:00:00.000Z");
+
+  const baseInput = {
+    incomes: [{ id: "i1", amount: 3000, dayOfMonth: 5 }],
+    fixedExpenses: [{ id: "e1", amount: 500, dueDay: 20 }],
+    creditCards: [],
+    cardPurchases: [],
+    transactions: [],
+    today: new Date(2026, 0, 10),
+  };
+
+  it.each([
+    ["gravado por servidor em UTC", gravadoPorServidorUtc],
+    ["gravado por servidor em Brasília", gravadoPorServidorBrt],
+  ])("tira a despesa fixa dos lembretes: %s", (_rotulo, dueDate) => {
+    const budget = calculateDailyBudget({
+      ...baseInput,
+      expensePayments: [{ fixedExpenseId: "e1", dueDate, amount: 500 }],
+    });
+    expect(budget.fixedExpenseReminders).toEqual([]);
+  });
+
+  it.each([
+    ["gravado por servidor em UTC", new Date("2026-01-05T00:00:00.000Z")],
+    ["gravado por servidor em Brasília", new Date("2026-01-05T03:00:00.000Z")],
+  ])("conta o recebimento confirmado: %s", (_rotulo, occurrenceDate) => {
+    const budget = calculateDailyBudget({
+      ...baseInput,
+      incomeReceipts: [{ incomeId: "i1", occurrenceDate, amount: 3000 }],
+    });
+    expect(budget.incomeReminders).toEqual([]);
+    expect(budget.incomeTotal).toBe(3000);
+  });
+
+  it.each([
+    ["gravado por servidor em UTC", new Date("2026-01-08T00:00:00.000Z")],
+    ["gravado por servidor em Brasília", new Date("2026-01-08T03:00:00.000Z")],
+  ])("conta o lançamento no período: %s", (_rotulo, date) => {
+    const budget = calculateDailyBudget({
+      ...baseInput,
+      fixedExpenses: [],
+      transactions: [{ amount: 120, date }],
+    });
+    expect(budget.transactionTotal).toBe(120);
+  });
+});
