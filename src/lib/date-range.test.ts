@@ -216,6 +216,33 @@ describe("previousRangeParams e nextRangeParams", () => {
   });
 });
 
+describe("navegar clique a clique", () => {
+  // Uma seta clicada N vezes tem que andar N passos, nem mais nem menos: o
+  // resultado de um clique vira a URL que o proximo clique le de volta.
+  function walk(start: RangeParams, steps: number, dir: "prev" | "next") {
+    const today = new Date(2026, 7, 17);
+    let range = resolveRange(start, today);
+    const days = [range.rangeStart.getDate()];
+    for (let i = 0; i < steps; i++) {
+      range = resolveRange(dir === "prev" ? previousRangeParams(range) : nextRangeParams(range), today);
+      days.push(range.rangeStart.getDate());
+    }
+    return days;
+  }
+
+  it("anda exatamente um dia por clique para tras", () => {
+    expect(walk({ range: "hoje" }, 3, "prev")).toEqual([17, 16, 15, 14]);
+  });
+
+  it("anda exatamente um dia por clique para frente", () => {
+    expect(walk({ range: "hoje" }, 3, "next")).toEqual([17, 18, 19, 20]);
+  });
+
+  it("anda exatamente sete dias por clique no modo semana", () => {
+    expect(walk({ range: "semana", from: "2026-08-17" }, 2, "prev")).toEqual([17, 10, 3]);
+  });
+});
+
 describe("dayParam", () => {
   it("escreve o dia local, sem passar por UTC", () => {
     // `toISOString()` devolveria o dia anterior em qualquer fuso positivo.
