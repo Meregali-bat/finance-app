@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import { ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
@@ -15,14 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  dayParam,
-  nextRangeParams,
-  previousRangeParams,
-  rangeHref,
-  type RangeMode,
-  type ResolvedRange,
-} from "@/lib/date-range";
+import { rangeHref, type RangeMode, type ResolvedRange } from "@/lib/date-range";
 import { cn } from "@/lib/utils";
 
 const MODES: { value: RangeMode; label: string }[] = [
@@ -41,12 +34,6 @@ const MODES: { value: RangeMode; label: string }[] = [
  * borda de baixo do dedo entre o `touchstart` e o `touchend`, e o iOS não
  * dispara o clique — o botão pisca e não navega.
  */
-/**
- * Curto o bastante para não atrapalhar quem anda vários períodos seguidos, e
- * longo o bastante para cobrir um repique de toque com um render no meio.
- */
-const DOUBLE_ACTIVATION_MS = 350;
-
 const ARROW_CLASS =
   "flex size-11 shrink-0 touch-manipulation items-center justify-center rounded-xl text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground active:bg-muted active:text-foreground";
 
@@ -65,24 +52,6 @@ export function PeriodPicker({ range }: { range: ResolvedRange }) {
   // o roteador resolverem contra a URL atual, e é uma variável a menos numa
   // navegação que já se comporta diferente no celular.
   const hrefFor = (params: Parameters<typeof rangeHref>[0]) => `${pathname}${rangeHref(params)}`;
-
-  /**
-   * Um clique, um período. No iPhone uma seta estava andando dois dias por
-   * toque: o cálculo anda um só (ver date-range.test.ts), então a ativação é
-   * que chega em dobro. Enquanto a origem não aparece, a segunda ativação
-   * dentro da janela é descartada — dois períodos de uma vez nunca é o que
-   * alguém quis, e clicar de novo depois disso continua funcionando.
-   */
-  const lastNavigation = useRef(0);
-
-  function guardDoubleActivation(event: React.MouseEvent) {
-    const now = Date.now();
-    if (now - lastNavigation.current < DOUBLE_ACTIVATION_MS) {
-      event.preventDefault();
-      return;
-    }
-    lastNavigation.current = now;
-  }
 
   function handleOpenChange(next: boolean) {
     setOpen(next);
@@ -112,8 +81,7 @@ export function PeriodPicker({ range }: { range: ResolvedRange }) {
   return (
     <div className="flex items-center justify-between gap-2 rounded-2xl bg-card p-2 shadow-surface ring-1 ring-foreground/10 lg:w-fit lg:gap-6 lg:self-start">
       <Link
-        href={hrefFor(previousRangeParams(range))}
-        onClick={guardDoubleActivation}
+        href={hrefFor(range.previous)}
         className={ARROW_CLASS}
         aria-label="Período anterior"
       >
@@ -185,7 +153,7 @@ export function PeriodPicker({ range }: { range: ResolvedRange }) {
                     name="from"
                     type="date"
                     required
-                    defaultValue={dayParam(range.rangeStart)}
+                    defaultValue={range.firstDay}
                   />
                 </div>
                 <div className="flex flex-col gap-1.5">
@@ -195,8 +163,7 @@ export function PeriodPicker({ range }: { range: ResolvedRange }) {
                     name="to"
                     type="date"
                     required
-                    // O fim é exclusivo: o campo mostra o último dia de dentro.
-                    defaultValue={dayParam(new Date(range.rangeEnd.getTime() - 1))}
+                    defaultValue={range.lastDay}
                   />
                 </div>
               </div>
@@ -210,8 +177,7 @@ export function PeriodPicker({ range }: { range: ResolvedRange }) {
       </Dialog>
 
       <Link
-        href={hrefFor(nextRangeParams(range))}
-        onClick={guardDoubleActivation}
+        href={hrefFor(range.next)}
         className={ARROW_CLASS}
         aria-label="Próximo período"
       >
