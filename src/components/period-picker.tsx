@@ -26,10 +26,20 @@ import {
 import { cn } from "@/lib/utils";
 
 const MODES: { value: RangeMode; label: string }[] = [
+  { value: "hoje", label: "Hoje" },
   { value: "semana", label: "Semana" },
   { value: "mes", label: "Mês" },
   { value: "custom", label: "Personalizado" },
 ];
+
+/**
+ * As setas são o alvo de toque mais estreito da tela, então valem 44px (o
+ * mínimo confortável para o polegar) em vez dos 40 do ícone, e reagem ao
+ * toque: com só `hover:`, um toque no celular não deixa rastro nenhum e
+ * "não navegou" fica indistinguível de "não registrou".
+ */
+const ARROW_CLASS =
+  "flex size-11 shrink-0 touch-manipulation items-center justify-center rounded-xl text-muted-foreground transition-[color,background-color,transform] duration-150 ease-out-quint hover:bg-muted hover:text-foreground active:scale-90 active:bg-muted active:text-foreground";
 
 /**
  * A barra de período: setas para os vizinhos e o rótulo como gatilho do
@@ -70,7 +80,7 @@ export function PeriodPicker({ range }: { range: ResolvedRange }) {
     <div className="flex items-center justify-between gap-2 rounded-2xl bg-card p-2 shadow-surface ring-1 ring-foreground/10 lg:w-fit lg:gap-6 lg:self-start">
       <Link
         href={rangeHref(previousRangeParams(range))}
-        className="flex size-10 shrink-0 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        className={ARROW_CLASS}
         aria-label="Período anterior"
       >
         <ChevronLeft className="size-5" aria-hidden="true" />
@@ -103,7 +113,9 @@ export function PeriodPicker({ range }: { range: ResolvedRange }) {
             onSubmit={handleSubmit}
             className="flex flex-col gap-4"
           >
-            <div className="grid grid-cols-3 gap-1 rounded-xl bg-muted p-1">
+            {/* 2×2 no celular: em quatro colunas sobram ~80px por botão e
+                "Personalizado" trunca. */}
+            <div className="grid grid-cols-2 gap-1 rounded-xl bg-muted p-1 sm:grid-cols-4">
               {MODES.map((option) => (
                 <button
                   key={option.value}
@@ -165,7 +177,7 @@ export function PeriodPicker({ range }: { range: ResolvedRange }) {
 
       <Link
         href={rangeHref(nextRangeParams(range))}
-        className="flex size-10 shrink-0 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        className={ARROW_CLASS}
         aria-label="Próximo período"
       >
         <ChevronRight className="size-5" aria-hidden="true" />

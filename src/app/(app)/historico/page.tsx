@@ -21,16 +21,18 @@ export default async function HistoryPage({
   const params = await searchParams;
   const userId = await requireUserId();
   const range = resolveRange(params);
-  const { rangeStart, rangeEnd } = range;
+  // Duas bordas para duas convenções de gravação: lançamentos guardam um dia
+  // do calendário em meia-noite UTC, confirmações guardam instantes locais.
+  const { rangeStart, rangeEnd, utcRangeStart, utcRangeEnd } = range;
 
   const [transactions, cardPurchases, expensePayments, incomeReceipts, categories, creditCards] =
     await Promise.all([
     prisma.transaction.findMany({
-      where: { userId, date: { gte: rangeStart, lt: rangeEnd } },
+      where: { userId, date: { gte: utcRangeStart, lt: utcRangeEnd } },
       include: { category: { select: { id: true, name: true } } },
     }),
     prisma.cardPurchase.findMany({
-      where: { userId, date: { gte: rangeStart, lt: rangeEnd } },
+      where: { userId, date: { gte: utcRangeStart, lt: utcRangeEnd } },
       include: {
         card: { select: { name: true } },
         category: { select: { id: true, name: true } },
@@ -72,6 +74,7 @@ export default async function HistoryPage({
       description: t.description,
       amount: Number(t.amount),
       date: t.date,
+      createdAt: t.createdAt,
       categoryId: rememberCategory(t.category),
     })),
     ...cardPurchases.map((p) => ({
@@ -80,6 +83,7 @@ export default async function HistoryPage({
       description: p.description,
       amount: Number(p.amount),
       date: p.date,
+      createdAt: p.createdAt,
       categoryId: rememberCategory(p.category),
       cardId: p.cardId,
       cardName: p.card.name,

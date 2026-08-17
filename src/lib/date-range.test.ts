@@ -30,6 +30,31 @@ describe("resolveRange", () => {
     expect(range.rangeStart).toEqual(new Date(2026, 7, 1));
   });
 
+  it("cobre só o dia de hoje no modo hoje", () => {
+    const today = new Date(2026, 7, 13, 15, 42); // com hora, como vem de `new Date()`
+    const range = resolveRange({ range: "hoje" }, today);
+    expect(range.mode).toBe("hoje");
+    expect(range.rangeStart).toEqual(new Date(2026, 7, 13));
+    expect(range.rangeEnd).toEqual(new Date(2026, 7, 14));
+  });
+
+  it("ancora o dia no from, e não em hoje", () => {
+    const range = resolveRange({ range: "hoje", from: "2026-08-03" }, new Date(2026, 7, 13));
+    expect(range.rangeStart).toEqual(new Date(2026, 7, 3));
+    expect(range.rangeEnd).toEqual(new Date(2026, 7, 4));
+  });
+
+  it("volta para hoje quando a âncora do dia não é uma data", () => {
+    const range = resolveRange({ range: "hoje", from: "ontem" }, new Date(2026, 7, 13));
+    expect(range.rangeStart).toEqual(new Date(2026, 7, 13));
+  });
+
+  it('chama o dia corrente de "Hoje" e os outros pela data', () => {
+    const today = new Date(2026, 7, 13);
+    expect(resolveRange({ range: "hoje" }, today).label).toBe("Hoje");
+    expect(resolveRange({ range: "hoje", from: "2026-08-10" }, today).label).toBe("10 de ago.");
+  });
+
   it("abre a semana na segunda-feira e fecha sete dias depois", () => {
     const wednesday = new Date(2026, 7, 12);
     const range = resolveRange({ range: "semana" }, wednesday);
@@ -109,8 +134,43 @@ describe("resolveRange", () => {
   });
 });
 
+describe("bordas em UTC", () => {
+  // Um lançamento do dia 16 é gravado como 16/08 00:00Z. Comparado com a borda
+  // local (16/08 00:00-03:00) ele cairia no dia 15 — o filtro de um dia só
+  // mostraria sempre os lançamentos do dia seguinte.
+  it("cobre o dia do lançamento, e não o anterior", () => {
+    const range = resolveRange({ range: "hoje", from: "2026-08-16" }, new Date(2026, 7, 17));
+    const lancamentoDoDia16 = new Date("2026-08-16T00:00:00.000Z");
+    expect(range.utcRangeStart.getTime()).toBeLessThanOrEqual(lancamentoDoDia16.getTime());
+    expect(range.utcRangeEnd.getTime()).toBeGreaterThan(lancamentoDoDia16.getTime());
+  });
+
+  it("acompanha os mesmos dias do calendário das bordas locais", () => {
+    const range = resolveRange({ range: "mes", month: "2026-08" }, new Date(2026, 7, 13));
+    expect(range.utcRangeStart.toISOString()).toBe("2026-08-01T00:00:00.000Z");
+    expect(range.utcRangeEnd.toISOString()).toBe("2026-09-01T00:00:00.000Z");
+  });
+
+  it("fecha o dia seguinte para fora no modo hoje", () => {
+    const range = resolveRange({ range: "hoje", from: "2026-08-16" }, new Date(2026, 7, 17));
+    expect(range.utcRangeStart.toISOString()).toBe("2026-08-16T00:00:00.000Z");
+    expect(range.utcRangeEnd.toISOString()).toBe("2026-08-17T00:00:00.000Z");
+  });
+});
+
 describe("previousRangeParams e nextRangeParams", () => {
   const at = (params: RangeParams) => resolveRange(params, new Date(2026, 7, 13));
+
+  it("anda um dia de cada vez no modo hoje", () => {
+    const day = at({ range: "hoje", from: "2026-08-13" });
+    expect(previousRangeParams(day)).toEqual({ range: "hoje", from: "2026-08-12" });
+    expect(nextRangeParams(day)).toEqual({ range: "hoje", from: "2026-08-14" });
+  });
+
+  it("vira o mês ao andar de dia no modo hoje", () => {
+    const lastDay = at({ range: "hoje", from: "2026-08-31" });
+    expect(nextRangeParams(lastDay)).toEqual({ range: "hoje", from: "2026-09-01" });
+  });
 
   it("anda um mês de cada vez no modo mês", () => {
     const august = at({ range: "mes", month: "2026-08" });
