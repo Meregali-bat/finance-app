@@ -11,7 +11,7 @@ import { DeleteIconButton } from "@/components/delete-icon-button";
 import { MovementFormDialog } from "@/components/forms/movement-form-dialog";
 import { unmarkExpensePayment } from "@/lib/actions/expense-payment";
 import { unmarkIncomeReceived } from "@/lib/actions/income-receipt";
-import { formatCurrency, formatDate, formatDateOnly } from "@/lib/format";
+import { formatCurrency, formatDateTime, formatInstant, formatShortDate } from "@/lib/format";
 import { toMovementValues, type HistoryItem, type MovementValues } from "@/lib/history-item";
 
 type Options = {
@@ -75,14 +75,15 @@ export function HistoryRow({ item, cards, categories }: Options & { item: Histor
   // Confirmação, como as de pagamento: não se edita um recebimento, só se
   // desfaz — e desfazer devolve o lembrete à tela inicial.
   const isConfirmation = isPayment || isReceipt;
-  // paidAt é um instante de verdade, então segue o fuso local; a data de um
-  // lançamento é um dia do calendário e é lida em UTC.
+  // Cada um mostra a hora que de fato tem. `paidAt` é um instante, então o
+  // pagamento leva hora; `occurrenceDate` é o dia do pagamento da receita, e
+  // um "00:00" ali seria ruído; o lançamento pega a hora do cadastro.
   const subtitle =
     (isPayment
-      ? `Pago em ${formatDate(item.date)}`
+      ? `Pago em ${formatInstant(item.date)}`
       : isReceipt
-        ? `Recebido em ${formatDate(item.date)}`
-        : formatDateOnly(item.date)) +
+        ? `Recebido em ${formatShortDate(item.date)}`
+        : formatDateTime(item.date, item.createdAt)) +
     (item.kind === "card" && item.cardName ? ` · ${item.cardName}` : "");
 
   const icon = isConfirmation ? (

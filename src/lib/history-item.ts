@@ -8,6 +8,12 @@ export type HistoryItem = {
   /** Assinado: receita é negativa, como está no banco. */
   amount: number;
   date: Date;
+  /**
+   * Quando o lançamento foi cadastrado — de onde sai a hora exibida. Só existe
+   * para lançamentos (transaction/card); confirmações trazem o próprio instante
+   * em `date`.
+   */
+  createdAt?: Date | null;
   categoryId: string | null;
   cardId?: string;
   cardName?: string;

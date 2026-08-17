@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { Receipt } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/auth-helpers";
-import { formatCurrency, formatDate, formatDateOnly } from "@/lib/format";
+import { formatCurrency, formatDate, formatDateTime } from "@/lib/format";
 import { getCardBillsInPeriod } from "@/lib/period";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -115,7 +115,7 @@ export default async function CardDetailPage({
                   categoryId: purchase.categoryId,
                   cardId: card.id,
                 })}
-                subtitle={formatDateOnly(purchase.date)}
+                subtitle={formatDateTime(purchase.date, purchase.createdAt)}
                 cards={[{ id: card.id, name: card.name }]}
                 categories={categoryOptions}
               />

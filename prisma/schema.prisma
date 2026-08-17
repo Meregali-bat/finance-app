@@ -127,6 +127,10 @@ model Transaction {
   amount      Decimal
   description String
   date        DateTime  @default(now())
+  /// Quando o lançamento foi cadastrado — é daqui que sai a hora exibida.
+  /// `date` é um dia do calendário (meia-noite UTC) e não carrega horário.
+  /// Nulo nos lançamentos anteriores a esta coluna, que então só mostram o dia.
+  createdAt   DateTime? @default(now())
   categoryId  String?
   user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   category    Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
@@ -158,6 +162,8 @@ model CardPurchase {
   amount      Decimal
   description String
   date        DateTime   @default(now())
+  /// Mesma coisa que em Transaction: o dia vem de `date`, a hora daqui.
+  createdAt   DateTime?  @default(now())
   categoryId  String?
   card        CreditCard @relation(fields: [cardId], references: [id], onDelete: Cascade)
   user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
