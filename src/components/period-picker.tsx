@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import { ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -35,11 +35,14 @@ const MODES: { value: RangeMode; label: string }[] = [
 /**
  * As setas são o alvo de toque mais estreito da tela, então valem 44px (o
  * mínimo confortável para o polegar) em vez dos 40 do ícone, e reagem ao
- * toque: com só `hover:`, um toque no celular não deixa rastro nenhum e
- * "não navegou" fica indistinguível de "não registrou".
+ * toque: com só `hover:`, um toque no celular não deixa rastro nenhum.
+ *
+ * A reação é de cor, nunca de escala. Encolher um alvo desse tamanho tira a
+ * borda de baixo do dedo entre o `touchstart` e o `touchend`, e o iOS não
+ * dispara o clique — o botão pisca e não navega.
  */
 const ARROW_CLASS =
-  "flex size-11 shrink-0 touch-manipulation items-center justify-center rounded-xl text-muted-foreground transition-[color,background-color,transform] duration-150 ease-out-quint hover:bg-muted hover:text-foreground active:scale-90 active:bg-muted active:text-foreground";
+  "flex size-11 shrink-0 touch-manipulation items-center justify-center rounded-xl text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground active:bg-muted active:text-foreground";
 
 /**
  * A barra de período: setas para os vizinhos e o rótulo como gatilho do
@@ -48,8 +51,14 @@ const ARROW_CLASS =
  */
 export function PeriodPicker({ range }: { range: ResolvedRange }) {
   const router = useRouter();
+  const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<RangeMode>(range.mode);
+
+  // Caminho na frente da query: um href só com `?...` depende de o navegador e
+  // o roteador resolverem contra a URL atual, e é uma variável a menos numa
+  // navegação que já se comporta diferente no celular.
+  const hrefFor = (params: Parameters<typeof rangeHref>[0]) => `${pathname}${rangeHref(params)}`;
 
   function handleOpenChange(next: boolean) {
     setOpen(next);
@@ -65,7 +74,7 @@ export function PeriodPicker({ range }: { range: ResolvedRange }) {
     const to = form.get("to");
 
     router.push(
-      rangeHref(
+      hrefFor(
         mode === "custom"
           ? { range: "custom", from: String(from), to: String(to) }
           // Semana e mês sem âncora: escolher o modo leva ao período corrente,
@@ -79,7 +88,7 @@ export function PeriodPicker({ range }: { range: ResolvedRange }) {
   return (
     <div className="flex items-center justify-between gap-2 rounded-2xl bg-card p-2 shadow-surface ring-1 ring-foreground/10 lg:w-fit lg:gap-6 lg:self-start">
       <Link
-        href={rangeHref(previousRangeParams(range))}
+        href={hrefFor(previousRangeParams(range))}
         className={ARROW_CLASS}
         aria-label="Período anterior"
       >
@@ -176,7 +185,7 @@ export function PeriodPicker({ range }: { range: ResolvedRange }) {
       </Dialog>
 
       <Link
-        href={rangeHref(nextRangeParams(range))}
+        href={hrefFor(nextRangeParams(range))}
         className={ARROW_CLASS}
         aria-label="Próximo período"
       >
