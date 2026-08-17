@@ -32,19 +32,50 @@ export type ResolvedRange = {
    */
   utcRangeStart: Date;
   utcRangeEnd: Date;
+  /**
+   * Os períodos vizinhos, já resolvidos aqui — e é por isso que eles são
+   * dados, e não uma função que o componente chama.
+   *
+   * A conta de calendário usa `getFullYear/getMonth/getDate`, que leem a data
+   * no fuso de quem chama. Refeita no navegador sobre uma `Date` que veio
+   * daqui, ela dá outro dia: em produção o servidor roda em UTC e o aparelho
+   * não, então o servidor renderiza a seta para o dia 16 e o cliente rehidrata
+   * ela apontando para o 15. Um toque andava dois dias, e para frente caía na
+   * própria página. No `localhost` os dois fusos coincidem e nada aparece.
+   */
+  previous: RangeParams;
+  next: RangeParams;
+  /** As pontas como "YYYY-MM-DD", pelo mesmo motivo: `dayParam` também lê no fuso. */
+  firstDay: string;
+  lastDay: string;
 };
+
+/** O período antes de ganhar tudo que é derivado dele. */
+type RangeCore = Omit<
+  ResolvedRange,
+  "utcRangeStart" | "utcRangeEnd" | "previous" | "next" | "firstDay" | "lastDay"
+>;
 
 /** A meia-noite UTC do mesmo dia do calendário. */
 function utcMidnight(day: Date) {
   return new Date(Date.UTC(day.getFullYear(), day.getMonth(), day.getDate()));
 }
 
-/** Deriva as bordas em UTC a partir das locais, que são a fonte da verdade. */
-function withUtcBounds(range: Omit<ResolvedRange, "utcRangeStart" | "utcRangeEnd">): ResolvedRange {
+/**
+ * Completa o período com tudo que depende de conta de calendário. Roda uma vez
+ * só, onde `resolveRange` roda — no servidor — para que o resultado atravesse
+ * a serialização como string e número, que não têm fuso.
+ */
+function complete(core: RangeCore): ResolvedRange {
   return {
-    ...range,
-    utcRangeStart: utcMidnight(range.rangeStart),
-    utcRangeEnd: utcMidnight(range.rangeEnd),
+    ...core,
+    utcRangeStart: utcMidnight(core.rangeStart),
+    utcRangeEnd: utcMidnight(core.rangeEnd),
+    previous: shiftRange(core, -1),
+    next: shiftRange(core, 1),
+    firstDay: dayParam(core.rangeStart),
+    // O fim é exclusivo: o último dia de dentro é o anterior a ele.
+    lastDay: dayParam(addDays(core.rangeEnd, -1)),
   };
 }
 
@@ -112,7 +143,7 @@ function dayLabel(day: Date, today: Date) {
 }
 
 function monthRange(year: number, monthIndex: number): ResolvedRange {
-  return withUtcBounds({
+  return complete({
     mode: "mes",
     rangeStart: new Date(year, monthIndex, 1),
     rangeEnd: new Date(year, monthIndex + 1, 1),
@@ -132,7 +163,7 @@ export function resolveRange(params: RangeParams, today: Date = new Date()): Res
     // `from` é só a âncora, como na semana: sem ela, é o dia de hoje.
     const rangeStart = startOfDay(parseDayParam(params.from) ?? today);
     const rangeEnd = addDays(rangeStart, 1);
-    return withUtcBounds({
+    return complete({
       mode: "hoje",
       rangeStart,
       rangeEnd,
@@ -146,7 +177,7 @@ export function resolveRange(params: RangeParams, today: Date = new Date()): Res
     // semana continua abrindo na segunda-feira. Sem âncora, é a de hoje.
     const rangeStart = startOfWeek(parseDayParam(params.from) ?? today, { weekStartsOn: 1 });
     const rangeEnd = addDays(rangeStart, 7);
-    return withUtcBounds({
+    return complete({
       mode: "semana",
       rangeStart,
       rangeEnd,
@@ -163,7 +194,7 @@ export function resolveRange(params: RangeParams, today: Date = new Date()): Res
       // devolver um período vazio.
       const [first, last] = from <= to ? [from, to] : [to, from];
       const rangeEnd = addDays(last, 1);
-      return withUtcBounds({
+      return complete({
         mode: "custom",
         rangeStart: first,
         rangeEnd,
@@ -183,7 +214,7 @@ export function resolveRange(params: RangeParams, today: Date = new Date()): Res
  * de mês em mês, a semana de sete em sete dias, e o intervalo personalizado
  * pela própria duração. Devolve parâmetros, não datas — quem navega é a URL.
  */
-function shiftRange(range: ResolvedRange, direction: 1 | -1): RangeParams {
+function shiftRange(range: RangeCore, direction: 1 | -1): RangeParams {
   if (range.mode === "hoje") {
     return { range: "hoje", from: dayParam(addDays(range.rangeStart, direction)) };
   }
@@ -203,12 +234,14 @@ function shiftRange(range: ResolvedRange, direction: 1 | -1): RangeParams {
   return { range: "mes", month: monthParam(Math.floor(total / 12), ((total % 12) + 12) % 12) };
 }
 
+// Leitura do que `resolveRange` já calculou, nunca uma conta nova: refazer a
+// conta é justamente o que quebrava a navegação no celular.
 export function previousRangeParams(range: ResolvedRange): RangeParams {
-  return shiftRange(range, -1);
+  return range.previous;
 }
 
 export function nextRangeParams(range: ResolvedRange): RangeParams {
-  return shiftRange(range, 1);
+  return range.next;
 }
 
 /** A query relativa que leva a um período — o Link resolve contra a rota atual. */

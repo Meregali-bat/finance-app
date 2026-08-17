@@ -243,6 +243,38 @@ describe("navegar clique a clique", () => {
   });
 });
 
+describe("a navegação não pode depender do fuso de quem lê", () => {
+  // O bug: `resolveRange` roda no servidor (UTC em produção) e o componente
+  // refazia a conta no navegador, num fuso diferente. O mesmo instante lido em
+  // UTC-3 cai no dia anterior, então a seta rehidratava apontando um dia a
+  // mais. Para tras andava dois dias; para frente voltava para a propria
+  // pagina. Com os vizinhos resolvidos no servidor, sobra so leitura.
+  const meiaNoiteUtcDoDia17 = new Date("2026-08-17T00:00:00.000Z");
+
+  it("resolve os vizinhos junto com o período, e não sob demanda", () => {
+    const range = resolveRange({ range: "hoje", from: "2026-08-17" }, meiaNoiteUtcDoDia17);
+    // Os mesmos objetos, não um recálculo: ler duas vezes tem que dar o mesmo.
+    expect(previousRangeParams(range)).toBe(range.previous);
+    expect(nextRangeParams(range)).toBe(range.next);
+  });
+
+  it("anda um dia para cada lado a partir do dia 17", () => {
+    const range = resolveRange({ range: "hoje", from: "2026-08-17" }, meiaNoiteUtcDoDia17);
+    expect(range.previous).toEqual({ range: "hoje", from: "2026-08-16" });
+    expect(range.next).toEqual({ range: "hoje", from: "2026-08-18" });
+  });
+
+  it("entrega as pontas do intervalo como string, prontas para o campo de data", () => {
+    const range = resolveRange(
+      { range: "custom", from: "2026-08-01", to: "2026-08-10" },
+      meiaNoiteUtcDoDia17,
+    );
+    expect(range.firstDay).toBe("2026-08-01");
+    // O fim é exclusivo, então o campo "Até" mostra o dia 10, não o 11.
+    expect(range.lastDay).toBe("2026-08-10");
+  });
+});
+
 describe("dayParam", () => {
   it("escreve o dia local, sem passar por UTC", () => {
     // `toISOString()` devolveria o dia anterior em qualquer fuso positivo.
