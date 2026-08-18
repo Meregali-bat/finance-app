@@ -14,7 +14,7 @@ export default async function CardsPage() {
   const cards = await prisma.creditCard.findMany({
     where: { userId },
     orderBy: { name: "asc" },
-    include: { purchases: true },
+    include: { purchases: true, fixedExpenses: { where: { active: true } } },
   });
 
   const today = new Date();
@@ -41,7 +41,21 @@ export default async function CardsPage() {
               amount: Number(p.amount),
               date: p.date,
             }));
-            const bills = getCardBillsInPeriod([card], purchases, today, farFuture);
+            // As assinaturas cobradas no cartão fazem parte da fatura: sem elas
+            // esta tela mostrava um número menor que o do início.
+            const cardFixedExpenses = card.fixedExpenses.map((e) => ({
+              id: e.id,
+              amount: Number(e.amount),
+              cardId: e.cardId ?? undefined,
+              createdAt: e.createdAt,
+            }));
+            const bills = getCardBillsInPeriod(
+              [card],
+              purchases,
+              today,
+              farFuture,
+              cardFixedExpenses,
+            );
             const nextBill = bills.sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime())[0];
 
             return (
