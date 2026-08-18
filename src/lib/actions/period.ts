@@ -13,14 +13,22 @@ import {
 } from "@/lib/period";
 
 async function loadBudgetInputs(userId: string) {
-  const [incomes, incomeReceipts, fixedExpenses, creditCards, transactions, expensePayments] =
-    await Promise.all([
+  const [
+    incomes,
+    incomeReceipts,
+    fixedExpenses,
+    creditCards,
+    transactions,
+    expensePayments,
+    billEstimates,
+  ] = await Promise.all([
       prisma.income.findMany({ where: { userId } }),
       prisma.incomeReceipt.findMany({ where: { userId } }),
       prisma.fixedExpense.findMany({ where: { userId } }),
       prisma.creditCard.findMany({ where: { userId }, include: { purchases: true } }),
       prisma.transaction.findMany({ where: { userId } }),
       prisma.expensePayment.findMany({ where: { userId } }),
+      prisma.cardBillEstimate.findMany({ where: { userId } }),
     ]);
 
   const incomeInputs: IncomeInput[] = incomes.map((i) => ({
@@ -42,7 +50,12 @@ async function loadBudgetInputs(userId: string) {
     dueDay: c.dueDay,
   }));
   const cardPurchaseInputs = creditCards.flatMap((c) =>
-    c.purchases.map((p) => ({ cardId: c.id, amount: Number(p.amount), date: p.date })),
+    c.purchases.map((p) => ({
+      cardId: c.id,
+      amount: Number(p.amount),
+      date: p.date,
+      installments: p.installments,
+    })),
   );
   const transactionInputs = transactions.map((t) => ({ amount: Number(t.amount), date: t.date }));
 
@@ -56,6 +69,11 @@ async function loadBudgetInputs(userId: string) {
     fixedExpenses: fixedExpenseInputs,
     creditCards: creditCardInputs,
     cardPurchases: cardPurchaseInputs,
+    billEstimates: billEstimates.map((e) => ({
+      cardId: e.cardId,
+      dueDate: e.dueDate,
+      amount: Number(e.amount),
+    })),
     expensePayments: expensePayments.map((p) => ({
       fixedExpenseId: p.fixedExpenseId ?? undefined,
       cardId: p.cardId ?? undefined,

@@ -25,8 +25,16 @@ export default async function DashboardPage() {
   const userId = await requireUserId();
   const today = new Date();
 
-  const [incomes, incomeReceipts, fixedExpenses, creditCards, transactions, categories, expensePayments] =
-    await Promise.all([
+  const [
+    incomes,
+    incomeReceipts,
+    fixedExpenses,
+    creditCards,
+    transactions,
+    categories,
+    expensePayments,
+    billEstimates,
+  ] = await Promise.all([
       prisma.income.findMany({ where: { userId, active: true } }),
       prisma.incomeReceipt.findMany({ where: { userId } }),
       prisma.fixedExpense.findMany({ where: { userId, active: true } }),
@@ -34,6 +42,7 @@ export default async function DashboardPage() {
       prisma.transaction.findMany({ where: { userId }, orderBy: { date: "desc" } }),
       prisma.category.findMany({ where: { userId, active: true }, orderBy: { name: "asc" } }),
       prisma.expensePayment.findMany({ where: { userId } }),
+      prisma.cardBillEstimate.findMany({ where: { userId } }),
     ]);
 
   const budget = calculateDailyBudget({
@@ -57,8 +66,18 @@ export default async function DashboardPage() {
     })),
     creditCards: creditCards.map((c) => ({ id: c.id, closingDay: c.closingDay, dueDay: c.dueDay })),
     cardPurchases: creditCards.flatMap((c) =>
-      c.purchases.map((p) => ({ cardId: c.id, amount: Number(p.amount), date: p.date })),
+      c.purchases.map((p) => ({
+        cardId: c.id,
+        amount: Number(p.amount),
+        date: p.date,
+        installments: p.installments,
+      })),
     ),
+    billEstimates: billEstimates.map((e) => ({
+      cardId: e.cardId,
+      dueDate: e.dueDate,
+      amount: Number(e.amount),
+    })),
     expensePayments: expensePayments.map((p) => ({
       // null vira undefined: period.ts compara os dois lados por igualdade
       // estrita, e null !== undefined faria o pagamento nunca casar.
