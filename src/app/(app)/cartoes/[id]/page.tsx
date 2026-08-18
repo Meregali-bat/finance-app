@@ -2,14 +2,21 @@ import { notFound } from "next/navigation";
 import { Receipt } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/auth-helpers";
-import { formatCurrency, formatDate, formatDateTime } from "@/lib/format";
-import { getCardBillsInPeriod, getCardLimitUsage } from "@/lib/period";
+import {
+  formatCurrency,
+  formatDate,
+  formatDateTime,
+  installmentLabel,
+} from "@/lib/format";
+import { buildCardBills, getCardBillsInPeriod, getCardLimitUsage } from "@/lib/period";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader, SectionLabel } from "@/components/page-header";
 import { CardFormDialog } from "@/components/forms/card-form-dialog";
 import { CardPurchaseFormDialog } from "@/components/forms/card-purchase-form-dialog";
+import { CardBillEstimateDialog } from "@/components/forms/card-bill-estimate-dialog";
+import { CardBillProjection } from "@/components/card-bill-projection";
 import { MovementRow } from "@/components/movement-row";
 import { toMovementValues } from "@/lib/history-item";
 import { DeleteIconButton } from "@/components/delete-icon-button";
@@ -91,6 +98,39 @@ export default async function CardDetailPage({
     expensePayments,
     today,
   });
+
+  // Seis faturas: cabe na tela do celular sem rolar muito e cobre a maioria dos
+  // parcelamentos curtos.
+  const projectedBills = buildCardBills({
+    card: { id: card.id, closingDay: card.closingDay, dueDay: card.dueDay },
+    purchases,
+    cardFixedExpenses,
+    billEstimates,
+    expensePayments,
+    from: today,
+    months: 6,
+  }).map((bill) => ({
+    dueDateIso: bill.dueDate.toISOString(),
+    dueDate: bill.dueDate,
+    amount: bill.amount,
+    estimateAmount: bill.estimateAmount,
+    paid: bill.paid,
+    paidAmount: bill.paidAmount,
+  }));
+
+  // O seletor do formulário só oferece vencimentos de verdade: uma data
+  // qualquer não casaria com fatura alguma e a previsão sumiria em silêncio.
+  const dueDateOptions = projectedBills.map((bill) => ({
+    value: bill.dueDateIso,
+    label: formatDate(bill.dueDate),
+  }));
+
+  const listedEstimates = card.billEstimates.map((e) => ({
+    id: e.id,
+    description: e.description,
+    dueDate: e.dueDate,
+    amount: Number(e.amount),
+  }));
 
   return (
     <div className="flex flex-col gap-6">
@@ -182,6 +222,14 @@ export default async function CardDetailPage({
           </Card>
 
           <CardPurchaseFormDialog cardId={card.id} categories={categoryOptions} />
+
+          <CardBillEstimateDialog cardId={card.id} dueDates={dueDateOptions} />
+
+          <CardBillProjection
+            cardId={card.id}
+            bills={projectedBills}
+            estimates={listedEstimates}
+          />
         </div>
 
         {card.purchases.length === 0 ? (
@@ -199,8 +247,16 @@ export default async function CardDetailPage({
                   date: purchase.date,
                   categoryId: purchase.categoryId,
                   cardId: card.id,
+                  installments: purchase.installments,
                 })}
-                subtitle={formatDateTime(purchase.date, purchase.createdAt)}
+                subtitle={[
+                  formatDateTime(purchase.date, purchase.createdAt),
+                  // O valor da linha é o total da compra; sem isto um 12x se
+                  // leria como se tudo tivesse saído no mês em que foi comprado.
+                  installmentLabel(Number(purchase.amount), purchase.installments),
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
                 cards={[{ id: card.id, name: card.name }]}
                 categories={categoryOptions}
               />

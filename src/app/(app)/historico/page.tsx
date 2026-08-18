@@ -87,6 +87,7 @@ export default async function HistoryPage({
       categoryId: rememberCategory(p.category),
       cardId: p.cardId,
       cardName: p.card.name,
+      installments: p.installments,
     })),
     ...expensePayments.map((p) => ({
       id: p.id,

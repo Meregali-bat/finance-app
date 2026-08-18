@@ -75,6 +75,21 @@ export function CardPurchaseFormDialog({
               <Input id="date" name="date" type="date" defaultValue={todayInputValue()} required />
             </div>
           </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="installments">Parcelas</Label>
+            <Input
+              id="installments"
+              name="installments"
+              type="number"
+              inputMode="numeric"
+              min="1"
+              max="48"
+              defaultValue={1}
+            />
+            <p className="text-xs text-muted-foreground">
+              O valor acima é o total da compra; ele é dividido nas próximas faturas.
+            </p>
+          </div>
           {categories.length > 0 && (
             <div className="flex flex-col gap-2">
               <Label htmlFor="categoryId">Categoria</Label>

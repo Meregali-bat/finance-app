@@ -229,13 +229,38 @@ export function MovementFormDialog({
                 </Select>
               </div>
             )}
+            {/* É por aqui que a maioria das compras no cartão entra, então sem
+                este campo o fluxo principal não conseguiria lançar um
+                parcelado. Só aparece com um cartão escolhido: à vista não
+                existe parcela. */}
+            {!isEdit && kind === "expense" && cardId !== CASH && (
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="installments">Parcelas</Label>
+                <Input
+                  id="installments"
+                  name="installments"
+                  type="number"
+                  inputMode="numeric"
+                  min="1"
+                  max="48"
+                  defaultValue={1}
+                />
+                <p className="text-xs text-muted-foreground">
+                  O valor acima é o total da compra; ele é dividido nas próximas faturas.
+                </p>
+              </div>
+            )}
             {/* Trocar à vista ↔ cartão mudaria o lançamento de tabela, então na
                 edição o meio de pagamento é só informativo. */}
             {isEdit && kind === "expense" && (
               <div className="flex flex-col gap-1">
                 <Label>Como foi pago</Label>
                 <p className="text-sm text-muted-foreground">
-                  {cardName ?? "À vista"} · para trocar, exclua e lance de novo
+                  {cardName ?? "À vista"}
+                  {movement?.installments && movement.installments > 1
+                    ? ` · ${movement.installments}x`
+                    : ""}{" "}
+                  · para trocar, exclua e lance de novo
                 </p>
               </div>
             )}
