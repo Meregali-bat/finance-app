@@ -41,8 +41,11 @@ export interface CreditCardInput {
 
 export interface CardPurchaseInput {
   cardId: string;
+  /** O TOTAL da compra, não o valor da parcela. */
   amount: number;
   date: Date;
+  /** Em quantas parcelas. Ausente ou 1 = valor inteiro num único ciclo. */
+  installments?: number;
 }
 
 /**
@@ -149,6 +152,15 @@ function earliestOccurrenceAfter(dayOfMonth: number, reference: Date): Date {
   const ref = startOfDay(reference);
   const candidate = dateForDayInMonth(ref.getFullYear(), ref.getMonth(), dayOfMonth);
   if (candidate.getTime() > ref.getTime()) return candidate;
+  const next = addMonths(ref.getFullYear(), ref.getMonth(), 1);
+  return dateForDayInMonth(next.year, next.month, dayOfMonth);
+}
+
+/** A primeira ocorrência de dayOfMonth em ou depois de reference. */
+function earliestOccurrenceOnOrAfter(dayOfMonth: number, reference: Date): Date {
+  const ref = startOfDay(reference);
+  const candidate = dateForDayInMonth(ref.getFullYear(), ref.getMonth(), dayOfMonth);
+  if (candidate.getTime() >= ref.getTime()) return candidate;
   const next = addMonths(ref.getFullYear(), ref.getMonth(), 1);
   return dateForDayInMonth(next.year, next.month, dayOfMonth);
 }
@@ -281,6 +293,48 @@ export function getPeriodBounds(
   return { periodStart, periodEnd };
 }
 
+/** Sem um parcelamento válido, é uma parcela. Puro: não lança. */
+function normalizeInstallments(installments: number | undefined): number {
+  if (installments == null || !Number.isInteger(installments) || installments < 1) return 1;
+  return installments;
+}
+
+/**
+ * As parcelas de uma compra, uma por ciclo, a partir do primeiro fechamento em
+ * ou depois do dia da compra.
+ *
+ * O ciclo de cada parcela é re-derivado de (ano, mês, closingDay) a cada passo,
+ * nunca somando um mês ao ciclo anterior: com fechamento no dia 31, fevereiro
+ * gruda em 28, e somar um mês a esse 28 daria 28/mar em vez de 31/mar — o erro
+ * seguiria acumulando mês a mês.
+ *
+ * A sobra dos centavos vai toda para a primeira parcela: é o que os bancos
+ * fazem, e deixa a fatura mais próxima ser a pessimista, o que é o lado certo
+ * de errar quando o dinheiro sai neste mês.
+ *
+ * Exportada para ser testada direto — é onde vivem o arredondamento e o clamp
+ * do dia 31, e verificá-los através de seis chamadas de getCardBillsInPeriod
+ * esconderia qual dos dois quebrou.
+ */
+export function installmentSlices(
+  purchase: CardPurchaseInput,
+  closingDay: number,
+): { amount: number; cycleEnd: Date }[] {
+  const count = normalizeInstallments(purchase.installments);
+  const cents = Math.round(purchase.amount * 100);
+  const base = Math.floor(cents / count);
+  const remainder = cents - base * count;
+  const firstClose = earliestOccurrenceOnOrAfter(closingDay, storedDay(purchase.date));
+
+  return Array.from({ length: count }, (_, i) => {
+    const { year, month } = addMonths(firstClose.getFullYear(), firstClose.getMonth(), i);
+    return {
+      amount: (base + (i === 0 ? remainder : 0)) / 100,
+      cycleEnd: dateForDayInMonth(year, month, closingDay),
+    };
+  });
+}
+
 /**
  * Aggregates the credit card bill(s) due within [periodStart, periodEnd),
  * summing purchases from the closing cycle that generated each bill.
@@ -298,16 +352,18 @@ export function getCardBillsInPeriod(
     const dueDates = occurrencesInRange(card.dueDay, periodStart, periodEnd);
     for (const dueDate of dueDates) {
       const cycleEnd = latestOccurrenceBefore(card.closingDay, dueDate);
-      const cycleStart = latestOccurrenceBefore(card.closingDay, cycleEnd);
 
+      // Casar a parcela pelo ciclo em que ela fecha, em vez de filtrar a compra
+      // pela data, é o que faz um parcelado entrar cem por mês em vez de mil e
+      // duzentos de uma vez. Para uma parcela só o resultado é o mesmo de antes:
+      // fechamentos consecutivos são estritamente crescentes mesmo com o clamp,
+      // então `cycleStart < dia <= cycleEnd` equivale a
+      // `cycleEnd = min{fechamento >= dia}`, que é o que installmentSlices usa.
       const purchaseAmount = purchases
         .filter((p) => p.cardId === card.id)
-        .filter((p) => {
-          // A compra guarda um dia do calendário; o ciclo é sempre meia-noite.
-          const purchaseDay = storedDay(p.date);
-          return purchaseDay.getTime() > cycleStart.getTime() && purchaseDay.getTime() <= cycleEnd.getTime();
-        })
-        .reduce((sum, p) => sum + p.amount, 0);
+        .flatMap((p) => installmentSlices(p, card.closingDay))
+        .filter((slice) => slice.cycleEnd.getTime() === cycleEnd.getTime())
+        .reduce((sum, slice) => sum + slice.amount, 0);
 
       // A card-linked expense has no due day of its own — it's billed on
       // every cycle that closes on or after it was created, same as the

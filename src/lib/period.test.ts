@@ -4,7 +4,23 @@ import {
   getCardBillsInPeriod,
   getPeriodBounds,
   getPreviousPeriodBounds,
+  installmentSlices,
 } from "./period";
+
+/**
+ * Um dia de calendário como o banco guarda: a intenção mora na parte UTC.
+ *
+ * As suítes mais antigas deste arquivo montam essas datas em horário local, o
+ * que funciona só porque elas escolhem dias longe da borda do ciclo. Onde a
+ * comparação é de igualdade exata de dia — o vencimento de uma previsão, o
+ * fechamento de uma parcela — local não serve: new Date(2026, 0, 27) em fuso
+ * positivo é 2026-01-26T22:00Z, e storedDay() leria dia 26.
+ *
+ * Para o que é instante de verdade (today, createdAt, periodStart/periodEnd) e
+ * para os valores ESPERADOS continua valendo new Date(y, m, d) local, porque é
+ * meia-noite local que dateForDayInMonth devolve.
+ */
+const day = (y: number, m: number, d: number) => new Date(Date.UTC(y, m, d));
 
 describe("getPeriodBounds", () => {
   it("finds the current period for a single monthly income", () => {
@@ -582,6 +598,97 @@ describe("getCardBillsInPeriod", () => {
       [subscription],
     );
     expect(result).toEqual([]);
+  });
+});
+
+describe("compras parceladas", () => {
+  // Cartão que fecha dia 20 e vence dia 27.
+  const card = { id: "c1", closingDay: 20, dueDay: 27 };
+
+  it("trata uma compra sem parcelas como uma parcela única no ciclo da compra", () => {
+    // A regressão que importa: `installments` ausente tem que dar exatamente a
+    // mesma resposta de antes deste campo existir.
+    const purchases = [{ cardId: "c1", amount: 300, date: day(2026, 0, 15) }];
+    const bills = getCardBillsInPeriod(
+      [card],
+      purchases,
+      new Date(2026, 0, 21),
+      new Date(2026, 1, 21),
+    );
+    expect(bills).toEqual([{ cardId: "c1", dueDate: new Date(2026, 0, 27), amount: 300 }]);
+  });
+
+  it("divide o total em parcelas iguais, uma por ciclo", () => {
+    const purchases = [{ cardId: "c1", amount: 1200, date: day(2026, 0, 15), installments: 12 }];
+    // A compra de 15/jan fecha no ciclo de 20/jan, que vence em 27/jan.
+    const jan = getCardBillsInPeriod([card], purchases, new Date(2026, 0, 21), new Date(2026, 1, 21));
+    const fev = getCardBillsInPeriod([card], purchases, new Date(2026, 1, 21), new Date(2026, 2, 21));
+    expect(jan[0].amount).toBe(100);
+    expect(fev[0].amount).toBe(100);
+  });
+
+  it("coloca a primeira parcela no ciclo que fecha depois da compra", () => {
+    // Comprou 25/jan, depois do fechamento do dia 20: cai na fatura de fevereiro.
+    const purchases = [{ cardId: "c1", amount: 400, date: day(2026, 0, 25), installments: 2 }];
+    const jan = getCardBillsInPeriod([card], purchases, new Date(2026, 0, 21), new Date(2026, 1, 21));
+    const fev = getCardBillsInPeriod([card], purchases, new Date(2026, 1, 21), new Date(2026, 2, 21));
+    expect(jan).toEqual([]);
+    expect(fev[0].amount).toBe(200);
+  });
+
+  it("manda a sobra dos centavos para a primeira parcela", () => {
+    // 1000 em 3x não fecha: alguém tem que levar o centavo a mais. Vai para a
+    // primeira porque é assim que os bancos fazem, e porque deixa a fatura mais
+    // próxima ser a pessimista.
+    const slices = installmentSlices(
+      { cardId: "c1", amount: 1000, date: day(2026, 0, 15), installments: 3 },
+      20,
+    );
+    expect(slices.map((s) => s.amount)).toEqual([333.34, 333.33, 333.33]);
+  });
+
+  it.each([
+    [1000, 3],
+    [100, 3],
+    [0.05, 3],
+    [1234.56, 7],
+  ])("faz as parcelas de %s em %ix somarem exatamente o total", (total, count) => {
+    // Comparado em centavos inteiros de propósito: toBeCloseTo esconderia
+    // justamente o erro de arredondamento que este teste existe para pegar.
+    const slices = installmentSlices(
+      { cardId: "c1", amount: total, date: day(2026, 0, 15), installments: count },
+      20,
+    );
+    const sum = slices.reduce((acc, s) => acc + Math.round(s.amount * 100), 0);
+    expect(sum).toBe(Math.round(total * 100));
+  });
+
+  it("não deixa o fechamento no dia 31 escorregar ao passar por fevereiro", () => {
+    // Fevereiro fecha dia 28. Se o próximo ciclo fosse calculado somando um mês
+    // ao 28 já grudado, março fecharia dia 28 em vez de 31 — e o erro seguiria
+    // acumulando mês a mês.
+    const slices = installmentSlices(
+      { cardId: "c2", amount: 400, date: day(2026, 0, 15), installments: 4 },
+      31,
+    );
+    expect(slices.map((s) => s.cycleEnd)).toEqual([
+      new Date(2026, 0, 31),
+      new Date(2026, 1, 28),
+      new Date(2026, 2, 31),
+      new Date(2026, 3, 30),
+    ]);
+  });
+
+  it.each([[0], [-3], [2.5]])("ignora um número de parcelas inválido (%s)", (installments) => {
+    // period.ts é puro e não lança: a validação de verdade é do zod na action.
+    const purchases = [{ cardId: "c1", amount: 300, date: day(2026, 0, 15), installments }];
+    const bills = getCardBillsInPeriod(
+      [card],
+      purchases,
+      new Date(2026, 0, 21),
+      new Date(2026, 1, 21),
+    );
+    expect(bills[0].amount).toBe(300);
   });
 });
 
