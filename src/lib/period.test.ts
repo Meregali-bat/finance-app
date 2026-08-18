@@ -7,6 +7,8 @@ import {
   installmentSlices,
   buildCardBills,
   getCardLimitUsage,
+  findNextOpenBill,
+  type CardBill,
 } from "./period";
 
 /**
@@ -910,6 +912,53 @@ describe("getCardLimitUsage", () => {
     })!;
     // Uma assinatura entra em todo ciclo da janela, não só em um.
     expect(usage.used).toBeGreaterThan(34.9);
+  });
+});
+
+describe("findNextOpenBill", () => {
+  const bill = (overrides: Partial<CardBill> = {}): CardBill => ({
+    cardId: "c1",
+    dueDate: new Date(2026, 0, 27),
+    cycleStart: new Date(2025, 11, 20),
+    cycleEnd: new Date(2026, 0, 20),
+    amount: 100,
+    purchaseAmount: 100,
+    fixedExpenseAmount: 0,
+    estimateAmount: 0,
+    paid: false,
+    ...overrides,
+  });
+
+  it("devolve a primeira fatura que ainda cobra algo", () => {
+    const bills = [
+      bill({ dueDate: new Date(2026, 0, 27), amount: 0, purchaseAmount: 0 }),
+      bill({ dueDate: new Date(2026, 1, 27), amount: 250 }),
+      bill({ dueDate: new Date(2026, 2, 27), amount: 400 }),
+    ];
+    expect(findNextOpenBill(bills)?.dueDate).toEqual(new Date(2026, 1, 27));
+  });
+
+  it("pula a fatura já paga", () => {
+    // A regressão: com a fatura de janeiro quitada, a próxima em aberto é a de
+    // fevereiro. Mostrar janeiro como "próxima fatura" contradiz o selo "Paga"
+    // que a projeção põe na mesma linha.
+    const bills = [
+      bill({ dueDate: new Date(2026, 0, 27), paid: true, paidAmount: 100 }),
+      bill({ dueDate: new Date(2026, 1, 27), amount: 250 }),
+    ];
+    expect(findNextOpenBill(bills)?.dueDate).toEqual(new Date(2026, 1, 27));
+  });
+
+  it("devolve undefined quando toda fatura está paga ou zerada", () => {
+    const bills = [
+      bill({ paid: true, paidAmount: 100 }),
+      bill({ dueDate: new Date(2026, 1, 27), amount: 0, purchaseAmount: 0 }),
+    ];
+    expect(findNextOpenBill(bills)).toBeUndefined();
+  });
+
+  it("devolve undefined numa série vazia", () => {
+    expect(findNextOpenBill([])).toBeUndefined();
   });
 });
 

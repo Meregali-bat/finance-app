@@ -8,7 +8,7 @@ import {
   formatDateTime,
   installmentLabel,
 } from "@/lib/format";
-import { buildCardBills, getCardBillsInPeriod, getCardLimitUsage } from "@/lib/period";
+import { buildCardBills, findNextOpenBill, getCardLimitUsage } from "@/lib/period";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -48,8 +48,6 @@ export default async function CardDetailPage({
   const categoryOptions = categories.map((c) => ({ id: c.id, name: c.name }));
 
   const today = new Date();
-  const farFuture = new Date(today);
-  farFuture.setDate(farFuture.getDate() + 45);
 
   const purchases = card.purchases.map((p) => ({
     cardId: card.id,
@@ -70,16 +68,6 @@ export default async function CardDetailPage({
     cardId: e.cardId ?? undefined,
     createdAt: e.createdAt,
   }));
-  const bills = getCardBillsInPeriod(
-    [card],
-    purchases,
-    today,
-    farFuture,
-    cardFixedExpenses,
-    billEstimates,
-  );
-  const nextBill = bills.sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime())[0];
-
   const expensePayments = card.payments.map((p) => ({
     cardId: p.cardId ?? undefined,
     dueDate: p.dueDate,
@@ -100,8 +88,11 @@ export default async function CardDetailPage({
   });
 
   // Seis faturas: cabe na tela do celular sem rolar muito e cobre a maioria dos
-  // parcelamentos curtos.
-  const projectedBills = buildCardBills({
+  // parcelamentos curtos. A série é montada uma vez e alimenta tanto a "próxima
+  // fatura" quanto a projeção — antes eram duas contas, e a de cima ignorava os
+  // pagamentos, então anunciava como próxima uma fatura que a de baixo já
+  // marcava como paga.
+  const cardBills = buildCardBills({
     card: { id: card.id, closingDay: card.closingDay, dueDay: card.dueDay },
     purchases,
     cardFixedExpenses,
@@ -109,7 +100,9 @@ export default async function CardDetailPage({
     expensePayments,
     from: today,
     months: 6,
-  }).map((bill) => ({
+  });
+  const nextBill = findNextOpenBill(cardBills);
+  const projectedBills = cardBills.map((bill) => ({
     dueDateIso: bill.dueDate.toISOString(),
     dueDate: bill.dueDate,
     amount: bill.amount,

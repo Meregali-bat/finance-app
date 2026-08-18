@@ -528,6 +528,19 @@ export function getCardBillsInPeriod(
 }
 
 /**
+ * A próxima fatura em aberto de uma série: a primeira que ainda cobra algo e
+ * ainda não foi paga.
+ *
+ * As duas condições contam. Sem `!paid`, uma fatura já quitada seguiria
+ * anunciada como "próxima fatura" — contradizendo o selo "Paga" que a projeção
+ * põe na mesma linha. Sem `amount > 0`, uma fatura de mês vazio seria anunciada
+ * como se houvesse algo a pagar.
+ */
+export function findNextOpenBill(bills: CardBill[]): CardBill | undefined {
+  return bills.find((bill) => !bill.paid && bill.amount > 0);
+}
+
+/**
  * Quanto do limite do cartão já está comprometido.
  *
  * Comprometido é tudo que ainda não foi pago: as faturas em aberto mais as
