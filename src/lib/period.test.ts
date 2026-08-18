@@ -6,6 +6,7 @@ import {
   getPreviousPeriodBounds,
   installmentSlices,
   buildCardBills,
+  getCardLimitUsage,
 } from "./period";
 
 /**
@@ -827,6 +828,88 @@ describe("buildCardBills", () => {
       months: 1,
     });
     expect(bill.amount).toBe(0);
+  });
+});
+
+describe("getCardLimitUsage", () => {
+  const card = { id: "c1", closingDay: 20, dueDay: 27, creditLimit: 5000 };
+  const today = new Date(2026, 2, 10); // 10/mar/2026
+
+  it("devolve nulo quando o cartão não tem limite informado", () => {
+    const usage = getCardLimitUsage({
+      card: { id: "c1", closingDay: 20, dueDay: 27 },
+      purchases: [],
+      today,
+    });
+    expect(usage).toBeNull();
+  });
+
+  it("soma as faturas em aberto e as parcelas futuras no usado", () => {
+    const purchases = [
+      { cardId: "c1", amount: 900, date: day(2026, 1, 15) }, // fatura de 27/fev
+      { cardId: "c1", amount: 1200, date: day(2026, 2, 5), installments: 4 }, // 300 x4
+    ];
+    const usage = getCardLimitUsage({ card, purchases, today })!;
+    expect(usage.used).toBe(2100);
+    expect(usage.available).toBe(2900);
+  });
+
+  it("libera o limite quando a fatura é marcada como paga", () => {
+    const purchases = [{ cardId: "c1", amount: 900, date: day(2026, 1, 15) }];
+    const payments = [{ cardId: "c1", dueDate: day(2026, 1, 27), amount: 900 }];
+    const usage = getCardLimitUsage({ card, purchases, expensePayments: payments, today })!;
+    expect(usage.used).toBe(0);
+    expect(usage.available).toBe(5000);
+  });
+
+  it("alcança a última parcela de um parcelado de 18x", () => {
+    // O horizonte é derivado das parcelas: com uma janela fixa de seis meses,
+    // dois terços do comprometido ficariam invisíveis.
+    const purchases = [{ cardId: "c1", amount: 1800, date: day(2026, 2, 5), installments: 18 }];
+    const usage = getCardLimitUsage({ card, purchases, today })!;
+    expect(usage.used).toBe(1800);
+  });
+
+  it("conta a fatura vencida no mês passado que ainda não foi paga", () => {
+    const purchases = [{ cardId: "c1", amount: 400, date: day(2026, 1, 15) }];
+    const usage = getCardLimitUsage({ card, purchases, today })!;
+    expect(usage.used).toBe(400);
+    expect(usage.overdueBillCount).toBe(1);
+  });
+
+  it("esquece a fatura vencida há mais de três meses que nunca foi marcada como paga", () => {
+    // Compra de 15/out/2025: a fatura venceu em 27/out, e a janela do limite só
+    // começa no primeiro vencimento em ou depois de 10/dez/2025 — ou seja,
+    // 27/dez. Uma fatura tão antiga quase certamente foi paga e só não foi
+    // marcada; mantê-la comeria o limite para sempre.
+    const purchases = [{ cardId: "c1", amount: 400, date: day(2025, 9, 15) }];
+    const usage = getCardLimitUsage({ card, purchases, today })!;
+    expect(usage.used).toBe(0);
+    expect(usage.overdueBillCount).toBe(0);
+  });
+
+  it("não deixa o disponível ficar negativo quando o comprometido passa do limite", () => {
+    const purchases = [{ cardId: "c1", amount: 8000, date: day(2026, 1, 15) }];
+    const usage = getCardLimitUsage({ card, purchases, today })!;
+    expect(usage.available).toBe(0);
+    expect(usage.percentUsed).toBe(100);
+  });
+
+  it("conta a previsão manual no comprometido", () => {
+    const estimates = [{ cardId: "c1", dueDate: day(2026, 3, 27), amount: 600 }];
+    const usage = getCardLimitUsage({ card, purchases: [], billEstimates: estimates, today })!;
+    expect(usage.used).toBe(600);
+  });
+
+  it("conta a assinatura cobrada no cartão", () => {
+    const usage = getCardLimitUsage({
+      card,
+      purchases: [],
+      cardFixedExpenses: [{ id: "f1", amount: 34.9, cardId: "c1", createdAt: new Date(2026, 0, 1) }],
+      today,
+    })!;
+    // Uma assinatura entra em todo ciclo da janela, não só em um.
+    expect(usage.used).toBeGreaterThan(34.9);
   });
 });
 

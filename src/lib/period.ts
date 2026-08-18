@@ -114,6 +114,21 @@ export interface IncomeReminder {
   amount: number;
 }
 
+export interface CardLimitUsage {
+  limit: number;
+  /** Tudo que ainda não foi pago: faturas em aberto + parcelas futuras. */
+  used: number;
+  /**
+   * Nunca negativo: um estouro se mostra pela porcentagem em 100, não por um
+   * número negativo de "disponível", que não é uma quantia que exista.
+   */
+  available: number;
+  /** 0..100, arredondado e limitado, pronto para a barra de progresso. */
+  percentUsed: number;
+  /** Faturas com vencimento já passado e ainda sem pagamento confirmado. */
+  overdueBillCount: number;
+}
+
 export interface PeriodBudget {
   periodStart: Date;
   periodEnd: Date;
@@ -366,6 +381,25 @@ export function installmentSlices(
 }
 
 /**
+ * Quanto tempo uma fatura vencida continua ocupando o limite sem confirmação.
+ *
+ * Pagar alguns dias atrasado é normal, então zerar no vencimento liberaria o
+ * limite justo quando o dinheiro ainda não saiu. Já uma fatura de meio ano atrás
+ * quase certamente foi paga e só não foi marcada — mantê-la comeria o limite
+ * para sempre, e quem pagaria o preço do esquecimento é o usuário.
+ *
+ * Mesma escolha que PRE_REGISTRATION_GRACE_DAYS faz para renda não confirmada:
+ * limitar até onde vale perseguir uma confirmação, em vez de varrer a história
+ * toda.
+ */
+const LIMIT_LOOKBACK_MONTHS = 3;
+
+/** Quantos meses de calendário separam duas datas. */
+function monthsBetween(from: Date, to: Date): number {
+  return (to.getFullYear() - from.getFullYear()) * 12 + (to.getMonth() - from.getMonth());
+}
+
+/**
  * Os próximos `months` vencimentos a partir de `from`.
  *
  * Substitui occurrencesInRange para este caso: aquele varre uma janela fixa de
@@ -491,6 +525,79 @@ export function getCardBillsInPeriod(
       .filter((bill) => bill.dueDate.getTime() < periodEnd.getTime() && bill.amount > 0)
       .map((bill) => ({ cardId: card.id, dueDate: bill.dueDate, amount: bill.amount })),
   );
+}
+
+/**
+ * Quanto do limite do cartão já está comprometido.
+ *
+ * Comprometido é tudo que ainda não foi pago: as faturas em aberto mais as
+ * parcelas que ainda vão fechar. É assim que o banco faz — o limite só volta
+ * quando a fatura é paga —, e é por isso que marcar uma fatura como paga é o
+ * que libera limite aqui.
+ *
+ * Devolve null quando o cartão não tem limite informado, para a tela ter uma
+ * coisa só para checar em vez de adivinhar a partir de um zero.
+ */
+export function getCardLimitUsage(input: {
+  card: CreditCardInput & { creditLimit?: number };
+  purchases: CardPurchaseInput[];
+  cardFixedExpenses?: FixedExpenseInput[];
+  billEstimates?: CardBillEstimateInput[];
+  expensePayments?: ExpensePaymentInput[];
+  today: Date;
+}): CardLimitUsage | null {
+  const {
+    card,
+    purchases,
+    cardFixedExpenses = [],
+    billEstimates = [],
+    expensePayments = [],
+    today,
+  } = input;
+
+  const limit = card.creditLimit;
+  if (limit == null || limit <= 0) return null;
+
+  const todayStart = startOfDay(today);
+  const lookback = addMonths(
+    todayStart.getFullYear(),
+    todayStart.getMonth(),
+    -LIMIT_LOOKBACK_MONTHS,
+  );
+  const from = dateForDayInMonth(lookback.year, lookback.month, todayStart.getDate());
+
+  // O horizonte para frente é derivado, não fixo: vai até a última parcela e a
+  // última previsão que existirem, para um 18x ser coberto inteiro sem varrer
+  // uma janela fixa grande o suficiente para qualquer caso. O +2 cobre a
+  // distância entre um ciclo fechar e a fatura que o cobra vencer.
+  const slices = purchases
+    .filter((p) => p.cardId === card.id)
+    .flatMap((p) => installmentSlices(p, card.closingDay));
+  const lastRelevant = [
+    ...slices.map((slice) => slice.cycleEnd),
+    ...billEstimates.filter((e) => e.cardId === card.id).map((e) => storedDay(e.dueDate)),
+  ].reduce((latest, d) => (d.getTime() > latest.getTime() ? d : latest), todayStart);
+  const months = Math.max(4, monthsBetween(from, lastRelevant) + 2);
+
+  const bills = buildCardBills({
+    card,
+    purchases,
+    cardFixedExpenses,
+    billEstimates,
+    expensePayments,
+    from,
+    months,
+  });
+  const open = bills.filter((bill) => !bill.paid && bill.amount > 0);
+  const used = open.reduce((sum, bill) => sum + bill.amount, 0);
+
+  return {
+    limit,
+    used,
+    available: Math.max(0, limit - used),
+    percentUsed: Math.min(100, Math.round((used / limit) * 100)),
+    overdueBillCount: open.filter((bill) => bill.dueDate.getTime() < todayStart.getTime()).length,
+  };
 }
 
 export function calculateDailyBudget(input: {
