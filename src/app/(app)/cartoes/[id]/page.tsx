@@ -3,8 +3,9 @@ import { Receipt } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/auth-helpers";
 import { formatCurrency, formatDate, formatDateTime } from "@/lib/format";
-import { getCardBillsInPeriod } from "@/lib/period";
+import { getCardBillsInPeriod, getCardLimitUsage } from "@/lib/period";
 import { Card, CardContent } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader, SectionLabel } from "@/components/page-header";
 import { CardFormDialog } from "@/components/forms/card-form-dialog";
@@ -29,6 +30,7 @@ export default async function CardDetailPage({
         purchases: { orderBy: { date: "desc" } },
         fixedExpenses: { where: { active: true } },
         billEstimates: { orderBy: { dueDate: "asc" } },
+        payments: true,
       },
     }),
     prisma.category.findMany({ where: { userId, active: true }, orderBy: { name: "asc" } }),
@@ -71,6 +73,25 @@ export default async function CardDetailPage({
   );
   const nextBill = bills.sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime())[0];
 
+  const expensePayments = card.payments.map((p) => ({
+    cardId: p.cardId ?? undefined,
+    dueDate: p.dueDate,
+    amount: Number(p.amount),
+  }));
+  const limitUsage = getCardLimitUsage({
+    card: {
+      id: card.id,
+      closingDay: card.closingDay,
+      dueDay: card.dueDay,
+      creditLimit: card.creditLimit ? Number(card.creditLimit) : undefined,
+    },
+    purchases,
+    cardFixedExpenses,
+    billEstimates,
+    expensePayments,
+    today,
+  });
+
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
@@ -89,6 +110,7 @@ export default async function CardDetailPage({
                 name: card.name,
                 closingDay: card.closingDay,
                 dueDay: card.dueDay,
+                creditLimit: card.creditLimit ? Number(card.creditLimit) : undefined,
               }}
             />
             <DeleteIconButton
@@ -117,6 +139,44 @@ export default async function CardDetailPage({
                 </>
               ) : (
                 <p className="text-sm text-muted-foreground">Sem fatura em aberto.</p>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card variant="elevated">
+            <CardContent className="flex flex-col gap-1 py-5">
+              <SectionLabel>Limite</SectionLabel>
+              {limitUsage ? (
+                <>
+                  {/* Neutro, não text-negative: dinheiro comprometido não é
+                      prejuízo, é limite ocupado. */}
+                  <p className="font-heading text-3xl leading-tight font-bold tracking-[-0.02em] tabular-nums">
+                    {formatCurrency(limitUsage.used)}
+                  </p>
+                  <Progress
+                    value={limitUsage.percentUsed}
+                    className="mt-1 gap-1.5"
+                    indicatorClassName={limitUsage.percentUsed >= 90 ? "bg-negative" : undefined}
+                  />
+                  <p className="text-sm text-muted-foreground tabular-nums">
+                    {formatCurrency(limitUsage.available)} disponíveis de{" "}
+                    {formatCurrency(limitUsage.limit)}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Considera as faturas em aberto dos últimos 3 meses e as parcelas futuras.
+                  </p>
+                  {limitUsage.overdueBillCount > 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      {limitUsage.overdueBillCount === 1
+                        ? "1 fatura vencida ainda não marcada como paga."
+                        : `${limitUsage.overdueBillCount} faturas vencidas ainda não marcadas como pagas.`}
+                    </p>
+                  )}
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Informe o limite no lápis acima para acompanhar quanto já está comprometido.
+                </p>
               )}
             </CardContent>
           </Card>

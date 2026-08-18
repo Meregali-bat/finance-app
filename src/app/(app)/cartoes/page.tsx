@@ -3,8 +3,9 @@ import { ChevronRight, CreditCard as CardIcon } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/auth-helpers";
 import { formatCurrency } from "@/lib/format";
-import { getCardBillsInPeriod } from "@/lib/period";
+import { getCardBillsInPeriod, getCardLimitUsage } from "@/lib/period";
 import { Card, CardContent } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/page-header";
 import { CardFormDialog } from "@/components/forms/card-form-dialog";
@@ -18,6 +19,7 @@ export default async function CardsPage() {
       purchases: true,
       fixedExpenses: { where: { active: true } },
       billEstimates: true,
+      payments: true,
     },
   });
 
@@ -68,6 +70,23 @@ export default async function CardsPage() {
               billEstimates,
             );
             const nextBill = bills.sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime())[0];
+            const limitUsage = getCardLimitUsage({
+              card: {
+                id: card.id,
+                closingDay: card.closingDay,
+                dueDay: card.dueDay,
+                creditLimit: card.creditLimit ? Number(card.creditLimit) : undefined,
+              },
+              purchases,
+              cardFixedExpenses,
+              billEstimates,
+              expensePayments: card.payments.map((p) => ({
+                cardId: p.cardId ?? undefined,
+                dueDate: p.dueDate,
+                amount: Number(p.amount),
+              })),
+              today,
+            });
 
             return (
               // `h-full` porque em grid a linha "Próxima fatura" só aparece em
@@ -85,6 +104,25 @@ export default async function CardsPage() {
                         <p className="mt-1.5 text-sm font-medium text-negative tabular-nums">
                           Próxima fatura: {formatCurrency(nextBill.amount)}
                         </p>
+                      )}
+                      {limitUsage && (
+                        <>
+                          {/* Progress renderiza os children acima da trilha, por
+                              isso o texto vem depois. Ele não adiciona nada
+                              focável, então o Link que envolve o cartão continua
+                              clicável. */}
+                          <Progress
+                            value={limitUsage.percentUsed}
+                            className="mt-2 gap-1.5"
+                            indicatorClassName={
+                              limitUsage.percentUsed >= 90 ? "bg-negative" : undefined
+                            }
+                          />
+                          <p className="text-xs text-muted-foreground tabular-nums">
+                            {formatCurrency(limitUsage.available)} de{" "}
+                            {formatCurrency(limitUsage.limit)} livres
+                          </p>
+                        </>
                       )}
                     </div>
                     <ChevronRight

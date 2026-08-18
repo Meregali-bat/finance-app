@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { CurrencyInput } from "@/components/currency-input";
 import { createCreditCard, updateCreditCard } from "@/lib/actions/card";
 
 type CardValues = {
@@ -20,6 +21,7 @@ type CardValues = {
   name: string;
   closingDay: number;
   dueDay: number;
+  creditLimit?: number;
 };
 
 export function CardFormDialog({ card }: { card?: CardValues }) {
@@ -107,6 +109,15 @@ export function CardFormDialog({ card }: { card?: CardValues }) {
                 required
               />
             </div>
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="creditLimit">Limite (opcional)</Label>
+            {/* Sem `required`: vazio manda "", que a action lê como "sem limite"
+                em vez de limite zero. */}
+            <CurrencyInput id="creditLimit" name="creditLimit" defaultValue={card?.creditLimit} />
+            <p className="text-xs text-muted-foreground">
+              Informe para acompanhar quanto do cartão já está comprometido.
+            </p>
           </div>
           {error && (
             <p role="alert" className="text-sm text-negative">
