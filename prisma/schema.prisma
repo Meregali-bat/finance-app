@@ -25,6 +25,7 @@ model User {
   periodAllocations PeriodAllocation[]
   categories        Category[]
   expensePayments   ExpensePayment[]
+  cardBillEstimates CardBillEstimate[]
   createdAt         DateTime           @default(now())
 }
 
@@ -74,18 +75,18 @@ model IncomeReceipt {
 }
 
 model FixedExpense {
-  id         String      @id @default(cuid())
+  id         String           @id @default(cuid())
   userId     String
   label      String
   amount     Decimal
   dueDay     Int?
-  active     Boolean     @default(true)
-  createdAt  DateTime    @default(now())
+  active     Boolean          @default(true)
+  createdAt  DateTime         @default(now())
   cardId     String?
   categoryId String?
-  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  card       CreditCard? @relation(fields: [cardId], references: [id], onDelete: SetNull)
-  category   Category?   @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  card       CreditCard?      @relation(fields: [cardId], references: [id], onDelete: SetNull)
+  category   Category?        @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   payments   ExpensePayment[]
 
   @@index([userId])
@@ -140,38 +141,73 @@ model Transaction {
 }
 
 model CreditCard {
-  id         String         @id @default(cuid())
-  userId     String
-  name       String
-  closingDay Int
-  dueDay     Int
-  active     Boolean        @default(true)
-  createdAt  DateTime       @default(now())
-  user       User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  purchases  CardPurchase[]
+  id            String             @id @default(cuid())
+  userId        String
+  name          String
+  closingDay    Int
+  dueDay        Int
+  active        Boolean            @default(true)
+  /// Limite total do cartão. Opcional: sem ele a tela não mostra o bloco de
+  /// usado/disponível, em vez de fingir um limite que o usuário não informou.
+  /// O nome não é `limit` porque essa é palavra reservada em SQL e precisaria de
+  /// aspas em toda migration escrita à mão.
+  creditLimit   Decimal?
+  createdAt     DateTime           @default(now())
+  user          User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  purchases     CardPurchase[]
   fixedExpenses FixedExpense[]
   payments      ExpensePayment[]
+  billEstimates CardBillEstimate[]
 
   @@index([userId])
 }
 
 model CardPurchase {
-  id          String     @id @default(cuid())
-  cardId      String
-  userId      String
-  amount      Decimal
-  description String
-  date        DateTime   @default(now())
+  id           String     @id @default(cuid())
+  cardId       String
+  userId       String
+  amount       Decimal
+  description  String
+  date         DateTime   @default(now())
   /// Mesma coisa que em Transaction: o dia vem de `date`, a hora daqui.
-  createdAt   DateTime?  @default(now())
-  categoryId  String?
-  card        CreditCard @relation(fields: [cardId], references: [id], onDelete: Cascade)
-  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  category    Category?  @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  createdAt    DateTime?  @default(now())
+  /// Em quantas parcelas a compra foi dividida. 1 = à vista no cartão.
+  /// `amount` continua sendo o TOTAL da compra — a parcela é derivada em
+  /// src/lib/period.ts, não gravada.
+  installments Int        @default(1)
+  categoryId   String?
+  card         CreditCard @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category     Category?  @relation(fields: [categoryId], references: [id], onDelete: SetNull)
 
   @@index([cardId, date])
   @@index([userId])
   @@index([categoryId])
+}
+
+/// Um valor previsto que o usuário lança à mão na fatura de um vencimento
+/// futuro — a anuidade, o IOF de uma compra em dólar, a parcela de algo
+/// comprado fora do app. Soma-se ao que as compras calculam; não substitui.
+///
+/// Sem @@unique([cardId, dueDate]), ao contrário de ExpensePayment: lá existe
+/// exatamente um ato de pagar a fatura de janeiro, aqui a anuidade e o IOF
+/// podem cair na mesma fatura, e juntá-los numa linha só apagaria a descrição
+/// de cada um. É por isso também que a descrição é obrigatória.
+model CardBillEstimate {
+  id          String     @id @default(cuid())
+  userId      String
+  cardId      String
+  /// O vencimento da fatura em que este valor entra. Mesma convenção de
+  /// ExpensePayment.dueDate: um dia de calendário, sem horário.
+  dueDate     DateTime
+  amount      Decimal
+  description String
+  createdAt   DateTime   @default(now())
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  card        CreditCard @relation(fields: [cardId], references: [id], onDelete: Cascade)
+
+  @@index([cardId, dueDate])
+  @@index([userId])
 }
 
 model Jar {
