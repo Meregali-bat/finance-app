@@ -2,13 +2,21 @@ import { notFound } from "next/navigation";
 import { Receipt } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/auth-helpers";
-import { formatCurrency, formatDate, formatDateTime } from "@/lib/format";
-import { getCardBillsInPeriod } from "@/lib/period";
+import {
+  formatCurrency,
+  formatDate,
+  formatDateTime,
+  installmentLabel,
+} from "@/lib/format";
+import { buildCardBills, findNextOpenBill, getCardLimitUsage } from "@/lib/period";
 import { Card, CardContent } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader, SectionLabel } from "@/components/page-header";
 import { CardFormDialog } from "@/components/forms/card-form-dialog";
 import { CardPurchaseFormDialog } from "@/components/forms/card-purchase-form-dialog";
+import { CardBillEstimateDialog } from "@/components/forms/card-bill-estimate-dialog";
+import { CardBillProjection } from "@/components/card-bill-projection";
 import { MovementRow } from "@/components/movement-row";
 import { toMovementValues } from "@/lib/history-item";
 import { DeleteIconButton } from "@/components/delete-icon-button";
@@ -25,7 +33,12 @@ export default async function CardDetailPage({
   const [card, categories] = await Promise.all([
     prisma.creditCard.findUnique({
       where: { id, userId },
-      include: { purchases: { orderBy: { date: "desc" } } },
+      include: {
+        purchases: { orderBy: { date: "desc" } },
+        fixedExpenses: { where: { active: true } },
+        billEstimates: { orderBy: { dueDate: "asc" } },
+        payments: true,
+      },
     }),
     prisma.category.findMany({ where: { userId, active: true }, orderBy: { name: "asc" } }),
   ]);
@@ -35,16 +48,82 @@ export default async function CardDetailPage({
   const categoryOptions = categories.map((c) => ({ id: c.id, name: c.name }));
 
   const today = new Date();
-  const farFuture = new Date(today);
-  farFuture.setDate(farFuture.getDate() + 45);
 
   const purchases = card.purchases.map((p) => ({
     cardId: card.id,
     amount: Number(p.amount),
     date: p.date,
+    installments: p.installments,
   }));
-  const bills = getCardBillsInPeriod([card], purchases, today, farFuture);
-  const nextBill = bills.sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime())[0];
+  const billEstimates = card.billEstimates.map((e) => ({
+    cardId: e.cardId,
+    dueDate: e.dueDate,
+    amount: Number(e.amount),
+  }));
+  // As assinaturas cobradas no cartão fazem parte da fatura: sem elas esta tela
+  // mostrava um número menor que o do início.
+  const cardFixedExpenses = card.fixedExpenses.map((e) => ({
+    id: e.id,
+    amount: Number(e.amount),
+    cardId: e.cardId ?? undefined,
+    createdAt: e.createdAt,
+  }));
+  const expensePayments = card.payments.map((p) => ({
+    cardId: p.cardId ?? undefined,
+    dueDate: p.dueDate,
+    amount: Number(p.amount),
+  }));
+  const limitUsage = getCardLimitUsage({
+    card: {
+      id: card.id,
+      closingDay: card.closingDay,
+      dueDay: card.dueDay,
+      creditLimit: card.creditLimit ? Number(card.creditLimit) : undefined,
+    },
+    purchases,
+    cardFixedExpenses,
+    billEstimates,
+    expensePayments,
+    today,
+  });
+
+  // Seis faturas: cabe na tela do celular sem rolar muito e cobre a maioria dos
+  // parcelamentos curtos. A série é montada uma vez e alimenta tanto a "próxima
+  // fatura" quanto a projeção — antes eram duas contas, e a de cima ignorava os
+  // pagamentos, então anunciava como próxima uma fatura que a de baixo já
+  // marcava como paga.
+  const cardBills = buildCardBills({
+    card: { id: card.id, closingDay: card.closingDay, dueDay: card.dueDay },
+    purchases,
+    cardFixedExpenses,
+    billEstimates,
+    expensePayments,
+    from: today,
+    months: 6,
+  });
+  const nextBill = findNextOpenBill(cardBills);
+  const projectedBills = cardBills.map((bill) => ({
+    dueDateIso: bill.dueDate.toISOString(),
+    dueDate: bill.dueDate,
+    amount: bill.amount,
+    estimateAmount: bill.estimateAmount,
+    paid: bill.paid,
+    paidAmount: bill.paidAmount,
+  }));
+
+  // O seletor do formulário só oferece vencimentos de verdade: uma data
+  // qualquer não casaria com fatura alguma e a previsão sumiria em silêncio.
+  const dueDateOptions = projectedBills.map((bill) => ({
+    value: bill.dueDateIso,
+    label: formatDate(bill.dueDate),
+  }));
+
+  const listedEstimates = card.billEstimates.map((e) => ({
+    id: e.id,
+    description: e.description,
+    dueDate: e.dueDate,
+    amount: Number(e.amount),
+  }));
 
   return (
     <div className="flex flex-col gap-6">
@@ -64,6 +143,7 @@ export default async function CardDetailPage({
                 name: card.name,
                 closingDay: card.closingDay,
                 dueDay: card.dueDay,
+                creditLimit: card.creditLimit ? Number(card.creditLimit) : undefined,
               }}
             />
             <DeleteIconButton
@@ -96,7 +176,53 @@ export default async function CardDetailPage({
             </CardContent>
           </Card>
 
+          <Card variant="elevated">
+            <CardContent className="flex flex-col gap-1 py-5">
+              <SectionLabel>Limite</SectionLabel>
+              {limitUsage ? (
+                <>
+                  {/* Neutro, não text-negative: dinheiro comprometido não é
+                      prejuízo, é limite ocupado. */}
+                  <p className="font-heading text-3xl leading-tight font-bold tracking-[-0.02em] tabular-nums">
+                    {formatCurrency(limitUsage.used)}
+                  </p>
+                  <Progress
+                    value={limitUsage.percentUsed}
+                    className="mt-1 gap-1.5"
+                    indicatorClassName={limitUsage.percentUsed >= 90 ? "bg-negative" : undefined}
+                  />
+                  <p className="text-sm text-muted-foreground tabular-nums">
+                    {formatCurrency(limitUsage.available)} disponíveis de{" "}
+                    {formatCurrency(limitUsage.limit)}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Considera as faturas em aberto dos últimos 3 meses e as parcelas futuras.
+                  </p>
+                  {limitUsage.overdueBillCount > 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      {limitUsage.overdueBillCount === 1
+                        ? "1 fatura vencida ainda não marcada como paga."
+                        : `${limitUsage.overdueBillCount} faturas vencidas ainda não marcadas como pagas.`}
+                    </p>
+                  )}
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Informe o limite no lápis acima para acompanhar quanto já está comprometido.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+
           <CardPurchaseFormDialog cardId={card.id} categories={categoryOptions} />
+
+          <CardBillEstimateDialog cardId={card.id} dueDates={dueDateOptions} />
+
+          <CardBillProjection
+            cardId={card.id}
+            bills={projectedBills}
+            estimates={listedEstimates}
+          />
         </div>
 
         {card.purchases.length === 0 ? (
@@ -114,8 +240,16 @@ export default async function CardDetailPage({
                   date: purchase.date,
                   categoryId: purchase.categoryId,
                   cardId: card.id,
+                  installments: purchase.installments,
                 })}
-                subtitle={formatDateTime(purchase.date, purchase.createdAt)}
+                subtitle={[
+                  formatDateTime(purchase.date, purchase.createdAt),
+                  // O valor da linha é o total da compra; sem isto um 12x se
+                  // leria como se tudo tivesse saído no mês em que foi comprado.
+                  installmentLabel(Number(purchase.amount), purchase.installments),
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
                 cards={[{ id: card.id, name: card.name }]}
                 categories={categoryOptions}
               />

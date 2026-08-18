@@ -80,3 +80,18 @@ export function todayInputValue(): string {
   const offset = now.getTimezoneOffset();
   return new Date(now.getTime() - offset * 60000).toISOString().slice(0, 10);
 }
+
+/**
+ * "12x de R$ 100,00", ou nulo numa compra à vista.
+ *
+ * A parcela anunciada é a PRIMEIRA, que é onde a sobra dos centavos cai — ver
+ * installmentSlices em src/lib/period.ts. Dizer "3x de R$ 333,33" quando a
+ * primeira fatura vai cobrar R$ 333,34 seria mentir por um centavo.
+ */
+export function installmentLabel(total: number, installments: number): string | null {
+  if (!Number.isInteger(installments) || installments <= 1) return null;
+  const cents = Math.round(total * 100);
+  const base = Math.floor(cents / installments);
+  const first = base + (cents - base * installments);
+  return `${installments}x de ${formatCurrency(first / 100)}`;
+}

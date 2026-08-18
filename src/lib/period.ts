@@ -41,14 +41,28 @@ export interface CreditCardInput {
 
 export interface CardPurchaseInput {
   cardId: string;
+  /** O TOTAL da compra, não o valor da parcela. */
   amount: number;
   date: Date;
+  /** Em quantas parcelas. Ausente ou 1 = valor inteiro num único ciclo. */
+  installments?: number;
 }
 
 /**
  * Confirmação de que uma ocorrência de despesa foi paga. Exatamente um entre
  * fixedExpenseId e cardId vem preenchido.
  */
+/**
+ * Um valor previsto que o usuário lançou à mão para a fatura de um vencimento.
+ * É ADITIVO: soma ao que as compras calculam, nunca substitui.
+ */
+export interface CardBillEstimateInput {
+  cardId: string;
+  /** O vencimento da fatura em que este valor entra. */
+  dueDate: Date;
+  amount: number;
+}
+
 export interface ExpensePaymentInput {
   fixedExpenseId?: string;
   cardId?: string;
@@ -69,6 +83,25 @@ export interface CardBillReminder {
   amount: number;
 }
 
+/** Uma fatura de um cartão: o que ela cobra, de onde vem, e se já foi paga. */
+export interface CardBill {
+  cardId: string;
+  /** O vencimento — a identidade da fatura, a mesma de ExpensePayment. */
+  dueDate: Date;
+  /** O ciclo que gerou a fatura: (cycleStart, cycleEnd]. */
+  cycleStart: Date;
+  cycleEnd: Date;
+  /** O previsto: parcelas + assinaturas do cartão + previsões manuais. */
+  amount: number;
+  /** De onde veio cada pedaço, para a tela poder detalhar. */
+  purchaseAmount: number;
+  fixedExpenseAmount: number;
+  estimateAmount: number;
+  paid: boolean;
+  /** O valor realmente pago, quando pago — pode diferir do previsto. */
+  paidAmount?: number;
+}
+
 export interface FixedExpenseReminder {
   expenseId: string;
   dueDate: Date;
@@ -79,6 +112,21 @@ export interface IncomeReminder {
   incomeId: string;
   dueDate: Date;
   amount: number;
+}
+
+export interface CardLimitUsage {
+  limit: number;
+  /** Tudo que ainda não foi pago: faturas em aberto + parcelas futuras. */
+  used: number;
+  /**
+   * Nunca negativo: um estouro se mostra pela porcentagem em 100, não por um
+   * número negativo de "disponível", que não é uma quantia que exista.
+   */
+  available: number;
+  /** 0..100, arredondado e limitado, pronto para a barra de progresso. */
+  percentUsed: number;
+  /** Faturas com vencimento já passado e ainda sem pagamento confirmado. */
+  overdueBillCount: number;
 }
 
 export interface PeriodBudget {
@@ -149,6 +197,15 @@ function earliestOccurrenceAfter(dayOfMonth: number, reference: Date): Date {
   const ref = startOfDay(reference);
   const candidate = dateForDayInMonth(ref.getFullYear(), ref.getMonth(), dayOfMonth);
   if (candidate.getTime() > ref.getTime()) return candidate;
+  const next = addMonths(ref.getFullYear(), ref.getMonth(), 1);
+  return dateForDayInMonth(next.year, next.month, dayOfMonth);
+}
+
+/** A primeira ocorrência de dayOfMonth em ou depois de reference. */
+function earliestOccurrenceOnOrAfter(dayOfMonth: number, reference: Date): Date {
+  const ref = startOfDay(reference);
+  const candidate = dateForDayInMonth(ref.getFullYear(), ref.getMonth(), dayOfMonth);
+  if (candidate.getTime() >= ref.getTime()) return candidate;
   const next = addMonths(ref.getFullYear(), ref.getMonth(), 1);
   return dateForDayInMonth(next.year, next.month, dayOfMonth);
 }
@@ -281,6 +338,162 @@ export function getPeriodBounds(
   return { periodStart, periodEnd };
 }
 
+/** Sem um parcelamento válido, é uma parcela. Puro: não lança. */
+function normalizeInstallments(installments: number | undefined): number {
+  if (installments == null || !Number.isInteger(installments) || installments < 1) return 1;
+  return installments;
+}
+
+/**
+ * As parcelas de uma compra, uma por ciclo, a partir do primeiro fechamento em
+ * ou depois do dia da compra.
+ *
+ * O ciclo de cada parcela é re-derivado de (ano, mês, closingDay) a cada passo,
+ * nunca somando um mês ao ciclo anterior: com fechamento no dia 31, fevereiro
+ * gruda em 28, e somar um mês a esse 28 daria 28/mar em vez de 31/mar — o erro
+ * seguiria acumulando mês a mês.
+ *
+ * A sobra dos centavos vai toda para a primeira parcela: é o que os bancos
+ * fazem, e deixa a fatura mais próxima ser a pessimista, o que é o lado certo
+ * de errar quando o dinheiro sai neste mês.
+ *
+ * Exportada para ser testada direto — é onde vivem o arredondamento e o clamp
+ * do dia 31, e verificá-los através de seis chamadas de getCardBillsInPeriod
+ * esconderia qual dos dois quebrou.
+ */
+export function installmentSlices(
+  purchase: CardPurchaseInput,
+  closingDay: number,
+): { amount: number; cycleEnd: Date }[] {
+  const count = normalizeInstallments(purchase.installments);
+  const cents = Math.round(purchase.amount * 100);
+  const base = Math.floor(cents / count);
+  const remainder = cents - base * count;
+  const firstClose = earliestOccurrenceOnOrAfter(closingDay, storedDay(purchase.date));
+
+  return Array.from({ length: count }, (_, i) => {
+    const { year, month } = addMonths(firstClose.getFullYear(), firstClose.getMonth(), i);
+    return {
+      amount: (base + (i === 0 ? remainder : 0)) / 100,
+      cycleEnd: dateForDayInMonth(year, month, closingDay),
+    };
+  });
+}
+
+/**
+ * Quanto tempo uma fatura vencida continua ocupando o limite sem confirmação.
+ *
+ * Pagar alguns dias atrasado é normal, então zerar no vencimento liberaria o
+ * limite justo quando o dinheiro ainda não saiu. Já uma fatura de meio ano atrás
+ * quase certamente foi paga e só não foi marcada — mantê-la comeria o limite
+ * para sempre, e quem pagaria o preço do esquecimento é o usuário.
+ *
+ * Mesma escolha que PRE_REGISTRATION_GRACE_DAYS faz para renda não confirmada:
+ * limitar até onde vale perseguir uma confirmação, em vez de varrer a história
+ * toda.
+ */
+const LIMIT_LOOKBACK_MONTHS = 3;
+
+/** Quantos meses de calendário separam duas datas. */
+function monthsBetween(from: Date, to: Date): number {
+  return (to.getFullYear() - from.getFullYear()) * 12 + (to.getMonth() - from.getMonth());
+}
+
+/**
+ * Os próximos `months` vencimentos a partir de `from`.
+ *
+ * Substitui occurrencesInRange para este caso: aquele varre uma janela fixa de
+ * três meses (start-1, start, start+1) e por isso não alcança uma projeção de
+ * seis. Aqui a caminhada é contada, não varrida.
+ *
+ * O dia é re-derivado por dateForDayInMonth a cada passo pelo mesmo motivo de
+ * installmentSlices: um vencimento no dia 31 gruda em 28 ao passar por
+ * fevereiro, e somar um mês a esse 28 nunca mais voltaria ao 31.
+ */
+function dueDatesFrom(dueDay: number, from: Date, months: number): Date[] {
+  const first = earliestOccurrenceOnOrAfter(dueDay, from);
+  return Array.from({ length: months }, (_, i) => {
+    const { year, month } = addMonths(first.getFullYear(), first.getMonth(), i);
+    return dateForDayInMonth(year, month, dueDay);
+  });
+}
+
+/**
+ * A série de faturas de um cartão: o que cada uma cobra, de onde vem cada
+ * pedaço, e se já foi paga.
+ *
+ * Fonte única de "quanto é a fatura que vence no dia X" — getCardBillsInPeriod
+ * e getCardLimitUsage saem os dois daqui, para não existirem duas contas do
+ * mesmo número que possam discordar.
+ *
+ * Devolve TODAS as faturas da janela, inclusive as zeradas: uma projeção que
+ * pulasse os meses vazios desalinharia a linha do tempo na tela. Quem quiser
+ * omitir as vazias filtra depois.
+ */
+export function buildCardBills(input: {
+  card: CreditCardInput;
+  purchases: CardPurchaseInput[];
+  cardFixedExpenses?: FixedExpenseInput[];
+  billEstimates?: CardBillEstimateInput[];
+  expensePayments?: ExpensePaymentInput[];
+  /** A série começa no primeiro vencimento em ou depois deste dia. */
+  from: Date;
+  /** Quantos vencimentos consecutivos devolver. */
+  months: number;
+}): CardBill[] {
+  const {
+    card,
+    purchases,
+    cardFixedExpenses = [],
+    billEstimates = [],
+    expensePayments = [],
+    from,
+    months,
+  } = input;
+
+  const slices = purchases
+    .filter((p) => p.cardId === card.id)
+    .flatMap((p) => installmentSlices(p, card.closingDay));
+
+  return dueDatesFrom(card.dueDay, from, months).map((dueDate) => {
+    const cycleEnd = latestOccurrenceBefore(card.closingDay, dueDate);
+    const cycleStart = latestOccurrenceBefore(card.closingDay, cycleEnd);
+
+    const purchaseAmount = slices
+      .filter((slice) => slice.cycleEnd.getTime() === cycleEnd.getTime())
+      .reduce((sum, slice) => sum + slice.amount, 0);
+
+    // A card-linked expense has no due day of its own — it is billed on every
+    // cycle that closes on or after it was created.
+    const fixedExpenseAmount = cardFixedExpenses
+      .filter((exp) => exp.cardId === card.id)
+      .filter((exp) => isOccurrenceValid(cycleEnd, exp.createdAt))
+      .reduce((sum, exp) => sum + exp.amount, 0);
+
+    // Mesma granularidade de dia de findExpensePayment: a previsão casa pelo
+    // vencimento, sem se importar com a hora que o banco gravou.
+    const estimateAmount = billEstimates
+      .filter((e) => e.cardId === card.id)
+      .filter((e) => storedDay(e.dueDate).getTime() === dueDate.getTime())
+      .reduce((sum, e) => sum + e.amount, 0);
+
+    const payment = findExpensePayment(expensePayments, { cardId: card.id }, dueDate);
+
+    return {
+      cardId: card.id,
+      dueDate,
+      cycleStart,
+      cycleEnd,
+      amount: purchaseAmount + fixedExpenseAmount + estimateAmount,
+      purchaseAmount,
+      fixedExpenseAmount,
+      estimateAmount,
+      paid: !!payment,
+      paidAmount: payment?.amount,
+    };
+  });
+}
+
 /**
  * Aggregates the credit card bill(s) due within [periodStart, periodEnd),
  * summing purchases from the closing cycle that generated each bill.
@@ -291,41 +504,113 @@ export function getCardBillsInPeriod(
   periodStart: Date,
   periodEnd: Date,
   cardFixedExpenses: FixedExpenseInput[] = [],
+  billEstimates: CardBillEstimateInput[] = [],
 ): CardBillReminder[] {
-  const reminders: CardBillReminder[] = [];
+  return cards.flatMap((card) =>
+    // Dois vencimentos bastam: um período vai de um pagamento ao seguinte, e a
+    // série já começa no primeiro vencimento em ou depois de periodStart — não
+    // existe borda de baixo para filtrar, ao contrário de occurrencesInRange.
+    buildCardBills({
+      card,
+      purchases,
+      cardFixedExpenses,
+      billEstimates,
+      // De propósito sem expensePayments: esta função devolve o PREVISTO. Quem
+      // aplica o valor realmente pago é calculateDailyBudget, e é lá que vive a
+      // invariante de a fatura paga sair do lembrete mas ficar no total.
+      expensePayments: [],
+      from: periodStart,
+      months: 2,
+    })
+      .filter((bill) => bill.dueDate.getTime() < periodEnd.getTime() && bill.amount > 0)
+      .map((bill) => ({ cardId: card.id, dueDate: bill.dueDate, amount: bill.amount })),
+  );
+}
 
-  for (const card of cards) {
-    const dueDates = occurrencesInRange(card.dueDay, periodStart, periodEnd);
-    for (const dueDate of dueDates) {
-      const cycleEnd = latestOccurrenceBefore(card.closingDay, dueDate);
-      const cycleStart = latestOccurrenceBefore(card.closingDay, cycleEnd);
+/**
+ * A próxima fatura em aberto de uma série: a primeira que ainda cobra algo e
+ * ainda não foi paga.
+ *
+ * As duas condições contam. Sem `!paid`, uma fatura já quitada seguiria
+ * anunciada como "próxima fatura" — contradizendo o selo "Paga" que a projeção
+ * põe na mesma linha. Sem `amount > 0`, uma fatura de mês vazio seria anunciada
+ * como se houvesse algo a pagar.
+ */
+export function findNextOpenBill(bills: CardBill[]): CardBill | undefined {
+  return bills.find((bill) => !bill.paid && bill.amount > 0);
+}
 
-      const purchaseAmount = purchases
-        .filter((p) => p.cardId === card.id)
-        .filter((p) => {
-          // A compra guarda um dia do calendário; o ciclo é sempre meia-noite.
-          const purchaseDay = storedDay(p.date);
-          return purchaseDay.getTime() > cycleStart.getTime() && purchaseDay.getTime() <= cycleEnd.getTime();
-        })
-        .reduce((sum, p) => sum + p.amount, 0);
+/**
+ * Quanto do limite do cartão já está comprometido.
+ *
+ * Comprometido é tudo que ainda não foi pago: as faturas em aberto mais as
+ * parcelas que ainda vão fechar. É assim que o banco faz — o limite só volta
+ * quando a fatura é paga —, e é por isso que marcar uma fatura como paga é o
+ * que libera limite aqui.
+ *
+ * Devolve null quando o cartão não tem limite informado, para a tela ter uma
+ * coisa só para checar em vez de adivinhar a partir de um zero.
+ */
+export function getCardLimitUsage(input: {
+  card: CreditCardInput & { creditLimit?: number };
+  purchases: CardPurchaseInput[];
+  cardFixedExpenses?: FixedExpenseInput[];
+  billEstimates?: CardBillEstimateInput[];
+  expensePayments?: ExpensePaymentInput[];
+  today: Date;
+}): CardLimitUsage | null {
+  const {
+    card,
+    purchases,
+    cardFixedExpenses = [],
+    billEstimates = [],
+    expensePayments = [],
+    today,
+  } = input;
 
-      // A card-linked expense has no due day of its own — it's billed on
-      // every cycle that closes on or after it was created, same as the
-      // card's own due date logic for real purchases.
-      const fixedExpenseAmount = cardFixedExpenses
-        .filter((exp) => exp.cardId === card.id)
-        .filter((exp) => isOccurrenceValid(cycleEnd, exp.createdAt))
-        .reduce((sum, exp) => sum + exp.amount, 0);
+  const limit = card.creditLimit;
+  if (limit == null || limit <= 0) return null;
 
-      const amount = purchaseAmount + fixedExpenseAmount;
+  const todayStart = startOfDay(today);
+  const lookback = addMonths(
+    todayStart.getFullYear(),
+    todayStart.getMonth(),
+    -LIMIT_LOOKBACK_MONTHS,
+  );
+  const from = dateForDayInMonth(lookback.year, lookback.month, todayStart.getDate());
 
-      if (amount > 0) {
-        reminders.push({ cardId: card.id, dueDate, amount });
-      }
-    }
-  }
+  // O horizonte para frente é derivado, não fixo: vai até a última parcela e a
+  // última previsão que existirem, para um 18x ser coberto inteiro sem varrer
+  // uma janela fixa grande o suficiente para qualquer caso. O +2 cobre a
+  // distância entre um ciclo fechar e a fatura que o cobra vencer.
+  const slices = purchases
+    .filter((p) => p.cardId === card.id)
+    .flatMap((p) => installmentSlices(p, card.closingDay));
+  const lastRelevant = [
+    ...slices.map((slice) => slice.cycleEnd),
+    ...billEstimates.filter((e) => e.cardId === card.id).map((e) => storedDay(e.dueDate)),
+  ].reduce((latest, d) => (d.getTime() > latest.getTime() ? d : latest), todayStart);
+  const months = Math.max(4, monthsBetween(from, lastRelevant) + 2);
 
-  return reminders;
+  const bills = buildCardBills({
+    card,
+    purchases,
+    cardFixedExpenses,
+    billEstimates,
+    expensePayments,
+    from,
+    months,
+  });
+  const open = bills.filter((bill) => !bill.paid && bill.amount > 0);
+  const used = open.reduce((sum, bill) => sum + bill.amount, 0);
+
+  return {
+    limit,
+    used,
+    available: Math.max(0, limit - used),
+    percentUsed: Math.min(100, Math.round((used / limit) * 100)),
+    overdueBillCount: open.filter((bill) => bill.dueDate.getTime() < todayStart.getTime()).length,
+  };
 }
 
 export function calculateDailyBudget(input: {
@@ -334,6 +619,7 @@ export function calculateDailyBudget(input: {
   fixedExpenses: FixedExpenseInput[];
   creditCards: CreditCardInput[];
   cardPurchases: CardPurchaseInput[];
+  billEstimates?: CardBillEstimateInput[];
   expensePayments?: ExpensePaymentInput[];
   transactions: TransactionInput[];
   today: Date;
@@ -344,6 +630,7 @@ export function calculateDailyBudget(input: {
     fixedExpenses,
     creditCards,
     cardPurchases,
+    billEstimates = [],
     expensePayments = [],
     transactions,
     today,
@@ -425,6 +712,7 @@ export function calculateDailyBudget(input: {
     periodStart,
     periodEnd,
     cardFixedExpenses,
+    billEstimates,
   );
   const cardBillPayments = cardBills.map((bill) =>
     findExpensePayment(expensePayments, { cardId: bill.cardId }, bill.dueDate),

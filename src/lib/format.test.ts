@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { formatDateTime, formatInstant, formatShortDate } from "./format";
+import {
+  formatCurrency,
+  formatDateTime,
+  formatInstant,
+  formatShortDate,
+  installmentLabel,
+} from "./format";
 
 // O dia de um lançamento é lido em UTC, então é determinístico. A hora segue o
 // fuso da máquina, então é conferida pelo formato, não pelo valor.
@@ -37,5 +43,24 @@ describe("formatShortDate", () => {
 
   it("preenche com zero à esquerda", () => {
     expect(formatShortDate(new Date("2026-01-09T00:00:00.000Z"), "UTC")).toBe("09/01/26");
+  });
+});
+
+describe("installmentLabel", () => {
+  // As expectativas são compostas com formatCurrency de propósito: o pt-BR do
+  // Intl separa o "R$" com espaço não-quebrável, e comparar com um espaço comum
+  // digitado à mão falharia por um motivo que não é o do teste.
+  it("descreve o parcelamento como 12x de R$ 100,00", () => {
+    expect(installmentLabel(1200, 12)).toBe(`12x de ${formatCurrency(100)}`);
+  });
+
+  it("não descreve parcelamento numa compra à vista", () => {
+    expect(installmentLabel(300, 1)).toBeNull();
+    expect(installmentLabel(300, 0)).toBeNull();
+  });
+
+  it("anuncia a primeira parcela quando os centavos não fecham", () => {
+    // A sobra vai para a primeira parcela — ver installmentSlices em period.ts.
+    expect(installmentLabel(1000, 3)).toBe(`3x de ${formatCurrency(333.34)}`);
   });
 });

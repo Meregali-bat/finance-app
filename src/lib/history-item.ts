@@ -17,6 +17,14 @@ export type HistoryItem = {
   categoryId: string | null;
   cardId?: string;
   cardName?: string;
+  /**
+   * Em quantas parcelas a compra foi dividida, quando kind === "card".
+   *
+   * O Histórico mostra o TOTAL da compra no mês em que ela foi feita, porque é
+   * isso que aconteceu. Sem este número para render um "12x de R$ 100,00", o
+   * total se leria como "saiu tudo isso este mês".
+   */
+  installments?: number;
   /** Presente quando kind === "incomeReceipt": a receita fixa que foi confirmada. */
   incomeId?: string;
 };
@@ -35,6 +43,8 @@ export type MovementValues = {
   categoryId: string | null;
   /** Presente quando kind === "card". */
   cardId?: string;
+  /** Em quantas parcelas — só de leitura no formulário, como o cartão. */
+  installments?: number;
 };
 
 /** Ids colidem entre tabelas, então a chave de lista precisa do kind junto. */
@@ -52,5 +62,6 @@ export function toMovementValues(item: HistoryItem): MovementValues {
     type: item.amount < 0 ? "income" : "expense",
     categoryId: item.categoryId,
     cardId: item.cardId,
+    installments: item.installments,
   };
 }

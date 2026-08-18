@@ -11,7 +11,13 @@ import { DeleteIconButton } from "@/components/delete-icon-button";
 import { MovementFormDialog } from "@/components/forms/movement-form-dialog";
 import { unmarkExpensePayment } from "@/lib/actions/expense-payment";
 import { unmarkIncomeReceived } from "@/lib/actions/income-receipt";
-import { formatCurrency, formatDateTime, formatInstant, formatShortDate } from "@/lib/format";
+import {
+  formatCurrency,
+  formatDateTime,
+  formatInstant,
+  formatShortDate,
+  installmentLabel,
+} from "@/lib/format";
 import { toMovementValues, type HistoryItem, type MovementValues } from "@/lib/history-item";
 
 type Options = {
@@ -84,7 +90,15 @@ export function HistoryRow({ item, cards, categories }: Options & { item: Histor
       : isReceipt
         ? `Recebido em ${formatShortDate(item.date)}`
         : formatDateTime(item.date, item.createdAt)) +
-    (item.kind === "card" && item.cardName ? ` · ${item.cardName}` : "");
+    (item.kind === "card" && item.cardName ? ` · ${item.cardName}` : "") +
+    // O valor mostrado é o total da compra; sem isto, um 12x se leria como se
+    // tudo tivesse saído no mês em que foi comprado.
+    (item.kind === "card" && item.installments
+      ? (() => {
+          const label = installmentLabel(Math.abs(item.amount), item.installments);
+          return label ? ` · ${label}` : "";
+        })()
+      : "");
 
   const icon = isConfirmation ? (
     <CircleCheck className="size-4 shrink-0 text-primary" aria-hidden="true" />

@@ -4,7 +4,27 @@ import {
   getCardBillsInPeriod,
   getPeriodBounds,
   getPreviousPeriodBounds,
+  installmentSlices,
+  buildCardBills,
+  getCardLimitUsage,
+  findNextOpenBill,
+  type CardBill,
 } from "./period";
+
+/**
+ * Um dia de calendário como o banco guarda: a intenção mora na parte UTC.
+ *
+ * As suítes mais antigas deste arquivo montam essas datas em horário local, o
+ * que funciona só porque elas escolhem dias longe da borda do ciclo. Onde a
+ * comparação é de igualdade exata de dia — o vencimento de uma previsão, o
+ * fechamento de uma parcela — local não serve: new Date(2026, 0, 27) em fuso
+ * positivo é 2026-01-26T22:00Z, e storedDay() leria dia 26.
+ *
+ * Para o que é instante de verdade (today, createdAt, periodStart/periodEnd) e
+ * para os valores ESPERADOS continua valendo new Date(y, m, d) local, porque é
+ * meia-noite local que dateForDayInMonth devolve.
+ */
+const day = (y: number, m: number, d: number) => new Date(Date.UTC(y, m, d));
 
 describe("getPeriodBounds", () => {
   it("finds the current period for a single monthly income", () => {
@@ -572,6 +592,19 @@ describe("getCardBillsInPeriod", () => {
     expect(result).toEqual([{ cardId: "c1", dueDate: new Date(2026, 0, 27), amount: 134.9 }]);
   });
 
+  it("soma a previsão manual à fatura do período", () => {
+    const estimates = [{ cardId: "c1", dueDate: day(2026, 0, 27), amount: 700 }];
+    const bills = getCardBillsInPeriod(
+      [card],
+      [],
+      new Date(2026, 0, 21),
+      new Date(2026, 1, 21),
+      [],
+      estimates,
+    );
+    expect(bills).toEqual([{ cardId: "c1", dueDate: new Date(2026, 0, 27), amount: 700 }]);
+  });
+
   it("ignores a fixed expense linked to a different card", () => {
     const subscription = { id: "youtube", amount: 34.9, cardId: "other-card" };
     const result = getCardBillsInPeriod(
@@ -582,6 +615,350 @@ describe("getCardBillsInPeriod", () => {
       [subscription],
     );
     expect(result).toEqual([]);
+  });
+});
+
+describe("compras parceladas", () => {
+  // Cartão que fecha dia 20 e vence dia 27.
+  const card = { id: "c1", closingDay: 20, dueDay: 27 };
+
+  it("trata uma compra sem parcelas como uma parcela única no ciclo da compra", () => {
+    // A regressão que importa: `installments` ausente tem que dar exatamente a
+    // mesma resposta de antes deste campo existir.
+    const purchases = [{ cardId: "c1", amount: 300, date: day(2026, 0, 15) }];
+    const bills = getCardBillsInPeriod(
+      [card],
+      purchases,
+      new Date(2026, 0, 21),
+      new Date(2026, 1, 21),
+    );
+    expect(bills).toEqual([{ cardId: "c1", dueDate: new Date(2026, 0, 27), amount: 300 }]);
+  });
+
+  it("divide o total em parcelas iguais, uma por ciclo", () => {
+    const purchases = [{ cardId: "c1", amount: 1200, date: day(2026, 0, 15), installments: 12 }];
+    // A compra de 15/jan fecha no ciclo de 20/jan, que vence em 27/jan.
+    const jan = getCardBillsInPeriod([card], purchases, new Date(2026, 0, 21), new Date(2026, 1, 21));
+    const fev = getCardBillsInPeriod([card], purchases, new Date(2026, 1, 21), new Date(2026, 2, 21));
+    expect(jan[0].amount).toBe(100);
+    expect(fev[0].amount).toBe(100);
+  });
+
+  it("coloca a primeira parcela no ciclo que fecha depois da compra", () => {
+    // Comprou 25/jan, depois do fechamento do dia 20: cai na fatura de fevereiro.
+    const purchases = [{ cardId: "c1", amount: 400, date: day(2026, 0, 25), installments: 2 }];
+    const jan = getCardBillsInPeriod([card], purchases, new Date(2026, 0, 21), new Date(2026, 1, 21));
+    const fev = getCardBillsInPeriod([card], purchases, new Date(2026, 1, 21), new Date(2026, 2, 21));
+    expect(jan).toEqual([]);
+    expect(fev[0].amount).toBe(200);
+  });
+
+  it("manda a sobra dos centavos para a primeira parcela", () => {
+    // 1000 em 3x não fecha: alguém tem que levar o centavo a mais. Vai para a
+    // primeira porque é assim que os bancos fazem, e porque deixa a fatura mais
+    // próxima ser a pessimista.
+    const slices = installmentSlices(
+      { cardId: "c1", amount: 1000, date: day(2026, 0, 15), installments: 3 },
+      20,
+    );
+    expect(slices.map((s) => s.amount)).toEqual([333.34, 333.33, 333.33]);
+  });
+
+  it.each([
+    [1000, 3],
+    [100, 3],
+    [0.05, 3],
+    [1234.56, 7],
+  ])("faz as parcelas de %s em %ix somarem exatamente o total", (total, count) => {
+    // Comparado em centavos inteiros de propósito: toBeCloseTo esconderia
+    // justamente o erro de arredondamento que este teste existe para pegar.
+    const slices = installmentSlices(
+      { cardId: "c1", amount: total, date: day(2026, 0, 15), installments: count },
+      20,
+    );
+    const sum = slices.reduce((acc, s) => acc + Math.round(s.amount * 100), 0);
+    expect(sum).toBe(Math.round(total * 100));
+  });
+
+  it("não deixa o fechamento no dia 31 escorregar ao passar por fevereiro", () => {
+    // Fevereiro fecha dia 28. Se o próximo ciclo fosse calculado somando um mês
+    // ao 28 já grudado, março fecharia dia 28 em vez de 31 — e o erro seguiria
+    // acumulando mês a mês.
+    const slices = installmentSlices(
+      { cardId: "c2", amount: 400, date: day(2026, 0, 15), installments: 4 },
+      31,
+    );
+    expect(slices.map((s) => s.cycleEnd)).toEqual([
+      new Date(2026, 0, 31),
+      new Date(2026, 1, 28),
+      new Date(2026, 2, 31),
+      new Date(2026, 3, 30),
+    ]);
+  });
+
+  it.each([[0], [-3], [2.5]])("ignora um número de parcelas inválido (%s)", (installments) => {
+    // period.ts é puro e não lança: a validação de verdade é do zod na action.
+    const purchases = [{ cardId: "c1", amount: 300, date: day(2026, 0, 15), installments }];
+    const bills = getCardBillsInPeriod(
+      [card],
+      purchases,
+      new Date(2026, 0, 21),
+      new Date(2026, 1, 21),
+    );
+    expect(bills[0].amount).toBe(300);
+  });
+});
+
+describe("buildCardBills", () => {
+  const card = { id: "c1", closingDay: 20, dueDay: 27 };
+
+  it("devolve uma fatura por vencimento, em ordem, pelos meses pedidos", () => {
+    // occurrencesInRange nunca conseguiu isso: ele só varre start-1, start e
+    // start+1, então seis meses estavam fora de alcance.
+    const bills = buildCardBills({ card, purchases: [], from: new Date(2026, 0, 1), months: 6 });
+    expect(bills.map((b) => b.dueDate)).toEqual([
+      new Date(2026, 0, 27),
+      new Date(2026, 1, 27),
+      new Date(2026, 2, 27),
+      new Date(2026, 3, 27),
+      new Date(2026, 4, 27),
+      new Date(2026, 5, 27),
+    ]);
+  });
+
+  it("atravessa a virada do ano sem repetir vencimento", () => {
+    const bills = buildCardBills({ card, purchases: [], from: new Date(2026, 10, 1), months: 4 });
+    expect(bills.map((b) => b.dueDate)).toEqual([
+      new Date(2026, 10, 27),
+      new Date(2026, 11, 27),
+      new Date(2027, 0, 27),
+      new Date(2027, 1, 27),
+    ]);
+  });
+
+  it("mantém o dia do vencimento colado no mês, sem escorregar", () => {
+    const card31 = { id: "c2", closingDay: 10, dueDay: 31 };
+    const bills = buildCardBills({
+      card: card31,
+      purchases: [],
+      from: new Date(2026, 0, 1),
+      months: 4,
+    });
+    expect(bills.map((b) => b.dueDate)).toEqual([
+      new Date(2026, 0, 31),
+      new Date(2026, 1, 28),
+      new Date(2026, 2, 31),
+      new Date(2026, 3, 30),
+    ]);
+  });
+
+  it("devolve fatura zerada nos meses sem nada", () => {
+    // Ao contrário de getCardBillsInPeriod, que omite as vazias: uma projeção
+    // que pula mês desalinha a linha do tempo na tela.
+    const bills = buildCardBills({ card, purchases: [], from: new Date(2026, 0, 1), months: 3 });
+    expect(bills).toHaveLength(3);
+    expect(bills.every((b) => b.amount === 0)).toBe(true);
+  });
+
+  it("marca a fatura como paga e guarda o valor realmente pago", () => {
+    const purchases = [{ cardId: "c1", amount: 300, date: day(2026, 0, 15) }];
+    const payments = [{ cardId: "c1", dueDate: day(2026, 0, 27), amount: 290 }];
+    const [bill] = buildCardBills({
+      card,
+      purchases,
+      expensePayments: payments,
+      from: new Date(2026, 0, 1),
+      months: 1,
+    });
+    expect(bill.paid).toBe(true);
+    expect(bill.paidAmount).toBe(290);
+    // O previsto não muda: quem aplica o valor pago é quem consome a fatura.
+    expect(bill.amount).toBe(300);
+  });
+
+  it("soma a previsão manual ao que as compras já calculam, sem substituir", () => {
+    const purchases = [{ cardId: "c1", amount: 200, date: day(2026, 0, 15) }];
+    const estimates = [{ cardId: "c1", dueDate: day(2026, 0, 27), amount: 800 }];
+    const [bill] = buildCardBills({
+      card,
+      purchases,
+      billEstimates: estimates,
+      from: new Date(2026, 0, 1),
+      months: 1,
+    });
+    expect(bill.amount).toBe(1000);
+  });
+
+  it("separa quanto veio de compra, de assinatura e de previsão", () => {
+    const [bill] = buildCardBills({
+      card,
+      purchases: [{ cardId: "c1", amount: 200, date: day(2026, 0, 15) }],
+      // createdAt é instante de verdade, por isso local.
+      cardFixedExpenses: [{ id: "f1", amount: 50, cardId: "c1", createdAt: new Date(2025, 11, 1) }],
+      billEstimates: [{ cardId: "c1", dueDate: day(2026, 0, 27), amount: 800 }],
+      from: new Date(2026, 0, 1),
+      months: 1,
+    });
+    expect(bill).toMatchObject({
+      purchaseAmount: 200,
+      fixedExpenseAmount: 50,
+      estimateAmount: 800,
+      amount: 1050,
+    });
+  });
+
+  it("casa a previsão pelo dia do vencimento, ignorando a hora", () => {
+    // Mesma armadilha de findExpensePayment: o banco grava meia-noite do fuso de
+    // quem gravou, então o dia pretendido está na parte UTC.
+    const estimates = [{ cardId: "c1", dueDate: new Date(Date.UTC(2026, 0, 27, 3, 0)), amount: 500 }];
+    const [bill] = buildCardBills({
+      card,
+      purchases: [],
+      billEstimates: estimates,
+      from: new Date(2026, 0, 1),
+      months: 1,
+    });
+    expect(bill.estimateAmount).toBe(500);
+  });
+
+  it("ignora previsão e compra de outro cartão", () => {
+    const [bill] = buildCardBills({
+      card,
+      purchases: [{ cardId: "outro", amount: 200, date: day(2026, 0, 15) }],
+      billEstimates: [{ cardId: "outro", dueDate: day(2026, 0, 27), amount: 800 }],
+      from: new Date(2026, 0, 1),
+      months: 1,
+    });
+    expect(bill.amount).toBe(0);
+  });
+});
+
+describe("getCardLimitUsage", () => {
+  const card = { id: "c1", closingDay: 20, dueDay: 27, creditLimit: 5000 };
+  const today = new Date(2026, 2, 10); // 10/mar/2026
+
+  it("devolve nulo quando o cartão não tem limite informado", () => {
+    const usage = getCardLimitUsage({
+      card: { id: "c1", closingDay: 20, dueDay: 27 },
+      purchases: [],
+      today,
+    });
+    expect(usage).toBeNull();
+  });
+
+  it("soma as faturas em aberto e as parcelas futuras no usado", () => {
+    const purchases = [
+      { cardId: "c1", amount: 900, date: day(2026, 1, 15) }, // fatura de 27/fev
+      { cardId: "c1", amount: 1200, date: day(2026, 2, 5), installments: 4 }, // 300 x4
+    ];
+    const usage = getCardLimitUsage({ card, purchases, today })!;
+    expect(usage.used).toBe(2100);
+    expect(usage.available).toBe(2900);
+  });
+
+  it("libera o limite quando a fatura é marcada como paga", () => {
+    const purchases = [{ cardId: "c1", amount: 900, date: day(2026, 1, 15) }];
+    const payments = [{ cardId: "c1", dueDate: day(2026, 1, 27), amount: 900 }];
+    const usage = getCardLimitUsage({ card, purchases, expensePayments: payments, today })!;
+    expect(usage.used).toBe(0);
+    expect(usage.available).toBe(5000);
+  });
+
+  it("alcança a última parcela de um parcelado de 18x", () => {
+    // O horizonte é derivado das parcelas: com uma janela fixa de seis meses,
+    // dois terços do comprometido ficariam invisíveis.
+    const purchases = [{ cardId: "c1", amount: 1800, date: day(2026, 2, 5), installments: 18 }];
+    const usage = getCardLimitUsage({ card, purchases, today })!;
+    expect(usage.used).toBe(1800);
+  });
+
+  it("conta a fatura vencida no mês passado que ainda não foi paga", () => {
+    const purchases = [{ cardId: "c1", amount: 400, date: day(2026, 1, 15) }];
+    const usage = getCardLimitUsage({ card, purchases, today })!;
+    expect(usage.used).toBe(400);
+    expect(usage.overdueBillCount).toBe(1);
+  });
+
+  it("esquece a fatura vencida há mais de três meses que nunca foi marcada como paga", () => {
+    // Compra de 15/out/2025: a fatura venceu em 27/out, e a janela do limite só
+    // começa no primeiro vencimento em ou depois de 10/dez/2025 — ou seja,
+    // 27/dez. Uma fatura tão antiga quase certamente foi paga e só não foi
+    // marcada; mantê-la comeria o limite para sempre.
+    const purchases = [{ cardId: "c1", amount: 400, date: day(2025, 9, 15) }];
+    const usage = getCardLimitUsage({ card, purchases, today })!;
+    expect(usage.used).toBe(0);
+    expect(usage.overdueBillCount).toBe(0);
+  });
+
+  it("não deixa o disponível ficar negativo quando o comprometido passa do limite", () => {
+    const purchases = [{ cardId: "c1", amount: 8000, date: day(2026, 1, 15) }];
+    const usage = getCardLimitUsage({ card, purchases, today })!;
+    expect(usage.available).toBe(0);
+    expect(usage.percentUsed).toBe(100);
+  });
+
+  it("conta a previsão manual no comprometido", () => {
+    const estimates = [{ cardId: "c1", dueDate: day(2026, 3, 27), amount: 600 }];
+    const usage = getCardLimitUsage({ card, purchases: [], billEstimates: estimates, today })!;
+    expect(usage.used).toBe(600);
+  });
+
+  it("conta a assinatura cobrada no cartão", () => {
+    const usage = getCardLimitUsage({
+      card,
+      purchases: [],
+      cardFixedExpenses: [{ id: "f1", amount: 34.9, cardId: "c1", createdAt: new Date(2026, 0, 1) }],
+      today,
+    })!;
+    // Uma assinatura entra em todo ciclo da janela, não só em um.
+    expect(usage.used).toBeGreaterThan(34.9);
+  });
+});
+
+describe("findNextOpenBill", () => {
+  const bill = (overrides: Partial<CardBill> = {}): CardBill => ({
+    cardId: "c1",
+    dueDate: new Date(2026, 0, 27),
+    cycleStart: new Date(2025, 11, 20),
+    cycleEnd: new Date(2026, 0, 20),
+    amount: 100,
+    purchaseAmount: 100,
+    fixedExpenseAmount: 0,
+    estimateAmount: 0,
+    paid: false,
+    ...overrides,
+  });
+
+  it("devolve a primeira fatura que ainda cobra algo", () => {
+    const bills = [
+      bill({ dueDate: new Date(2026, 0, 27), amount: 0, purchaseAmount: 0 }),
+      bill({ dueDate: new Date(2026, 1, 27), amount: 250 }),
+      bill({ dueDate: new Date(2026, 2, 27), amount: 400 }),
+    ];
+    expect(findNextOpenBill(bills)?.dueDate).toEqual(new Date(2026, 1, 27));
+  });
+
+  it("pula a fatura já paga", () => {
+    // A regressão: com a fatura de janeiro quitada, a próxima em aberto é a de
+    // fevereiro. Mostrar janeiro como "próxima fatura" contradiz o selo "Paga"
+    // que a projeção põe na mesma linha.
+    const bills = [
+      bill({ dueDate: new Date(2026, 0, 27), paid: true, paidAmount: 100 }),
+      bill({ dueDate: new Date(2026, 1, 27), amount: 250 }),
+    ];
+    expect(findNextOpenBill(bills)?.dueDate).toEqual(new Date(2026, 1, 27));
+  });
+
+  it("devolve undefined quando toda fatura está paga ou zerada", () => {
+    const bills = [
+      bill({ paid: true, paidAmount: 100 }),
+      bill({ dueDate: new Date(2026, 1, 27), amount: 0, purchaseAmount: 0 }),
+    ];
+    expect(findNextOpenBill(bills)).toBeUndefined();
+  });
+
+  it("devolve undefined numa série vazia", () => {
+    expect(findNextOpenBill([])).toBeUndefined();
   });
 });
 
