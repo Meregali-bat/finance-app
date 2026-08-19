@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   calculateDailyBudget,
   getCardBillsInPeriod,
+  getNextPeriodBounds,
   getPeriodBounds,
   getPreviousPeriodBounds,
   installmentSlices,
@@ -1123,5 +1124,40 @@ describe("confirmações gravadas por servidores de fusos diferentes", () => {
       transactions: [{ amount: 120, date }],
     });
     expect(budget.transactionTotal).toBe(120);
+  });
+});
+
+describe("getNextPeriodBounds", () => {
+  const incomes = [{ id: "i1", amount: 3000, dayOfMonth: 5 }];
+
+  it("opens the next period exactly where the current one ends", () => {
+    const current = getPeriodBounds(incomes, new Date(2026, 0, 15));
+    const next = getNextPeriodBounds(incomes, current.periodEnd);
+
+    expect(next.periodStart).toEqual(current.periodEnd);
+    expect(next.periodEnd).toEqual(new Date(2026, 2, 5));
+  });
+
+  it("chains forward without drifting when a payday day doesn't exist in a month", () => {
+    const incomes31 = [{ id: "i1", amount: 3000, dayOfMonth: 31 }];
+    const january = getPeriodBounds(incomes31, new Date(2027, 0, 31));
+    const february = getNextPeriodBounds(incomes31, january.periodEnd);
+    const march = getNextPeriodBounds(incomes31, february.periodEnd);
+
+    expect(january.periodEnd).toEqual(new Date(2027, 1, 28));
+    expect(february.periodEnd).toEqual(new Date(2027, 2, 31));
+    expect(march.periodEnd).toEqual(new Date(2027, 3, 30));
+  });
+
+  it("keeps the shorter periods that several incomes create", () => {
+    const two = [
+      { id: "salary", amount: 3000, dayOfMonth: 5 },
+      { id: "freela", amount: 800, dayOfMonth: 20 },
+    ];
+    const current = getPeriodBounds(two, new Date(2026, 0, 10));
+    const next = getNextPeriodBounds(two, current.periodEnd);
+
+    expect(next.periodStart).toEqual(new Date(2026, 0, 20));
+    expect(next.periodEnd).toEqual(new Date(2026, 1, 5));
   });
 });

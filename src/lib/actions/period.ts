@@ -3,86 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/auth-helpers";
-import {
-  calculateDailyBudget,
-  getPeriodBounds,
-  getPreviousPeriodBounds,
-  type CreditCardInput,
-  type FixedExpenseInput,
-  type IncomeInput,
-} from "@/lib/period";
-
-async function loadBudgetInputs(userId: string) {
-  const [
-    incomes,
-    incomeReceipts,
-    fixedExpenses,
-    creditCards,
-    transactions,
-    expensePayments,
-    billEstimates,
-  ] = await Promise.all([
-      prisma.income.findMany({ where: { userId } }),
-      prisma.incomeReceipt.findMany({ where: { userId } }),
-      prisma.fixedExpense.findMany({ where: { userId } }),
-      prisma.creditCard.findMany({ where: { userId }, include: { purchases: true } }),
-      prisma.transaction.findMany({ where: { userId } }),
-      prisma.expensePayment.findMany({ where: { userId } }),
-      prisma.cardBillEstimate.findMany({ where: { userId } }),
-    ]);
-
-  const incomeInputs: IncomeInput[] = incomes.map((i) => ({
-    id: i.id,
-    amount: Number(i.amount),
-    dayOfMonth: i.dayOfMonth,
-    createdAt: i.createdAt,
-  }));
-  const fixedExpenseInputs: FixedExpenseInput[] = fixedExpenses.map((e) => ({
-    id: e.id,
-    amount: Number(e.amount),
-    dueDay: e.dueDay ?? undefined,
-    createdAt: e.createdAt,
-    cardId: e.cardId ?? undefined,
-  }));
-  const creditCardInputs: CreditCardInput[] = creditCards.map((c) => ({
-    id: c.id,
-    closingDay: c.closingDay,
-    dueDay: c.dueDay,
-  }));
-  const cardPurchaseInputs = creditCards.flatMap((c) =>
-    c.purchases.map((p) => ({
-      cardId: c.id,
-      amount: Number(p.amount),
-      date: p.date,
-      installments: p.installments,
-    })),
-  );
-  const transactionInputs = transactions.map((t) => ({ amount: Number(t.amount), date: t.date }));
-
-  return {
-    incomes: incomeInputs,
-    incomeReceipts: incomeReceipts.map((r) => ({
-      incomeId: r.incomeId,
-      occurrenceDate: r.occurrenceDate,
-      amount: Number(r.amount),
-    })),
-    fixedExpenses: fixedExpenseInputs,
-    creditCards: creditCardInputs,
-    cardPurchases: cardPurchaseInputs,
-    billEstimates: billEstimates.map((e) => ({
-      cardId: e.cardId,
-      dueDate: e.dueDate,
-      amount: Number(e.amount),
-    })),
-    expensePayments: expensePayments.map((p) => ({
-      fixedExpenseId: p.fixedExpenseId ?? undefined,
-      cardId: p.cardId ?? undefined,
-      dueDate: p.dueDate,
-      amount: Number(p.amount),
-    })),
-    transactions: transactionInputs,
-  };
-}
+import { loadBudgetInputs } from "@/lib/budget-inputs";
+import { calculateDailyBudget, getPeriodBounds, getPreviousPeriodBounds } from "@/lib/period";
 
 export interface PendingPeriodClose {
   periodStart: string;
