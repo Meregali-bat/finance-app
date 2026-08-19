@@ -164,7 +164,7 @@ function startOfDay(date: Date): Date {
  * O retorno é meia-noite local, a mesma forma que `dateForDayInMonth`
  * produz, para os dois lados da comparação falarem a mesma língua.
  */
-function storedDay(date: Date): Date {
+export function storedDay(date: Date): Date {
   return new Date(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
 }
 
@@ -219,8 +219,14 @@ function latestOccurrenceBefore(dayOfMonth: number, reference: Date): Date {
   return dateForDayInMonth(prev.year, prev.month, dayOfMonth);
 }
 
-/** All occurrences of dayOfMonth within [start, end). */
-function occurrencesInRange(dayOfMonth: number, start: Date, end: Date): Date[] {
+/**
+ * All occurrences of dayOfMonth within [start, end).
+ *
+ * A varredura cobre três meses a partir do mês anterior a `start`, o que a
+ * limita a intervalos de pouco menos de dois meses — um período de pagamento
+ * cabe folgado, mas uma janela maior perderia ocorrências silenciosamente.
+ */
+export function occurrencesInRange(dayOfMonth: number, start: Date, end: Date): Date[] {
   const occurrences: Date[] = [];
   let cursor = addMonths(start.getFullYear(), start.getMonth(), -1);
   for (let i = 0; i < 3; i++) {
@@ -243,7 +249,7 @@ function diffCalendarDays(a: Date, b: Date): number {
  * created — otherwise a freshly-added income/expense would retroactively
  * invent a past payday/due date that was never actually tracked.
  */
-function isOccurrenceValid(occurrence: Date, createdAt: Date | undefined): boolean {
+export function isOccurrenceValid(occurrence: Date, createdAt: Date | undefined): boolean {
   if (!createdAt) return true;
   return occurrence.getTime() >= startOfDay(createdAt).getTime();
 }
@@ -278,7 +284,7 @@ function isPaydayConfirmed(
  * (de quem é a despesa, qual vencimento) — comparar só por data quitaria a
  * ocorrência errada quando duas despesas vencem no mesmo dia.
  */
-function findExpensePayment(
+export function findExpensePayment(
   payments: ExpensePaymentInput[],
   key: { fixedExpenseId?: string; cardId?: string },
   dueDate: Date,
@@ -763,4 +769,21 @@ export function getPreviousPeriodBounds(
   const dayBeforeStart = new Date(periodStart);
   dayBeforeStart.setDate(dayBeforeStart.getDate() - 1);
   return getPeriodBounds(incomes, dayBeforeStart, incomeReceipts);
+}
+
+/**
+ * O período imediatamente seguinte a [.., periodEnd) — a peça que permite
+ * encadear ciclos para frente na previsão.
+ *
+ * `periodEnd` é sempre um dia de pagamento, então `getPeriodBounds` visto de
+ * lá devolve ele mesmo como início: a ocorrência mais recente que não passou
+ * de `periodEnd` é o próprio `periodEnd`. Não há atalho a escrever aqui — o
+ * valor da função é dizer em voz alta o que essa chamada significa.
+ */
+export function getNextPeriodBounds(
+  incomes: IncomeInput[],
+  periodEnd: Date,
+  incomeReceipts: IncomeReceiptInput[] = [],
+): { periodStart: Date; periodEnd: Date } {
+  return getPeriodBounds(incomes, periodEnd, incomeReceipts);
 }

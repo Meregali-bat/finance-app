@@ -1,4 +1,4 @@
-import { Home, CreditCard, PiggyBank, ListChecks, History } from "lucide-react";
+import { Home, TrendingUp, CreditCard, PiggyBank, ListChecks, History } from "lucide-react";
 
 /**
  * As rotas da navegação principal, numa fonte única: a barra inferior (celular)
@@ -6,6 +6,7 @@ import { Home, CreditCard, PiggyBank, ListChecks, History } from "lucide-react";
  */
 export const navItems = [
   { href: "/", label: "Início", icon: Home },
+  { href: "/previsao", label: "Previsão", icon: TrendingUp },
   { href: "/cartoes", label: "Cartões", icon: CreditCard },
   { href: "/caixinhas", label: "Caixinhas", icon: PiggyBank },
   { href: "/rendas", label: "Fixos", icon: ListChecks },
