@@ -81,6 +81,16 @@ model FixedExpense {
   amount     Decimal
   dueDay     Int?
   active     Boolean          @default(true)
+  /// Quando a despesa deixou de ser cobrada — ao ser pausada ou apagada. É por
+  /// esta data que se sabe onde cortar: os ciclos que fecharam antes dela
+  /// continuam cobrando a despesa, e é isso que impede um encerramento de
+  /// apagar retroativamente dinheiro que de fato saiu. Nulo = ainda vigente.
+  /// Ver isExpenseOccurrenceValid em src/lib/period.ts.
+  endedAt    DateTime?
+  /// Apagada pelo usuário: some das listas de Fixos, mas a linha continua no
+  /// banco para o Histórico dos meses em que ela foi cobrada seguir de pé.
+  /// Sem volta pela interface, ao contrário de `active`.
+  deletedAt  DateTime?
   createdAt  DateTime         @default(now())
   cardId     String?
   categoryId String?

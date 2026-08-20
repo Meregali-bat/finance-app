@@ -78,6 +78,9 @@ export function MovementRow({
 export function HistoryRow({ item, cards, categories }: Options & { item: HistoryItem }) {
   const isPayment = item.kind === "fixedExpensePayment" || item.kind === "cardBillPayment";
   const isReceipt = item.kind === "incomeReceipt";
+  // Derivada da fatura paga, não uma linha de tabela: não há o que editar nem
+  // o que desfazer aqui. Quem mexe nela é a aba Despesas dos Fixos.
+  const isCardFixedExpense = item.kind === "cardFixedExpense";
   // Confirmação, como as de pagamento: não se edita um recebimento, só se
   // desfaz — e desfazer devolve o lembrete à tela inicial.
   const isConfirmation = isPayment || isReceipt;
@@ -89,7 +92,9 @@ export function HistoryRow({ item, cards, categories }: Options & { item: Histor
       ? `Pago em ${formatInstant(item.date)}`
       : isReceipt
         ? `Recebido em ${formatShortDate(item.date)}`
-        : formatDateTime(item.date, item.createdAt)) +
+        : isCardFixedExpense
+          ? `Na fatura do ${item.cardName ?? "cartão"} · ${formatShortDate(item.date)}`
+          : formatDateTime(item.date, item.createdAt)) +
     (item.kind === "card" && item.cardName ? ` · ${item.cardName}` : "") +
     // O valor mostrado é o total da compra; sem isto, um 12x se leria como se
     // tudo tivesse saído no mês em que foi comprado.
@@ -102,11 +107,30 @@ export function HistoryRow({ item, cards, categories }: Options & { item: Histor
 
   const icon = isConfirmation ? (
     <CircleCheck className="size-4 shrink-0 text-primary" aria-hidden="true" />
-  ) : item.kind === "card" ? (
+  ) : item.kind === "card" || isCardFixedExpense ? (
     <CardIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
   ) : (
     <Receipt className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
   );
+
+  if (isCardFixedExpense) {
+    return (
+      <Card>
+        <CardContent className="flex items-center justify-between gap-3 py-3">
+          <div className="flex min-w-0 items-center gap-3">
+            {icon}
+            <div className="min-w-0">
+              <p className="truncate font-medium">{item.description}</p>
+              <p className="text-sm text-muted-foreground">{subtitle}</p>
+            </div>
+          </div>
+          <span className="shrink-0 font-medium tabular-nums">
+            {formatCurrency(item.amount)}
+          </span>
+        </CardContent>
+      </Card>
+    );
+  }
 
   if (isConfirmation) {
     return (

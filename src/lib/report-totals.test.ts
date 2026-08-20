@@ -117,3 +117,21 @@ describe("calculateReportTotals", () => {
     expect(totals).toEqual({ spent: 0, received: 0, balance: 0, dailyAverage: 0 });
   });
 });
+
+describe("assinatura cobrada no cartão", () => {
+  it("conta como gasto, já que a fatura que a cobra fica de fora", () => {
+    const totals = calculateReportTotals({
+      items: [
+        item({ kind: "card", amount: 200, description: "Mercado" }),
+        item({ kind: "cardFixedExpense", amount: 55, description: "Netflix" }),
+        item({ kind: "cardBillPayment", amount: 255, description: "Fatura do Nubank" }),
+      ],
+      ...august,
+      today: afterAugust,
+    });
+
+    // 200 da compra + 55 da assinatura. A fatura de 255 sai, senão o mesmo
+    // dinheiro contaria duas vezes.
+    expect(totals.spent).toBe(255);
+  });
+});

@@ -17,6 +17,8 @@ export type ProjectedBill = {
   estimateAmount: number;
   paid: boolean;
   paidAmount?: number;
+  /** Já venceu e ainda não foi paga — resolvido no servidor, junto do resto. */
+  overdue: boolean;
 };
 
 export type ListedEstimate = {
@@ -38,12 +40,14 @@ export function CardBillProjection({
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-2">
-        <SectionLabel>Próximas faturas</SectionLabel>
+        <SectionLabel>Faturas</SectionLabel>
         {bills.map((bill) => (
           <Card key={bill.dueDateIso}>
             <CardContent className="flex items-center justify-between gap-3 py-3">
               <div className="min-w-0">
-                <p className="font-medium">Vence {formatDate(bill.dueDate)}</p>
+                <p className="font-medium">
+                  {bill.overdue ? "Venceu" : "Vence"} {formatDate(bill.dueDate)}
+                </p>
                 {bill.estimateAmount > 0 && (
                   <p className="text-xs text-muted-foreground tabular-nums">
                     inclui {formatCurrency(bill.estimateAmount)} previstos
@@ -51,7 +55,11 @@ export function CardBillProjection({
                 )}
               </div>
               <div className="flex shrink-0 items-center gap-2">
-                {bill.paid && <Badge variant="secondary">Paga</Badge>}
+                {bill.paid ? (
+                  <Badge variant="secondary">Paga</Badge>
+                ) : (
+                  bill.overdue && <Badge variant="destructive">Vencida</Badge>
+                )}
                 <span
                   className={`font-medium tabular-nums ${
                     // Uma fatura zerada não é uma dívida: não merece o destaque

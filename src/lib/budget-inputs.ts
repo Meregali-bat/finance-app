@@ -86,6 +86,9 @@ export async function loadBudgetInputs(
       amount: Number(e.amount),
       dueDay: e.dueDay ?? undefined,
       createdAt: e.createdAt,
+      // Sem isto, uma despesa encerrada seguiria cobrando para sempre no
+      // fechamento de período, que carrega também as inativas de propósito.
+      endedAt: e.endedAt ?? undefined,
       cardId: e.cardId ?? undefined,
     })),
     creditCards: creditCards.map((c) => ({

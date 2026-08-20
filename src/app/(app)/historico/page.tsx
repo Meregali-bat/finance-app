@@ -10,6 +10,7 @@ import { PageHeader } from "@/components/page-header";
 import { HistoryRow } from "@/components/movement-row";
 import { CategoryBreakdown, type CategoryGroup } from "@/components/category-breakdown";
 import { historyItemKey, type HistoryItem } from "@/lib/history-item";
+import { cardBillFixedExpenses } from "@/lib/period";
 
 const UNCATEGORIZED = "__none__";
 
@@ -56,8 +57,24 @@ export default async function HistoryPage({
       include: { income: { select: { label: true } } },
     }),
     prisma.category.findMany({ where: { userId, active: true }, orderBy: { name: "asc" } }),
-    prisma.creditCard.findMany({ where: { userId, active: true }, orderBy: { name: "asc" } }),
+    // Sem filtrar por ativo, e com as assinaturas junto: um pagamento pode ser
+    // de um cartão que o usuário desativou depois, e o histórico dele não pode
+    // sumir por causa disso. A lista de opções do formulário filtra à parte.
+    prisma.creditCard.findMany({
+      where: { userId },
+      orderBy: { name: "asc" },
+      include: {
+        // Sem filtro de ativo: uma assinatura pausada ou apagada precisa
+        // continuar aparecendo nos meses em que foi cobrada. Quem corta é a
+        // janela [createdAt, endedAt] em cardBillFixedExpenses.
+        fixedExpenses: {
+          include: { category: { select: { id: true, name: true } } },
+        },
+      },
+    }),
   ]);
+
+  const cardById = new Map(creditCards.map((c) => [c.id, c]));
 
   // O nome vem junto de cada lançamento, e não só da lista de categorias
   // ativas: um lançamento pode apontar para uma categoria já desativada.
@@ -101,6 +118,47 @@ export default async function HistoryPage({
       cardId: p.cardId ?? undefined,
       cardName: p.card?.name,
     })),
+    // A assinatura cobrada no cartão, aberta a partir da fatura que a pagou.
+    // Ela não é uma CardPurchase e não aparece em nenhuma outra tabela: sem
+    // isto, o dinheiro saía sem entrar em nenhum total nem em nenhuma
+    // categoria — as compras da fatura contam uma a uma, mas a assinatura
+    // existia só dentro do valor da fatura, que fica de fora justamente para
+    // não contar as compras duas vezes.
+    ...expensePayments.flatMap((payment) => {
+      const card = payment.cardId ? cardById.get(payment.cardId) : undefined;
+      if (!card) return [];
+      // Quem decide o que esta fatura cobra é period.ts, a mesma regra que
+      // monta o valor dela; aqui só se volta do id para a linha do banco, que
+      // é de onde saem o rótulo e a categoria.
+      const billed = new Set(
+        cardBillFixedExpenses({
+          card: { id: card.id, closingDay: card.closingDay, dueDay: card.dueDay },
+          cardFixedExpenses: card.fixedExpenses.map((e) => ({
+            id: e.id,
+            amount: Number(e.amount),
+            cardId: e.cardId ?? undefined,
+            createdAt: e.createdAt,
+            endedAt: e.endedAt ?? undefined,
+          })),
+          dueDate: payment.dueDate,
+        }).map((expense) => expense.id),
+      );
+
+      return card.fixedExpenses
+        .filter((expense) => billed.has(expense.id))
+        .map((expense) => ({
+          // A assinatura é derivada, então o id da linha precisa dizer de qual
+          // fatura ela saiu: o mesmo id se repetiria em todo mês pago.
+          id: `${payment.id}-${expense.id}`,
+          kind: "cardFixedExpense" as const,
+          description: expense.label,
+          amount: Number(expense.amount),
+          date: payment.paidAt,
+          categoryId: rememberCategory(expense.category),
+          cardId: card.id,
+          cardName: card.name,
+        }));
+    }),
     // Negativo porque é receita, que é como o HistoryItem marca dinheiro que
     // entra — é assim que o total de recebido enxerga a receita fixa.
     ...incomeReceipts.map((r) => ({
@@ -145,7 +203,9 @@ export default async function HistoryPage({
     .sort((a, b) => b.amount - a.amount);
 
   const categoryOptions = categories.map((c) => ({ id: c.id, name: c.name }));
-  const cardOptions = creditCards.map((c) => ({ id: c.id, name: c.name }));
+  const cardOptions = creditCards
+    .filter((c) => c.active)
+    .map((c) => ({ id: c.id, name: c.name }));
 
   return (
     <div className="flex flex-col gap-6">
