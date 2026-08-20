@@ -8,7 +8,7 @@ import {
   formatDateTime,
   installmentLabel,
 } from "@/lib/format";
-import { buildCardBills, findNextOpenBill, getCardLimitUsage } from "@/lib/period";
+import { buildCardBillSeries, findNextOpenBill, getCardLimitUsage } from "@/lib/period";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -67,6 +67,7 @@ export default async function CardDetailPage({
     amount: Number(e.amount),
     cardId: e.cardId ?? undefined,
     createdAt: e.createdAt,
+    endedAt: e.endedAt ?? undefined,
   }));
   const expensePayments = card.payments.map((p) => ({
     cardId: p.cardId ?? undefined,
@@ -91,17 +92,20 @@ export default async function CardDetailPage({
   // parcelamentos curtos. A série é montada uma vez e alimenta tanto a "próxima
   // fatura" quanto a projeção — antes eram duas contas, e a de cima ignorava os
   // pagamentos, então anunciava como próxima uma fatura que a de baixo já
-  // marcava como paga.
-  const cardBills = buildCardBills({
+  // marcava como paga. Vem de buildCardBillSeries para a fatura que venceu e
+  // não foi paga continuar aparecendo, em vez de existir só como o aviso de
+  // "fatura vencida" do card de limite ao lado.
+  const cardBills = buildCardBillSeries({
     card: { id: card.id, closingDay: card.closingDay, dueDay: card.dueDay },
     purchases,
     cardFixedExpenses,
     billEstimates,
     expensePayments,
-    from: today,
+    today,
     months: 6,
   });
   const nextBill = findNextOpenBill(cardBills);
+  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
   const projectedBills = cardBills.map((bill) => ({
     dueDateIso: bill.dueDate.toISOString(),
     dueDate: bill.dueDate,
@@ -109,6 +113,10 @@ export default async function CardDetailPage({
     estimateAmount: bill.estimateAmount,
     paid: bill.paid,
     paidAmount: bill.paidAmount,
+    // Calculado aqui, não no cliente: refazer a conta no navegador a leria em
+    // outro fuso, o mesmo motivo pelo qual date-range.ts resolve as setas no
+    // servidor.
+    overdue: bill.dueDate.getTime() < todayStart.getTime(),
   }));
 
   // O seletor do formulário só oferece vencimentos de verdade: uma data
@@ -167,7 +175,8 @@ export default async function CardDetailPage({
                     {formatCurrency(nextBill.amount)}
                   </p>
                   <p className="text-sm text-muted-foreground">
-                    Vence {formatDate(nextBill.dueDate)}
+                    {nextBill.dueDate.getTime() < todayStart.getTime() ? "Venceu" : "Vence"}{" "}
+                    {formatDate(nextBill.dueDate)}
                   </p>
                 </>
               ) : (

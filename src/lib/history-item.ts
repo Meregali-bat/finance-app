@@ -3,7 +3,20 @@ import { dateOnlyInputValue } from "@/lib/format";
 /** Um lançamento do mês, vindo de qualquer uma das três tabelas de gasto. */
 export type HistoryItem = {
   id: string;
-  kind: "transaction" | "card" | "fixedExpensePayment" | "cardBillPayment" | "incomeReceipt";
+  kind:
+    | "transaction"
+    | "card"
+    | "fixedExpensePayment"
+    | "cardBillPayment"
+    /**
+     * Uma assinatura cobrada no cartão, aberta a partir da fatura paga que a
+     * cobrou. Não é uma linha de tabela: é derivada, e por isso não se edita
+     * nem se apaga daqui. Existe porque ela não aparece em nenhuma outra
+     * tabela — sem ela, a categoria da assinatura nunca entrava no balde de
+     * "Por categoria" e o dinheiro saía sem aparecer em lugar nenhum.
+     */
+    | "cardFixedExpense"
+    | "incomeReceipt";
   description: string;
   /** Assinado: receita é negativa, como está no banco. */
   amount: number;

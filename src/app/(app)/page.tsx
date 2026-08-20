@@ -2,7 +2,7 @@ import { differenceInCalendarDays } from "date-fns";
 import { AlertTriangle, ArrowDownLeft, Receipt } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/auth-helpers";
-import { calculateDailyBudget } from "@/lib/period";
+import { calculateDailyBudget, fallsOnDay } from "@/lib/period";
 import { formatCurrency, formatDate, formatDateLong } from "@/lib/format";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -16,10 +16,6 @@ import { MarkIncomeReceivedDialog } from "@/components/mark-income-received-dial
 import { ConfirmPaymentDialog } from "@/components/confirm-payment-dialog";
 import { markCardBillPaid, markFixedExpensePaid } from "@/lib/actions/expense-payment";
 import { PeriodCloseCheck } from "@/components/period-close-check";
-
-function startOfDay(date: Date) {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
-}
 
 export default async function DashboardPage() {
   const userId = await requireUserId();
@@ -62,6 +58,7 @@ export default async function DashboardPage() {
       amount: Number(e.amount),
       dueDay: e.dueDay ?? undefined,
       createdAt: e.createdAt,
+      endedAt: e.endedAt ?? undefined,
       cardId: e.cardId ?? undefined,
     })),
     creditCards: creditCards.map((c) => ({ id: c.id, closingDay: c.closingDay, dueDay: c.dueDay })),
@@ -94,15 +91,16 @@ export default async function DashboardPage() {
   const elapsedDays = totalDays - budget.daysRemaining + 1;
   const progressPercent = totalDays > 0 ? Math.min(100, Math.round((elapsedDays / totalDays) * 100)) : 0;
 
-  const todayStart = startOfDay(today);
-  const tomorrowStart = new Date(todayStart);
-  tomorrowStart.setDate(tomorrowStart.getDate() + 1);
+  const tomorrow = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
 
-  const todaysTransactions = transactions.filter(
-    (t) => startOfDay(t.date).getTime() === todayStart.getTime(),
-  );
+  // `fallsOnDay`, e não uma comparação de meia-noite local dos dois lados:
+  // `Transaction.date` guarda um dia de calendário na parte UTC, e lê-lo no
+  // fuso local trazia o lançamento de amanhã para "hoje" e escondia o de hoje.
+  // O card de resumo acima já lia certo, então as duas metades da tela
+  // discordavam.
+  const todaysTransactions = transactions.filter((t) => fallsOnDay(t.date, today));
   const tomorrowsTransactions = transactions
-    .filter((t) => startOfDay(t.date).getTime() === tomorrowStart.getTime())
+    .filter((t) => fallsOnDay(t.date, tomorrow))
     .sort((a, b) => a.date.getTime() - b.date.getTime());
 
   const isOverBudget = budget.dailyAvailable < 0;

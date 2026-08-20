@@ -3,7 +3,7 @@ import { ChevronRight, CreditCard as CardIcon } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/auth-helpers";
 import { formatCurrency } from "@/lib/format";
-import { buildCardBills, findNextOpenBill, getCardLimitUsage } from "@/lib/period";
+import { buildCardBillSeries, findNextOpenBill, getCardLimitUsage } from "@/lib/period";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -24,6 +24,7 @@ export default async function CardsPage() {
   });
 
   const today = new Date();
+  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
 
   return (
     <div className="flex flex-col gap-6">
@@ -58,6 +59,7 @@ export default async function CardsPage() {
               amount: Number(e.amount),
               cardId: e.cardId ?? undefined,
               createdAt: e.createdAt,
+              endedAt: e.endedAt ?? undefined,
             }));
             const expensePayments = card.payments.map((p) => ({
               cardId: p.cardId ?? undefined,
@@ -69,7 +71,7 @@ export default async function CardsPage() {
             // janela curta faria a linha desaparecer de quem pagou as próximas
             // faturas adiantado, mesmo tendo parcela caindo depois.
             const nextBill = findNextOpenBill(
-              buildCardBills({
+              buildCardBillSeries({
                 card: {
                   id: card.id,
                   closingDay: card.closingDay,
@@ -79,7 +81,7 @@ export default async function CardsPage() {
                 cardFixedExpenses,
                 billEstimates,
                 expensePayments,
-                from: today,
+                today,
                 months: 6,
               }),
             );
@@ -111,7 +113,10 @@ export default async function CardsPage() {
                       </p>
                       {nextBill && (
                         <p className="mt-1.5 text-sm font-medium text-negative tabular-nums">
-                          Próxima fatura: {formatCurrency(nextBill.amount)}
+                          {nextBill.dueDate.getTime() < todayStart.getTime()
+                            ? "Fatura vencida"
+                            : "Próxima fatura"}
+                          : {formatCurrency(nextBill.amount)}
                         </p>
                       )}
                       {limitUsage && (

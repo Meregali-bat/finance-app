@@ -17,6 +17,7 @@ import {
   findExpensePayment,
   getNextPeriodBounds,
   getPeriodBounds,
+  isExpenseOccurrenceValid,
   isOccurrenceValid,
   occurrencesInRange,
   storedDay,
@@ -176,7 +177,7 @@ function forecastOnePeriod(
   const fixedExpenseEntries: ForecastEntry[] = standaloneExpenses.flatMap((expense) => {
     if (expense.dueDay == null) return [];
     return occurrencesInRange(expense.dueDay, periodStart, periodEnd)
-      .filter((occurrence) => isOccurrenceValid(occurrence, expense.createdAt))
+      .filter((occurrence) => isExpenseOccurrenceValid(occurrence, expense))
       .map((dueDate) => {
         const payment = findExpensePayment(expensePayments, { fixedExpenseId: expense.id }, dueDate);
         return {

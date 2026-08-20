@@ -29,6 +29,14 @@ export interface FixedExpenseInput {
   dueDay?: number;
   /** When omitted, every occurrence is treated as valid (useful for tests). */
   createdAt?: Date;
+  /**
+   * Quando a despesa deixou de ser cobrada — pausada ou apagada.
+   *
+   * Existe para o encerramento não ser retroativo: sem uma data, apagar uma
+   * assinatura a fazia sumir também dos meses em que ela de fato foi cobrada,
+   * e o Histórico perdia dinheiro que saiu. Ausente = ainda vigente.
+   */
+  endedAt?: Date;
   /** When set, this expense is billed on a credit card instead of standing alone. */
   cardId?: string;
 }
@@ -168,6 +176,19 @@ export function storedDay(date: Date): Date {
   return new Date(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
 }
 
+/**
+ * O lançamento cai no dia de `reference`?
+ *
+ * Os dois lados falam línguas diferentes e é por isso que esta função existe:
+ * `date` é um dia de calendário, cuja intenção mora na parte UTC, e
+ * `reference` é um instante de verdade — hoje, amanhã —, que se lê no fuso
+ * local. Comparar os dois com a mesma leitura erra por um dia em fuso
+ * negativo, que era o que fazia "Movimentações de hoje" listar as de amanhã.
+ */
+export function fallsOnDay(date: Date, reference: Date): boolean {
+  return storedDay(date).getTime() === startOfDay(reference).getTime();
+}
+
 function daysInMonth(year: number, month: number): number {
   return new Date(year, month + 1, 0).getDate();
 }
@@ -252,6 +273,23 @@ function diffCalendarDays(a: Date, b: Date): number {
 export function isOccurrenceValid(occurrence: Date, createdAt: Date | undefined): boolean {
   if (!createdAt) return true;
   return occurrence.getTime() >= startOfDay(createdAt).getTime();
+}
+
+/**
+ * A ocorrência de uma despesa cai dentro da vigência dela?
+ *
+ * A janela é fechada nas duas pontas. Do lado de baixo pelo mesmo motivo de
+ * `isOccurrenceValid`; do lado de cima porque o ciclo que fecha no próprio dia
+ * do encerramento cobre o mês inteiro em que a despesa esteve ativa — cortá-lo
+ * daria de graça um mês que foi usado.
+ */
+export function isExpenseOccurrenceValid(
+  occurrence: Date,
+  expense: { createdAt?: Date; endedAt?: Date },
+): boolean {
+  if (!isOccurrenceValid(occurrence, expense.createdAt)) return false;
+  if (!expense.endedAt) return true;
+  return occurrence.getTime() <= startOfDay(expense.endedAt).getTime();
 }
 
 /**
@@ -436,6 +474,32 @@ function dueDatesFrom(dueDay: number, from: Date, months: number): Date[] {
  * pulasse os meses vazios desalinharia a linha do tempo na tela. Quem quiser
  * omitir as vazias filtra depois.
  */
+/**
+ * As assinaturas que a fatura de um vencimento cobra, uma a uma.
+ *
+ * `buildCardBills` só devolve a soma delas, que basta para o total da fatura.
+ * O Histórico precisa de cada uma: uma assinatura cobrada no cartão não é uma
+ * CardPurchase e não aparece em nenhuma outra tabela, então sem esta lista a
+ * categoria dela nunca entrava no balde de "Por categoria" — o dinheiro saía
+ * e não aparecia em lugar nenhum.
+ *
+ * Fonte única da regra "quem entra nesta fatura", usada pelas duas.
+ */
+export function cardBillFixedExpenses(input: {
+  card: CreditCardInput;
+  cardFixedExpenses: FixedExpenseInput[];
+  /** O vencimento que identifica a fatura. */
+  dueDate: Date;
+}): FixedExpenseInput[] {
+  const { card, cardFixedExpenses, dueDate } = input;
+  // Uma despesa ligada a cartão não tem dia de vencimento próprio: ela é
+  // cobrada em todo ciclo que fecha em ou depois de ela ter sido cadastrada.
+  const cycleEnd = latestOccurrenceBefore(card.closingDay, storedDay(dueDate));
+  return cardFixedExpenses
+    .filter((exp) => exp.cardId === card.id)
+    .filter((exp) => isExpenseOccurrenceValid(cycleEnd, exp));
+}
+
 export function buildCardBills(input: {
   card: CreditCardInput;
   purchases: CardPurchaseInput[];
@@ -469,12 +533,11 @@ export function buildCardBills(input: {
       .filter((slice) => slice.cycleEnd.getTime() === cycleEnd.getTime())
       .reduce((sum, slice) => sum + slice.amount, 0);
 
-    // A card-linked expense has no due day of its own — it is billed on every
-    // cycle that closes on or after it was created.
-    const fixedExpenseAmount = cardFixedExpenses
-      .filter((exp) => exp.cardId === card.id)
-      .filter((exp) => isOccurrenceValid(cycleEnd, exp.createdAt))
-      .reduce((sum, exp) => sum + exp.amount, 0);
+    const fixedExpenseAmount = cardBillFixedExpenses({
+      card,
+      cardFixedExpenses,
+      dueDate,
+    }).reduce((sum, exp) => sum + exp.amount, 0);
 
     // Mesma granularidade de dia de findExpensePayment: a previsão casa pelo
     // vencimento, sem se importar com a hora que o banco gravou.
@@ -531,6 +594,60 @@ export function getCardBillsInPeriod(
       .filter((bill) => bill.dueDate.getTime() < periodEnd.getTime() && bill.amount > 0)
       .map((bill) => ({ cardId: card.id, dueDate: bill.dueDate, amount: bill.amount })),
   );
+}
+
+/**
+ * A série de faturas que as telas de cartão mostram: as que já venceram e
+ * continuam em aberto, seguidas dos próximos `months` vencimentos.
+ *
+ * `buildCardBills` começa no primeiro vencimento em ou depois de `from`, e uma
+ * janela que abrisse em hoje deixava a fatura vencida de fora — justo a mais
+ * urgente. A tela então se contradizia: o card de limite somava o valor dela e
+ * avisava "1 fatura vencida", enquanto "Próxima fatura" anunciava a do mês que
+ * vem e a projeção não mostrava a atrasada em lugar nenhum.
+ *
+ * A vencida em aberto entra como um extra, sem comer uma das `months` à
+ * frente. Quanto olhar para trás é o mesmo LIMIT_LOOKBACK_MONTHS que o limite
+ * usa, e pelo mesmo motivo: perseguir uma confirmação de meio ano atrás cobra
+ * do usuário o preço do esquecimento.
+ */
+export function buildCardBillSeries(input: {
+  card: CreditCardInput;
+  purchases: CardPurchaseInput[];
+  cardFixedExpenses?: FixedExpenseInput[];
+  billEstimates?: CardBillEstimateInput[];
+  expensePayments?: ExpensePaymentInput[];
+  today: Date;
+  /** Quantos vencimentos à frente devolver. */
+  months: number;
+}): CardBill[] {
+  const { today, months, ...rest } = input;
+
+  const todayStart = startOfDay(today);
+  const lookback = addMonths(
+    todayStart.getFullYear(),
+    todayStart.getMonth(),
+    -LIMIT_LOOKBACK_MONTHS,
+  );
+  const from = dateForDayInMonth(lookback.year, lookback.month, todayStart.getDate());
+
+  // O +1 cobre a folga entre a janela de meses e quantos vencimentos ela de
+  // fato contém: dependendo de dueDay cair antes ou depois do dia de hoje, a
+  // parte passada come um vencimento a mais.
+  const bills = buildCardBills({
+    ...rest,
+    from,
+    months: LIMIT_LOOKBACK_MONTHS + 1 + months,
+  });
+
+  const overdueOpen = bills.filter(
+    (bill) => bill.dueDate.getTime() < todayStart.getTime() && !bill.paid && bill.amount > 0,
+  );
+  const upcoming = bills
+    .filter((bill) => bill.dueDate.getTime() >= todayStart.getTime())
+    .slice(0, months);
+
+  return [...overdueOpen, ...upcoming];
 }
 
 /**
@@ -694,7 +811,7 @@ export function calculateDailyBudget(input: {
   const fixedExpenseOccurrences = standaloneFixedExpenses.flatMap((exp) => {
     if (exp.dueDay == null) return [];
     return occurrencesInRange(exp.dueDay, periodStart, periodEnd)
-      .filter((occ) => isOccurrenceValid(occ, exp.createdAt))
+      .filter((occ) => isExpenseOccurrenceValid(occ, exp))
       .map((dueDate) => ({
         expenseId: exp.id,
         dueDate,

@@ -9,6 +9,9 @@ import {
   buildCardBills,
   getCardLimitUsage,
   findNextOpenBill,
+  buildCardBillSeries,
+  cardBillFixedExpenses,
+  fallsOnDay,
   type CardBill,
 } from "./period";
 
@@ -1159,5 +1162,190 @@ describe("getNextPeriodBounds", () => {
 
     expect(next.periodStart).toEqual(new Date(2026, 0, 20));
     expect(next.periodEnd).toEqual(new Date(2026, 1, 5));
+  });
+});
+
+describe("buildCardBillSeries", () => {
+  const card = { id: "c1", closingDay: 1, dueDay: 10 };
+  // 20/08: a fatura que venceu dia 10 já passou, e cobra a compra de 15/07.
+  const today = new Date(2026, 7, 20);
+  const purchases = [
+    { cardId: "c1", amount: 500, date: day(2026, 6, 15) },
+    { cardId: "c1", amount: 300, date: day(2026, 7, 15) },
+  ];
+
+  it("mantém no começo da série a fatura que venceu e continua em aberto", () => {
+    const bills = buildCardBillSeries({ card, purchases, today, months: 6 });
+
+    expect(bills[0].dueDate).toEqual(new Date(2026, 7, 10));
+    expect(bills[0].amount).toBe(500);
+    // É ela a próxima a pagar — era isso que sumia enquanto a série começava
+    // em hoje, enquanto o card de limite seguia cobrando o valor dela.
+    expect(findNextOpenBill(bills)?.amount).toBe(500);
+  });
+
+  it("deixa de fora a fatura vencida que já foi marcada como paga", () => {
+    const bills = buildCardBillSeries({
+      card,
+      purchases,
+      expensePayments: [{ cardId: "c1", dueDate: new Date(2026, 7, 10), amount: 500 }],
+      today,
+      months: 6,
+    });
+
+    expect(bills[0].dueDate).toEqual(new Date(2026, 8, 10));
+    expect(findNextOpenBill(bills)?.amount).toBe(300);
+  });
+
+  it("devolve os `months` vencimentos à frente, além das vencidas em aberto", () => {
+    const bills = buildCardBillSeries({ card, purchases, today, months: 6 });
+
+    // A vencida em aberto é um extra: ela não come uma das seis à frente.
+    expect(bills).toHaveLength(7);
+    expect(bills[bills.length - 1].dueDate).toEqual(new Date(2027, 1, 10));
+  });
+
+  it("não inventa fatura vencida quando não há nada em aberto para trás", () => {
+    const bills = buildCardBillSeries({
+      card,
+      purchases: [{ cardId: "c1", amount: 300, date: day(2026, 7, 15) }],
+      today,
+      months: 6,
+    });
+
+    expect(bills).toHaveLength(6);
+    expect(bills[0].dueDate).toEqual(new Date(2026, 8, 10));
+  });
+});
+
+describe("cardBillFixedExpenses", () => {
+  const card = { id: "c1", closingDay: 1, dueDay: 10 };
+
+  it("devolve as assinaturas que a fatura de um vencimento cobra", () => {
+    const expenses = cardBillFixedExpenses({
+      card,
+      cardFixedExpenses: [
+        { id: "netflix", amount: 55, cardId: "c1" },
+        { id: "spotify", amount: 22, cardId: "c1" },
+        { id: "outro-cartao", amount: 99, cardId: "c2" },
+      ],
+      dueDate: new Date(2026, 7, 10),
+    });
+
+    expect(expenses.map((e) => e.id)).toEqual(["netflix", "spotify"]);
+  });
+
+  it("ignora a assinatura cadastrada depois de o ciclo fechar", () => {
+    const expenses = cardBillFixedExpenses({
+      card,
+      cardFixedExpenses: [
+        // O ciclo da fatura de 10/08 fecha em 01/08; cadastrada em 15/08, ela
+        // só entra na fatura seguinte.
+        { id: "netflix", amount: 55, cardId: "c1", createdAt: new Date(2026, 7, 15) },
+      ],
+      dueDate: new Date(2026, 7, 10),
+    });
+
+    expect(expenses).toEqual([]);
+  });
+
+  it("soma o mesmo que buildCardBills cobra de assinatura na fatura", () => {
+    const cardFixedExpenses = [
+      { id: "netflix", amount: 55, cardId: "c1" },
+      { id: "spotify", amount: 22, cardId: "c1" },
+    ];
+    const [bill] = buildCardBills({
+      card,
+      purchases: [],
+      cardFixedExpenses,
+      from: new Date(2026, 7, 1),
+      months: 1,
+    });
+    const expenses = cardBillFixedExpenses({ card, cardFixedExpenses, dueDate: bill.dueDate });
+
+    expect(expenses.reduce((sum, e) => sum + e.amount, 0)).toBe(bill.fixedExpenseAmount);
+  });
+});
+
+describe("fallsOnDay", () => {
+  it("casa o lançamento gravado em meia-noite UTC com o dia que ele quer dizer", () => {
+    expect(fallsOnDay(day(2026, 7, 20), new Date(2026, 7, 20, 15, 30))).toBe(true);
+  });
+
+  it("não puxa para hoje o lançamento do dia seguinte", () => {
+    // O erro que a tela inicial tinha: lida em fuso negativo, a meia-noite UTC
+    // do dia 21 vira dia 20, e "Movimentações de hoje" listava o de amanhã.
+    expect(fallsOnDay(day(2026, 7, 21), new Date(2026, 7, 20, 15, 30))).toBe(false);
+  });
+
+  it("não esconde o lançamento de hoje", () => {
+    expect(fallsOnDay(day(2026, 7, 20), new Date(2026, 7, 19, 15, 30))).toBe(false);
+  });
+});
+
+describe("assinatura encerrada", () => {
+  const card = { id: "c1", closingDay: 1, dueDay: 10 };
+
+  it("continua na fatura cujo ciclo fechou antes de ela ser encerrada", () => {
+    const expenses = cardBillFixedExpenses({
+      card,
+      // Encerrada em 20/08, depois de o ciclo da fatura de 10/08 fechar (01/08).
+      cardFixedExpenses: [{ id: "netflix", amount: 55, cardId: "c1", endedAt: new Date(2026, 7, 20) }],
+      dueDate: new Date(2026, 7, 10),
+    });
+
+    expect(expenses.map((e) => e.id)).toEqual(["netflix"]);
+  });
+
+  it("sai da fatura cujo ciclo fecha depois de ela ser encerrada", () => {
+    const expenses = cardBillFixedExpenses({
+      card,
+      // O ciclo da fatura de 10/09 fecha em 01/09, depois do encerramento.
+      cardFixedExpenses: [{ id: "netflix", amount: 55, cardId: "c1", endedAt: new Date(2026, 7, 20) }],
+      dueDate: new Date(2026, 8, 10),
+    });
+
+    expect(expenses).toEqual([]);
+  });
+
+  it("cobra a fatura cujo ciclo fecha no próprio dia do encerramento", () => {
+    // O ciclo que fecha em 01/08 cobre julho inteiro, mês em que a assinatura
+    // esteve ativa do primeiro ao último dia. A janela é fechada nas duas
+    // pontas, como já era do lado do createdAt.
+    const expenses = cardBillFixedExpenses({
+      card,
+      cardFixedExpenses: [{ id: "netflix", amount: 55, cardId: "c1", endedAt: new Date(2026, 7, 1) }],
+      dueDate: new Date(2026, 7, 10),
+    });
+
+    expect(expenses.map((e) => e.id)).toEqual(["netflix"]);
+  });
+});
+
+describe("despesa fixa avulsa encerrada", () => {
+  const incomes = [{ id: "i1", amount: 3000, dayOfMonth: 5 }];
+
+  const budgetFor = (endedAt: Date | undefined) =>
+    calculateDailyBudget({
+      incomes,
+      incomeReceipts: [{ incomeId: "i1", occurrenceDate: day(2026, 7, 5), amount: 3000 }],
+      fixedExpenses: [{ id: "aluguel", amount: 1000, dueDay: 10, endedAt }],
+      creditCards: [],
+      cardPurchases: [],
+      transactions: [],
+      today: new Date(2026, 7, 20),
+    });
+
+  it("não cobra a ocorrência posterior ao encerramento", () => {
+    // Período 05/08 → 05/09, vencimento em 10/08, encerrada em 01/08.
+    expect(budgetFor(new Date(2026, 7, 1)).fixedExpenseTotal).toBe(0);
+  });
+
+  it("continua cobrando enquanto não é encerrada", () => {
+    expect(budgetFor(undefined).fixedExpenseTotal).toBe(1000);
+  });
+
+  it("some dos lembretes depois de encerrada", () => {
+    expect(budgetFor(new Date(2026, 7, 1)).fixedExpenseReminders).toEqual([]);
   });
 });
