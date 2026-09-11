@@ -173,4 +173,6 @@ Decidido com o usuário, de propósito:
 
 - **Tela de histórico dos ajustes** — os dados ficam gravados e dá para expor depois.
 - **Múltiplas contas bancárias** — uma só.
-- **Informar saldo negativo à mão** — o `CurrencyInput` não digita sinal. O saldo *calculado* pode ficar negativo e aparece em vermelho normalmente.
+- ~~**Informar saldo negativo à mão**~~ — passou a ser suportado em 11/09/2026: o usuário usa
+  cheque especial, e uma conta no vermelho é um saldo real que o app precisava aceitar. O
+  dialog ganhou um seletor Positivo/Negativo; o `CurrencyInput` segue digitando só o número.

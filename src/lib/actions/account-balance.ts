@@ -5,10 +5,12 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/auth-helpers";
 
-// Zero é um saldo legítimo (conta zerada), então a validação para em
-// `nonnegative`. O campo vazio é barrado antes, pelo `required` do input.
+// `balance` é o valor absoluto: quem digita informa só o número, e o sinal vem
+// do seletor. Zero continua válido — conta zerada é um saldo como outro
+// qualquer —, e o campo vazio é barrado pelo `required` do input.
 const balanceSchema = z.object({
   balance: z.coerce.number().nonnegative("Valor não pode ser negativo"),
+  sign: z.enum(["positivo", "negativo"]).default("positivo"),
 });
 
 /**
@@ -17,8 +19,15 @@ const balanceSchema = z.object({
  */
 export async function setAccountBalance(formData: FormData) {
   const userId = await requireUserId();
-  const data = balanceSchema.parse({ balance: formData.get("balance") });
+  const data = balanceSchema.parse({
+    balance: formData.get("balance"),
+    sign: formData.get("sign") || undefined,
+  });
 
-  await prisma.balanceAdjustment.create({ data: { userId, balance: data.balance } });
+  // Mesma convenção de transaction.ts, que guarda entrada avulsa como negativa:
+  // o sinal é aplicado na hora de gravar, não digitado.
+  const balance = data.sign === "negativo" ? -data.balance : data.balance;
+
+  await prisma.balanceAdjustment.create({ data: { userId, balance } });
   revalidatePath("/");
 }

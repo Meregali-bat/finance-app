@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label";
 import { CurrencyInput } from "@/components/currency-input";
 import { setAccountBalance } from "@/lib/actions/account-balance";
 import { formatCurrency } from "@/lib/format";
+import { cn } from "@/lib/utils";
 
 /**
  * O campo abre preenchido com o valor que o app calculou: quem vem corrigir o
@@ -34,9 +35,13 @@ export function BalanceAdjustmentDialog({
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [sign, setSign] = useState<"positivo" | "negativo">(
+    currentBalance != null && currentBalance < 0 ? "negativo" : "positivo",
+  );
 
   function handleSubmit(formData: FormData) {
     setError(null);
+    formData.set("sign", sign);
     startTransition(async () => {
       try {
         await setAccountBalance(formData);
@@ -48,7 +53,18 @@ export function BalanceAdjustmentDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        // Reabrir tem que voltar ao sinal do saldo atual: sem isto o dialog
+        // guardaria o "negativo" de uma correção anterior, e o próximo ajuste
+        // sairia invertido sem o usuário perceber.
+        if (next) {
+          setSign(currentBalance != null && currentBalance < 0 ? "negativo" : "positivo");
+        }
+      }}
+    >
       <DialogTrigger render={<Button variant="secondary" size="sm" className="gap-2" />}>
         <Wallet className="size-4" /> {hasBalance ? "Corrigir" : "Informar saldo"}
       </DialogTrigger>
@@ -64,12 +80,38 @@ export function BalanceAdjustmentDialog({
                 ? `O app calculou ${formatCurrency(currentBalance)}.`
                 : `Movimentação registrada até hoje: ${formatCurrency(registeredMovement)} — não é o saldo do banco, só o que passou pelo app.`}
             </p>
+            <div className="grid grid-cols-2 gap-1 rounded-xl bg-muted p-1">
+              <button
+                type="button"
+                onClick={() => setSign("positivo")}
+                className={cn(
+                  "rounded-lg py-2 text-sm font-medium transition-colors duration-150",
+                  sign === "positivo"
+                    ? "bg-card text-primary shadow-surface ring-1 ring-foreground/10"
+                    : "text-muted-foreground",
+                )}
+              >
+                Positivo
+              </button>
+              <button
+                type="button"
+                onClick={() => setSign("negativo")}
+                className={cn(
+                  "rounded-lg py-2 text-sm font-medium transition-colors duration-150",
+                  sign === "negativo"
+                    ? "bg-card text-negative shadow-surface ring-1 ring-foreground/10"
+                    : "text-muted-foreground",
+                )}
+              >
+                Negativo
+              </button>
+            </div>
             <CurrencyInput
+              key={open ? "aberto" : "fechado"}
               id="balance"
               name="balance"
+              defaultValue={currentBalance != null ? Math.abs(currentBalance) : undefined}
               required
-              defaultValue={currentBalance ?? undefined}
-              key={open ? "aberto" : "fechado"}
             />
             <p className="text-sm text-muted-foreground">
               Abra o app do banco e digite o valor que aparece lá. Daqui para a frente o saldo se
