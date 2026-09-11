@@ -6,10 +6,17 @@ import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/auth-helpers";
 
 // `balance` é o valor absoluto: quem digita informa só o número, e o sinal vem
-// do seletor. Zero continua válido — conta zerada é um saldo como outro
-// qualquer —, e o campo vazio é barrado pelo `required` do input.
+// do seletor.
 const balanceSchema = z.object({
-  balance: z.coerce.number().nonnegative("Valor não pode ser negativo"),
+  // `""` viraria 0 no coerce, e zero é um saldo válido — então o vazio precisa
+  // morrer antes da conversão, não depois.
+  balance: z
+    .string()
+    .trim()
+    .min(1, "Informe o saldo")
+    // O parâmetro de tipo é o que o `pipe` exige: sem ele o coerce declara
+    // entrada `unknown` e não encaixa na saída `string` do passo anterior.
+    .pipe(z.coerce.number<string>().nonnegative("Valor não pode ser negativo")),
   sign: z.enum(["positivo", "negativo"]).default("positivo"),
 });
 
@@ -20,7 +27,7 @@ const balanceSchema = z.object({
 export async function setAccountBalance(formData: FormData) {
   const userId = await requireUserId();
   const data = balanceSchema.parse({
-    balance: formData.get("balance"),
+    balance: formData.get("balance") ?? "",
     sign: formData.get("sign") || undefined,
   });
 

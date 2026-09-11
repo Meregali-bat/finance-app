@@ -45,7 +45,6 @@ export function AccountBalanceCard({
         </div>
         <div className="shrink-0 [&>button]:w-full sm:[&>button]:w-auto">
           <BalanceAdjustmentDialog
-            hasBalance={balance != null}
             currentBalance={balance}
             registeredMovement={registeredMovement}
           />

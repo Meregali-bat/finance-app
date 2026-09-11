@@ -18,20 +18,21 @@ import { formatCurrency } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 /**
- * O campo abre preenchido com o valor que o app calculou: quem vem corrigir o
- * saldo quase sempre parte dele, não do zero. A contrapartida — decisão do
+ * O campo abre preenchido com o valor que o app calculou, exceto quando esse
+ * valor é exatamente zero — aí o `CurrencyInput` abre vazio, como em qualquer
+ * outro formulário. Preencher é o caso comum: quem vem corrigir o saldo quase
+ * sempre parte do que o app mostra, não do zero. A contrapartida — decisão do
  * usuário, ciente do trade-off — é que dá para confirmar sem abrir o banco,
  * o oposto do que este ajuste existe para forçar. Aceito assim mesmo.
  */
 export function BalanceAdjustmentDialog({
-  hasBalance,
   currentBalance,
   registeredMovement,
 }: {
-  hasBalance: boolean;
   currentBalance: number | null;
   registeredMovement: number;
 }) {
+  const hasBalance = currentBalance != null;
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);

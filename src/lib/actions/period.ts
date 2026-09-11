@@ -92,7 +92,13 @@ export async function resolvePeriodAllocation(
   await prisma.$transaction(async (tx) => {
     if (jarId) {
       await tx.jarDeposit.create({
-        data: { jarId, userId, amount: leftoverAmount, note: "Sobra do período anterior" },
+        data: {
+          jarId,
+          userId,
+          amount: leftoverAmount,
+          note: "Sobra do período anterior",
+          fromPeriodClose: true,
+        },
       });
       await tx.jar.update({
         where: { id: jarId, userId },
@@ -105,6 +111,7 @@ export async function resolvePeriodAllocation(
           amount: -leftoverAmount,
           description: "Saldo do período anterior",
           date: new Date(),
+          fromPeriodClose: true,
         },
       });
     }

@@ -135,6 +135,8 @@ Créditos e débitos chegam já normalizados pela página — o módulo não con
 
 Isso é inerente à abordagem: o marco congela o passado de propósito, e é justamente o que impede a dupla contagem. A válvula é o próprio botão de corrigir. Decisão confirmada com o usuário: o ajuste manual resolve.
 
+**Desfazer e reconfirmar um recebimento ou pagamento anterior ao marco, porém, mexe no saldo** — e aqui a limitação vai um passo além do parágrafo acima. Desfazer pela `movement-row` **apaga** a linha; reconfirmar cria outra, com `createdAt` novo. A linha original era anterior ao marco e estava fora da soma; a nova é posterior e entra. O saldo então anda pelo valor inteiro do movimento, embora nada tenha acontecido no banco. Mesma natureza, mesma saída: corrigir o saldo pelo botão.
+
 ---
 
 ## Tela e fluxo
@@ -146,7 +148,7 @@ Isso é inerente à abordagem: o marco congela o passado de propósito, e é jus
 
 **`src/components/forms/balance-adjustment-dialog.tsx`** — client component no molde de `jar-deposit-dialog.tsx`: `CurrencyInput`, label "Quanto o banco mostra agora", botões com estado de `isPending` e erro em `role="alert"`. O texto deixa claro que se digita o **valor do extrato**, não a diferença.
 
-**`src/lib/actions/account-balance.ts`** — `setAccountBalance(formData)`: `requireUserId()`, zod (`amount` numérico, não negativo), cria o `BalanceAdjustment` e `revalidatePath("/")`.
+**`src/lib/actions/account-balance.ts`** — `setAccountBalance(formData)`: `requireUserId()`, zod (`balance` numérico não negativo, recusando o campo vazio antes do coerce, e `sign` com o sinal vindo do seletor), cria o `BalanceAdjustment` e `revalidatePath("/")`.
 
 **`src/app/(app)/page.tsx`** — mais duas consultas no `Promise.all` existente: o último `balanceAdjustment` (`orderBy createdAt desc`, `findFirst`) e os `jarDeposit` do usuário. Recebimentos, lançamentos e pagamentos a página já carrega e são reaproveitados.
 

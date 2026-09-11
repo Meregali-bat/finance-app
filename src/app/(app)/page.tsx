@@ -94,19 +94,25 @@ export default async function DashboardPage() {
   });
 
   // Os quatro modelos viram duas listas genéricas aqui, e não dentro do
-  // módulo: a regra dos filtros mora em um lugar só, e `account-balance.ts`
-  // segue puro, sem conhecer nome de tabela.
+  // módulo: a regra dos filtros mora em um lugar só, e tanto o saldo em conta
+  // quanto a movimentação registrada saem da mesma matéria-prima, com
+  // `account-balance.ts` puro, sem conhecer nome de tabela.
   const accountCredits = incomeReceipts.map((r) => ({
     amount: Number(r.amount),
     registeredAt: r.createdAt,
     occurredOn: storedDay(r.occurrenceDate),
   }));
+  // Fora as linhas do fechamento de período: a sobra devolvida ao orçamento já
+  // estava na conta, e contá-la como movimento faria o saldo andar sozinho uma
+  // vez a cada fechamento, sem um centavo ter entrado ou saído do banco.
   const accountDebits = [
-    ...transactions.map((t) => ({
-      amount: Number(t.amount),
-      registeredAt: t.createdAt,
-      occurredOn: storedDay(t.date),
-    })),
+    ...transactions
+      .filter((t) => !t.fromPeriodClose)
+      .map((t) => ({
+        amount: Number(t.amount),
+        registeredAt: t.createdAt,
+        occurredOn: storedDay(t.date),
+      })),
     ...expensePayments.map((p) => ({
       amount: Number(p.amount),
       registeredAt: p.createdAt,
@@ -114,11 +120,13 @@ export default async function DashboardPage() {
       // quitada adiantada sairia do saldo só no vencimento.
       occurredOn: p.paidAt,
     })),
-    ...jarDeposits.map((d) => ({
-      amount: Number(d.amount),
-      registeredAt: d.createdAt,
-      occurredOn: d.createdAt,
-    })),
+    ...jarDeposits
+      .filter((d) => !d.fromPeriodClose)
+      .map((d) => ({
+        amount: Number(d.amount),
+        registeredAt: d.createdAt,
+        occurredOn: d.createdAt,
+      })),
   ];
 
   const accountBalance = calculateAccountBalance({
