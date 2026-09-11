@@ -20,7 +20,7 @@
 - **Datas de calendário** (`occurrenceDate`, `date`) são lidas com `storedDay()` de `src/lib/period.ts`, nunca com `getDate()` local. Ver o comentário em `src/lib/period.ts:104-121`.
 - **Comentários explicam o porquê, não o quê.** O repositório comenta decisões que não se leem no código (veja `src/lib/period.ts` e as migrations). Siga esse tom; não narre o óbvio.
 - Rodar os testes: `npm test`. Lint: `npm run lint`. Build: `npm run build`.
-- **O client Prisma versionado em `src/generated/prisma` está atrás do schema.** Antes de qualquer mudança deste plano, `npx tsc --noEmit` já acusa 5 erros de `endedAt`/`deletedAt` não existirem — campos que a migration `20260820120000` criou e o client nunca regenerou. O `npx prisma generate` da Task 1 corrige isso; se esses 5 erros continuarem depois dele, pare e investigue, porque aí é outra coisa. Não confunda esse ruído de partida com erro seu.
+- **O client Prisma gerado localmente está atrás do schema.** `src/generated/prisma` é gitignored — cada máquina gera o seu —, e o desta está anterior à migration `20260820120000`: antes de qualquer mudança deste plano, `npx tsc --noEmit` já acusa 5 erros de `endedAt`/`deletedAt` não existirem. O `npx prisma generate` da Task 1 corrige isso e **não gera nada para commitar**. Se esses 5 erros continuarem depois dele, pare e investigue, porque aí é outra coisa. Não confunda esse ruído de partida com erro seu.
 - Se `npx tsc --noEmit` reclamar da combinação `incremental`/`noEmit`, rode `npx tsc --noEmit --incremental false`.
 
 ---
@@ -741,4 +741,6 @@ Combinado com o usuário, não faça:
 
 - tela de histórico dos ajustes (os dados ficam gravados; dá para expor depois);
 - múltiplas contas bancárias;
-- informar saldo **negativo** à mão — o `CurrencyInput` não digita sinal. O saldo *calculado* pode ficar negativo e já aparece em vermelho.
+- ~~**Informar saldo negativo à mão**~~ — passou a ser suportado em 11/09/2026: o usuário usa
+  cheque especial, e uma conta no vermelho é um saldo real que o app precisava aceitar. O
+  dialog ganhou um seletor Positivo/Negativo; o `CurrencyInput` segue digitando só o número.

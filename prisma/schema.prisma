@@ -11,22 +11,23 @@ datasource db {
 }
 
 model User {
-  id                String             @id @default(cuid())
-  email             String             @unique
-  passwordHash      String
-  incomes           Income[]
-  incomeReceipts    IncomeReceipt[]
-  fixedExpenses     FixedExpense[]
-  transactions      Transaction[]
-  creditCards       CreditCard[]
-  cardPurchases     CardPurchase[]
-  jars              Jar[]
-  jarDeposits       JarDeposit[]
-  periodAllocations PeriodAllocation[]
-  categories        Category[]
-  expensePayments   ExpensePayment[]
-  cardBillEstimates CardBillEstimate[]
-  createdAt         DateTime           @default(now())
+  id                 String              @id @default(cuid())
+  email              String              @unique
+  passwordHash       String
+  incomes            Income[]
+  incomeReceipts     IncomeReceipt[]
+  fixedExpenses      FixedExpense[]
+  transactions       Transaction[]
+  creditCards        CreditCard[]
+  cardPurchases      CardPurchase[]
+  jars               Jar[]
+  jarDeposits        JarDeposit[]
+  periodAllocations  PeriodAllocation[]
+  categories         Category[]
+  expensePayments    ExpensePayment[]
+  cardBillEstimates  CardBillEstimate[]
+  balanceAdjustments BalanceAdjustment[]
+  createdAt          DateTime            @default(now())
 }
 
 model Category {
@@ -133,18 +134,24 @@ model ExpensePayment {
 }
 
 model Transaction {
-  id          String    @id @default(cuid())
-  userId      String
-  amount      Decimal
-  description String
-  date        DateTime  @default(now())
+  id              String    @id @default(cuid())
+  userId          String
+  amount          Decimal
+  description     String
+  date            DateTime  @default(now())
   /// Quando o lançamento foi cadastrado — é daqui que sai a hora exibida.
   /// `date` é um dia do calendário (meia-noite UTC) e não carrega horário.
   /// Nulo nos lançamentos anteriores a esta coluna, que então só mostram o dia.
-  createdAt   DateTime? @default(now())
-  categoryId  String?
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  category    Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  createdAt       DateTime? @default(now())
+  /// Linha criada pelo fechamento de período, não por um movimento de dinheiro:
+  /// a sobra devolvida ao orçamento seguinte. Ela existe para o orçamento e
+  /// precisa ficar de fora do saldo em conta — o dinheiro já estava na conta,
+  /// e contá-la de novo faria o saldo subir sozinho a cada período.
+  /// Ver resolvePeriodAllocation em src/lib/actions/period.ts.
+  fromPeriodClose Boolean   @default(false)
+  categoryId      String?
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category        Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
 
   @@index([userId, date])
   @@index([categoryId])
@@ -234,14 +241,20 @@ model Jar {
 }
 
 model JarDeposit {
-  id        String   @id @default(cuid())
-  jarId     String
-  userId    String
-  amount    Decimal
-  note      String?
-  createdAt DateTime @default(now())
-  jar       Jar      @relation(fields: [jarId], references: [id], onDelete: Cascade)
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id              String   @id @default(cuid())
+  jarId           String
+  userId          String
+  amount          Decimal
+  note            String?
+  createdAt       DateTime @default(now())
+  /// Linha criada pelo fechamento de período, não por um movimento de dinheiro:
+  /// a sobra guardada na caixinha pelo fechamento. Ela existe para o orçamento e
+  /// precisa ficar de fora do saldo em conta — o dinheiro não saiu do banco por
+  /// um ato do usuário, e contá-la faria o saldo cair sozinho a cada período.
+  /// Ver resolvePeriodAllocation em src/lib/actions/period.ts.
+  fromPeriodClose Boolean  @default(false)
+  jar             Jar      @relation(fields: [jarId], references: [id], onDelete: Cascade)
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([jarId])
   @@index([userId])
@@ -261,4 +274,20 @@ model PeriodAllocation {
 
   @@unique([userId, periodEnd])
   @@index([userId])
+}
+
+/// Uma leitura do extrato: "neste instante o banco dizia X". O saldo em conta
+/// exibido na home é derivado do ajuste mais recente somado a tudo que foi
+/// registrado depois dele — ver src/lib/account-balance.ts.
+///
+/// Cada correção cria uma linha nova; nada é sobrescrito. `createdAt` não é só
+/// carimbo de auditoria: é o marco a partir do qual a soma começa.
+model BalanceAdjustment {
+  id        String   @id @default(cuid())
+  userId    String
+  balance   Decimal
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
 }

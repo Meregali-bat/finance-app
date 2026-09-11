@@ -44,3 +44,6 @@ next-env.d.ts
 
 .vercel
 .env*
+
+# superpowers: scratch de execução de planos
+.superpowers/
