@@ -16,7 +16,7 @@ import { MarkIncomeReceivedDialog } from "@/components/mark-income-received-dial
 import { ConfirmPaymentDialog } from "@/components/confirm-payment-dialog";
 import { markCardBillPaid, markFixedExpensePaid } from "@/lib/actions/expense-payment";
 import { PeriodCloseCheck } from "@/components/period-close-check";
-import { calculateAccountBalance } from "@/lib/account-balance";
+import { calculateAccountBalance, calculateRegisteredMovement } from "@/lib/account-balance";
 import { AccountBalanceCard } from "@/components/account-balance-card";
 
 export default async function DashboardPage() {
@@ -96,34 +96,45 @@ export default async function DashboardPage() {
   // Os quatro modelos viram duas listas genéricas aqui, e não dentro do
   // módulo: a regra dos filtros mora em um lugar só, e `account-balance.ts`
   // segue puro, sem conhecer nome de tabela.
+  const accountCredits = incomeReceipts.map((r) => ({
+    amount: Number(r.amount),
+    registeredAt: r.createdAt,
+    occurredOn: storedDay(r.occurrenceDate),
+  }));
+  const accountDebits = [
+    ...transactions.map((t) => ({
+      amount: Number(t.amount),
+      registeredAt: t.createdAt,
+      occurredOn: storedDay(t.date),
+    })),
+    ...expensePayments.map((p) => ({
+      amount: Number(p.amount),
+      registeredAt: p.createdAt,
+      // `paidAt`, não `dueDate`: o dinheiro sai quando se paga, e uma fatura
+      // quitada adiantada sairia do saldo só no vencimento.
+      occurredOn: p.paidAt,
+    })),
+    ...jarDeposits.map((d) => ({
+      amount: Number(d.amount),
+      registeredAt: d.createdAt,
+      occurredOn: d.createdAt,
+    })),
+  ];
+
   const accountBalance = calculateAccountBalance({
     adjustment: balanceAdjustment
       ? { balance: Number(balanceAdjustment.balance), createdAt: balanceAdjustment.createdAt }
       : undefined,
-    credits: incomeReceipts.map((r) => ({
-      amount: Number(r.amount),
-      registeredAt: r.createdAt,
-      occurredOn: storedDay(r.occurrenceDate),
-    })),
-    debits: [
-      ...transactions.map((t) => ({
-        amount: Number(t.amount),
-        registeredAt: t.createdAt,
-        occurredOn: storedDay(t.date),
-      })),
-      ...expensePayments.map((p) => ({
-        amount: Number(p.amount),
-        registeredAt: p.createdAt,
-        // `paidAt`, não `dueDate`: o dinheiro sai quando se paga, e uma fatura
-        // quitada adiantada sairia do saldo só no vencimento.
-        occurredOn: p.paidAt,
-      })),
-      ...jarDeposits.map((d) => ({
-        amount: Number(d.amount),
-        registeredAt: d.createdAt,
-        occurredOn: d.createdAt,
-      })),
-    ],
+    credits: accountCredits,
+    debits: accountDebits,
+    today,
+  });
+
+  // A mesma matéria-prima do saldo, somada sem marco: é o que o dialog mostra
+  // como referência quando ainda não existe ajuste nenhum para calcular saldo.
+  const registeredMovement = calculateRegisteredMovement({
+    credits: accountCredits,
+    debits: accountDebits,
     today,
   });
 
@@ -245,6 +256,7 @@ export default async function DashboardPage() {
       <AccountBalanceCard
         balance={accountBalance}
         adjustedAt={balanceAdjustment?.createdAt ?? null}
+        registeredMovement={registeredMovement}
       />
 
       {/* As duas listas ficam lado a lado a partir de `xl`. Em `lg` sobrariam

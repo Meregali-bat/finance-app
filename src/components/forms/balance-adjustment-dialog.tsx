@@ -14,13 +14,23 @@ import {
 import { Label } from "@/components/ui/label";
 import { CurrencyInput } from "@/components/currency-input";
 import { setAccountBalance } from "@/lib/actions/account-balance";
+import { formatCurrency } from "@/lib/format";
 
 /**
- * O campo abre vazio, sem o saldo calculado preenchido: o valor pedido é o que
- * o banco mostra, e oferecer o número do app de volta convida a confirmar sem
- * conferir — que é justamente o que este ajuste existe para evitar.
+ * O campo abre preenchido com o valor que o app calculou: quem vem corrigir o
+ * saldo quase sempre parte dele, não do zero. A contrapartida — decisão do
+ * usuário, ciente do trade-off — é que dá para confirmar sem abrir o banco,
+ * o oposto do que este ajuste existe para forçar. Aceito assim mesmo.
  */
-export function BalanceAdjustmentDialog({ hasBalance }: { hasBalance: boolean }) {
+export function BalanceAdjustmentDialog({
+  hasBalance,
+  currentBalance,
+  registeredMovement,
+}: {
+  hasBalance: boolean;
+  currentBalance: number | null;
+  registeredMovement: number;
+}) {
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -49,7 +59,18 @@ export function BalanceAdjustmentDialog({ hasBalance }: { hasBalance: boolean })
         <form action={handleSubmit} className="flex flex-col gap-4">
           <div className="flex flex-col gap-2">
             <Label htmlFor="balance">Quanto o banco mostra agora</Label>
-            <CurrencyInput id="balance" name="balance" required />
+            <p className="text-sm text-muted-foreground tabular-nums">
+              {currentBalance != null
+                ? `O app calculou ${formatCurrency(currentBalance)}.`
+                : `Movimentação registrada até hoje: ${formatCurrency(registeredMovement)} — não é o saldo do banco, só o que passou pelo app.`}
+            </p>
+            <CurrencyInput
+              id="balance"
+              name="balance"
+              required
+              defaultValue={currentBalance ?? undefined}
+              key={open ? "aberto" : "fechado"}
+            />
             <p className="text-sm text-muted-foreground">
               Abra o app do banco e digite o valor que aparece lá. Daqui para a frente o saldo se
               atualiza sozinho com os seus lançamentos.

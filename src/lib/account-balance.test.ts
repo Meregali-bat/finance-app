@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calculateAccountBalance } from "./account-balance";
+import { calculateAccountBalance, calculateRegisteredMovement } from "./account-balance";
 import type { AccountMovementInput } from "./account-balance";
 
 // O ajuste foi feito no dia 10/set às 9h; "agora" são 20h do mesmo dia.
@@ -108,5 +108,45 @@ describe("calculateAccountBalance", () => {
       today: now,
     });
     expect(balance).toBe(300);
+  });
+});
+
+describe("calculateRegisteredMovement", () => {
+  it("soma o que entrou e subtrai o que saiu até hoje", () => {
+    const movement = calculateRegisteredMovement({
+      credits: [{ amount: 3000, occurredOn: new Date(2026, 8, 5) }],
+      debits: [{ amount: 200, occurredOn: new Date(2026, 8, 6) }],
+      today: now,
+    });
+    expect(movement).toBe(2800);
+  });
+
+  it("conta o lançamento sem data de registro, ao contrário do saldo", () => {
+    // A diferença que justifica a função existir: aqui não há marco de ajuste,
+    // então uma linha antiga sem `createdAt` ainda é dinheiro que se moveu.
+    const movement = calculateRegisteredMovement({
+      credits: [],
+      debits: [{ amount: 50, registeredAt: null, occurredOn: new Date(2026, 8, 1) }],
+      today: now,
+    });
+    expect(movement).toBe(-50);
+  });
+
+  it("não conta o que ainda vai acontecer", () => {
+    const movement = calculateRegisteredMovement({
+      credits: [],
+      debits: [{ amount: 50, occurredOn: new Date(2026, 8, 11) }],
+      today: now,
+    });
+    expect(movement).toBe(0);
+  });
+
+  it("soma a entrada avulsa, que chega como valor negativo", () => {
+    const movement = calculateRegisteredMovement({
+      credits: [],
+      debits: [{ amount: -400, occurredOn: new Date(2026, 8, 9) }],
+      today: now,
+    });
+    expect(movement).toBe(400);
   });
 });

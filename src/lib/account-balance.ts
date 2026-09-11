@@ -89,3 +89,29 @@ export function calculateAccountBalance(input: AccountBalanceInput): number | nu
     sumCounted(debits, adjustedAt, todayStart)
   );
 }
+
+/**
+ * Tudo que o app viu se mover até hoje, sem marco de ajuste nenhum.
+ *
+ * Serve de referência na primeira vez que o usuário vai informar o saldo: não é
+ * o que existe no banco — o app não conhece o que havia antes dele nem o que se
+ * move fora dele —, mas dá a ordem de grandeza para quem não faz ideia de que
+ * número digitar. Quem exibe precisa rotular como movimentação registrada, não
+ * como saldo.
+ *
+ * Diferente de `calculateAccountBalance`, aceita movimento sem `registeredAt`:
+ * sem marco, não há o que uma linha antiga possa duplicar.
+ */
+export function calculateRegisteredMovement(input: {
+  credits: AccountMovementInput[];
+  debits: AccountMovementInput[];
+  today: Date;
+}): number {
+  const todayStart = startOfDay(input.today).getTime();
+  const upToToday = (m: AccountMovementInput) =>
+    startOfDay(m.occurredOn).getTime() <= todayStart;
+
+  const credited = input.credits.filter(upToToday).reduce((sum, m) => sum + m.amount, 0);
+  const debited = input.debits.filter(upToToday).reduce((sum, m) => sum + m.amount, 0);
+  return credited - debited;
+}

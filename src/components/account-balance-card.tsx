@@ -11,9 +11,11 @@ import { BalanceAdjustmentDialog } from "@/components/forms/balance-adjustment-d
 export function AccountBalanceCard({
   balance,
   adjustedAt,
+  registeredMovement,
 }: {
   balance: number | null;
   adjustedAt: Date | null;
+  registeredMovement: number;
 }) {
   return (
     <Card>
@@ -42,7 +44,11 @@ export function AccountBalanceCard({
           )}
         </div>
         <div className="shrink-0 [&>button]:w-full sm:[&>button]:w-auto">
-          <BalanceAdjustmentDialog hasBalance={balance != null} />
+          <BalanceAdjustmentDialog
+            hasBalance={balance != null}
+            currentBalance={balance}
+            registeredMovement={registeredMovement}
+          />
         </div>
       </CardContent>
     </Card>
