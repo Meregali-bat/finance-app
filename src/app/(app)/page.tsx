@@ -2,7 +2,7 @@ import { differenceInCalendarDays } from "date-fns";
 import { AlertTriangle, ArrowDownLeft, Receipt } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/auth-helpers";
-import { calculateDailyBudget, fallsOnDay } from "@/lib/period";
+import { calculateDailyBudget, fallsOnDay, storedDay } from "@/lib/period";
 import { formatCurrency, formatDate, formatDateLong } from "@/lib/format";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -16,6 +16,8 @@ import { MarkIncomeReceivedDialog } from "@/components/mark-income-received-dial
 import { ConfirmPaymentDialog } from "@/components/confirm-payment-dialog";
 import { markCardBillPaid, markFixedExpensePaid } from "@/lib/actions/expense-payment";
 import { PeriodCloseCheck } from "@/components/period-close-check";
+import { calculateAccountBalance } from "@/lib/account-balance";
+import { AccountBalanceCard } from "@/components/account-balance-card";
 
 export default async function DashboardPage() {
   const userId = await requireUserId();
@@ -30,6 +32,8 @@ export default async function DashboardPage() {
     categories,
     expensePayments,
     billEstimates,
+    balanceAdjustment,
+    jarDeposits,
   ] = await Promise.all([
       prisma.income.findMany({ where: { userId, active: true } }),
       prisma.incomeReceipt.findMany({ where: { userId } }),
@@ -39,6 +43,8 @@ export default async function DashboardPage() {
       prisma.category.findMany({ where: { userId, active: true }, orderBy: { name: "asc" } }),
       prisma.expensePayment.findMany({ where: { userId } }),
       prisma.cardBillEstimate.findMany({ where: { userId } }),
+      prisma.balanceAdjustment.findFirst({ where: { userId }, orderBy: { createdAt: "desc" } }),
+      prisma.jarDeposit.findMany({ where: { userId } }),
     ]);
 
   const budget = calculateDailyBudget({
@@ -84,6 +90,40 @@ export default async function DashboardPage() {
       amount: Number(p.amount),
     })),
     transactions: transactions.map((t) => ({ amount: Number(t.amount), date: t.date })),
+    today,
+  });
+
+  // Os quatro modelos viram duas listas genéricas aqui, e não dentro do
+  // módulo: a regra dos filtros mora em um lugar só, e `account-balance.ts`
+  // segue puro, sem conhecer nome de tabela.
+  const accountBalance = calculateAccountBalance({
+    adjustment: balanceAdjustment
+      ? { balance: Number(balanceAdjustment.balance), createdAt: balanceAdjustment.createdAt }
+      : undefined,
+    credits: incomeReceipts.map((r) => ({
+      amount: Number(r.amount),
+      registeredAt: r.createdAt,
+      occurredOn: storedDay(r.occurrenceDate),
+    })),
+    debits: [
+      ...transactions.map((t) => ({
+        amount: Number(t.amount),
+        registeredAt: t.createdAt,
+        occurredOn: storedDay(t.date),
+      })),
+      ...expensePayments.map((p) => ({
+        amount: Number(p.amount),
+        registeredAt: p.createdAt,
+        // `paidAt`, não `dueDate`: o dinheiro sai quando se paga, e uma fatura
+        // quitada adiantada sairia do saldo só no vencimento.
+        occurredOn: p.paidAt,
+      })),
+      ...jarDeposits.map((d) => ({
+        amount: Number(d.amount),
+        registeredAt: d.createdAt,
+        occurredOn: d.createdAt,
+      })),
+    ],
     today,
   });
 
@@ -201,6 +241,11 @@ export default async function DashboardPage() {
           </div>
         </CardContent>
       </Card>
+
+      <AccountBalanceCard
+        balance={accountBalance}
+        adjustedAt={balanceAdjustment?.createdAt ?? null}
+      />
 
       {/* As duas listas ficam lado a lado a partir de `xl`. Em `lg` sobrariam
           ~340px por coluna, o que trunca o valor dos lembretes. `items-start`
