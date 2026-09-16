@@ -28,6 +28,14 @@ model User {
   cardBillEstimates  CardBillEstimate[]
   balanceAdjustments BalanceAdjustment[]
   createdAt          DateTime            @default(now())
+
+  /// Quanto da renda o usuário aceita ver comprometido com despesa fixa e fatura
+  /// de cartão, em porcentagem inteira. É o teto que a pergunta "posso comprar
+  /// isso?" usa para reprovar uma compra que cabe no saldo mas aperta o mês.
+  /// Nulo = nunca configurado, e vale DEFAULT_COMMITMENT_LIMIT_PERCENT de
+  /// src/lib/purchase-simulation.ts — um @default aqui apagaria a diferença
+  /// entre "não escolheu" e "escolheu 70", e a tela não teria como dizer qual.
+  commitmentLimitPercent Int?
 }
 
 model Category {

@@ -18,6 +18,7 @@ import { markCardBillPaid, markFixedExpensePaid } from "@/lib/actions/expense-pa
 import { PeriodCloseCheck } from "@/components/period-close-check";
 import { calculateAccountBalance, calculateRegisteredMovement } from "@/lib/account-balance";
 import { AccountBalanceCard } from "@/components/account-balance-card";
+import { PurchaseSimulationDialog } from "@/components/forms/purchase-simulation-dialog";
 
 export default async function DashboardPage() {
   const userId = await requireUserId();
@@ -266,6 +267,25 @@ export default async function DashboardPage() {
         adjustedAt={balanceAdjustment?.createdAt ?? null}
         registeredMovement={registeredMovement}
       />
+
+      {/* Sem cartão não há o que simular: a compra parcelada entra como uma
+          compra de cartão para usar o fechamento e o vencimento de verdade, e
+          um botão cuja única resposta possível é "cadastre um cartão" é ruído. */}
+      {cardOptions.length > 0 && (
+        <Card>
+          <CardContent className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex min-w-0 flex-col gap-1">
+              <SectionLabel>Posso comprar isso?</SectionLabel>
+              <p className="text-sm text-muted-foreground">
+                Simule uma compra no cartão e veja se ela cabe nos próximos ciclos.
+              </p>
+            </div>
+            <div className="shrink-0 [&>button]:w-full sm:[&>button]:w-auto">
+              <PurchaseSimulationDialog cards={cardOptions} categories={categoryOptions} />
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* As duas listas ficam lado a lado a partir de `xl`. Em `lg` sobrariam
           ~340px por coluna, o que trunca o valor dos lembretes. `items-start`
