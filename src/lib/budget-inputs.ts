@@ -17,7 +17,7 @@ import type {
  */
 export type NamedIncomeInput = IncomeInput & { label: string };
 export type NamedFixedExpenseInput = FixedExpenseInput & { label: string };
-export type NamedCreditCardInput = CreditCardInput & { name: string };
+export type NamedCreditCardInput = CreditCardInput & { name: string; creditLimit?: number };
 export type NamedTransactionInput = TransactionInput & { id: string; description: string };
 
 export interface BudgetInputs {
@@ -96,6 +96,10 @@ export async function loadBudgetInputs(
       name: c.name,
       closingDay: c.closingDay,
       dueDay: c.dueDay,
+      // `== null`, e não um ternário sobre o valor: Number(null) é 0, e um zero
+      // aqui passaria a valer como "limite zero" em vez de "limite não
+      // informado" — que é o que getCardLimitUsage usa para devolver null.
+      creditLimit: c.creditLimit == null ? undefined : Number(c.creditLimit),
     })),
     cardPurchases: creditCards.flatMap((c) =>
       c.purchases.map((p) => ({

@@ -92,6 +92,10 @@ describe("forecastPeriods — os limites dos ciclos", () => {
   it("limita a projeção ao teto, mesmo pedindo mais", () => {
     expect(forecastPeriods({ ...base, count: 999 })).toHaveLength(13);
   });
+
+  it("aceita um teto maior que o padrão, para quem precisa alcançar mais longe", () => {
+    expect(forecastPeriods({ ...base, count: 999, maxOffset: 24 })).toHaveLength(25);
+  });
 });
 
 describe("forecastPeriods — renda", () => {

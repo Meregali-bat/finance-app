@@ -283,14 +283,22 @@ function forecastOnePeriod(
  * Os períodos de deslocamento 0 (o corrente) até `count`, inclusive, cada um
  * encadeado a partir do fim do anterior.
  *
+ * `maxOffset` existe porque o teto da navegação não é o teto do que dá para
+ * projetar: a tela de Previsão para em MAX_FORECAST_OFFSET porque além disso
+ * ela só repetiria o mesmo mês, enquanto a simulação de uma compra parcelada
+ * precisa alcançar a última parcela, que pode estar mais longe. O padrão
+ * mantém o comportamento da tela intacto.
+ *
  * Sem nenhuma renda ativa não há de onde tirar um ciclo — `getPeriodBounds`
  * degenera num período de um dia que não avança — e a resposta honesta é uma
  * lista vazia, que a tela traduz num convite a cadastrar a primeira renda.
  */
-export function forecastPeriods(input: ForecastInput & { count: number }): PeriodForecast[] {
+export function forecastPeriods(
+  input: ForecastInput & { count: number; maxOffset?: number },
+): PeriodForecast[] {
   if (input.incomes.length === 0) return [];
 
-  const count = Math.min(Math.max(0, input.count), MAX_FORECAST_OFFSET);
+  const count = Math.min(Math.max(0, input.count), input.maxOffset ?? MAX_FORECAST_OFFSET);
   const forecasts: PeriodForecast[] = [];
 
   let bounds = getPeriodBounds(input.incomes, input.today, input.incomeReceipts);
