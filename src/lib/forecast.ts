@@ -109,14 +109,23 @@ export interface PeriodForecast {
   inherited: number;
   /**
    * Quanto dá para gastar neste ciclo sem deixar nenhum ciclo seguinte do
-   * horizonte no vermelho: `inherited + periodResult − reservedForLater`.
-   * Somado ciclo a ciclo, nunca passa do dinheiro que existe — ao contrário de
-   * `balance`, que oferece a mesma sobra em todo mês.
+   * horizonte no vermelho. Nunca negativo. Somado ciclo a ciclo, nunca passa do
+   * dinheiro que existe — ao contrário de `balance`, que oferece a mesma sobra
+   * em todo mês.
    */
   freeToSpend: number;
-  /** O que este ciclo precisa guardar para um ciclo mais à frente que não se paga. */
+  /**
+   * O saldo com que o ciclo fecha se cada ciclo, até ele, gastar só o seu
+   * livre: `inherited + periodResult − freeToSpend`. Negativo quando o ciclo
+   * não se paga nem com o que herdou — e esse negativo passa para o seguinte.
+   */
+  endBalance: number;
+  /** A parte positiva de `endBalance`: o que fica guardado para ciclos à frente. */
   reservedForLater: number;
-  /** `freeToSpend` dividido pelos dias: o "pode gastar por dia". */
+  /**
+   * O "pode gastar por dia": `freeToSpend` pelos dias, ou, num ciclo que fecha
+   * no vermelho, o estouro pelos dias.
+   */
   dailyAvailable: number;
   entries: ForecastEntry[];
 }
@@ -379,9 +388,10 @@ function forecastOnePeriod(
     periodResult,
     balance,
     // Provisórios: `forecastPeriods` só sabe quanto reservar depois de ver
-    // os ciclos seguintes, e reescreve os quatro em `withReserves`.
+    // os ciclos seguintes, e reescreve estes em `withReserves`.
     inherited: openingBalance,
     freeToSpend: balance,
+    endBalance: 0,
     reservedForLater: 0,
     dailyAvailable: daysLeft > 0 ? balance / daysLeft : 0,
     entries,
@@ -392,20 +402,21 @@ function forecastOnePeriod(
  * Quanto cada ciclo pode gastar sem que nenhum ciclo seguinte feche no vermelho.
  *
  * `balance` é o saldo acumulado supondo que nada além do comprometido seja
- * gasto. Se cada ciclo gastar o seu livre, o gasto se acumula também, e a
- * condição é que o acumulado nunca passe do `balance` de nenhum ciclo à
- * frente. O maior gasto acumulado possível até o ciclo N é então o menor
- * `balance` de N até o fim do horizonte — o mínimo dos sufixos, M(N) —, e o
- * livre de cada ciclo é o quanto esse teto sobe dele para o anterior:
- * `livre(N) = M(N) − M(N − 1)`, com M(−1) = 0.
+ * gasto. O que cada ciclo gasta a mais (o livre) se acumula também, e a
+ * condição é que o gasto acumulado nunca passe do `balance` de nenhum ciclo à
+ * frente. O teto do gasto acumulado até o ciclo N é então o menor `balance` de
+ * N até o fim do horizonte — o mínimo dos sufixos, M(N).
  *
- * Na prática, com meses que se pagam, M(N) é o próprio `balance` e o livre de
- * um ciclo futuro é só o resultado dele — a sobra de um mês não é prometida de
- * novo no seguinte. Quando um ciclo à frente não se paga (um IPVA, uma fatura
- * grande), M cai até ele, e os ciclos antes dele guardam a diferença.
+ * O livre nunca é negativo: não existe gastar menos que zero para cobrir um
+ * buraco. Um ciclo que não se paga fecha negativo, e esse negativo é a herança
+ * do seguinte — que só tem livre depois de cobri-lo. Cada ciclo gasta, então,
+ * o quanto o teto subiu além do que já foi gasto:
+ * `livre(N) = max(0, M(N) − gasto acumulado até N − 1)`.
  *
- * O livre do ciclo corrente pode ser negativo: é quando nem tudo o que existe
- * cobre o que está comprometido no horizonte. Os futuros, nunca.
+ * Com meses que se pagam, M(N) é o próprio `balance` e o livre de um ciclo
+ * futuro é só o resultado dele — a sobra de um mês não é prometida de novo no
+ * seguinte. Quando um ciclo à frente não se paga (um IPVA, uma fatura grande),
+ * os anteriores guardam a diferença em vez de oferecê-la.
  */
 function withReserves(periods: PeriodForecast[]): PeriodForecast[] {
   const suffixMin = new Array<number>(periods.length);
@@ -415,17 +426,26 @@ function withReserves(periods: PeriodForecast[]): PeriodForecast[] {
     suffixMin[i] = min;
   }
 
+  let spent = 0;
+  let previousEnd = 0;
   return periods.map((period, i) => {
-    const spentBefore = i === 0 ? 0 : suffixMin[i - 1];
-    const freeToSpend = suffixMin[i] - spentBefore;
-    const inherited = i === 0 ? period.openingBalance : periods[i - 1].balance - suffixMin[i - 1];
-    const reservedForLater = period.balance - suffixMin[i];
+    const freeToSpend = Math.max(0, suffixMin[i] - spent);
+    // O que veio do anterior seguindo o plano: a reserva que ele guardou, ou o
+    // que faltou nele — com sinal, para um vermelho não sumir na virada.
+    const inherited = i === 0 ? period.openingBalance : previousEnd;
+    spent += freeToSpend;
+    const endBalance = period.balance - spent;
+    previousEnd = endBalance;
     return {
       ...period,
       inherited,
       freeToSpend,
-      reservedForLater,
-      dailyAvailable: period.daysLeft > 0 ? freeToSpend / period.daysLeft : 0,
+      endBalance,
+      reservedForLater: Math.max(0, endBalance),
+      // No vermelho, o "por dia" mostra o tamanho do estouro, como a Início
+      // sempre mostrou; fora dele, o que dá para gastar.
+      dailyAvailable:
+        period.daysLeft > 0 ? (endBalance < 0 ? endBalance : freeToSpend) / period.daysLeft : 0,
     };
   });
 }

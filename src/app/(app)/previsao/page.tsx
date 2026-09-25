@@ -151,18 +151,20 @@ export default async function ForecastPage({
   }
 
   const period = periods[offset];
-  const isNegative = period.freeToSpend < -0.005;
+  const isNegative = period.endBalance < -0.005;
   const timeline = periods.slice(0, TIMELINE_LENGTH);
 
-  // O ciclo em que o acumulado fica mais baixo. Se ele é negativo, nem gastando
-  // só o comprometido o dinheiro chega até lá — e o aviso aparece em todo ciclo
-  // até ele, porque é neles que dá para economizar para cobrir.
-  const worst = periods.reduce((low, item) => (item.balance < low.balance ? item : low));
-  const shortfall = worst.balance < -0.005 && offset <= worst.offset ? worst : null;
+  // O primeiro ciclo, deste em diante, que fecha no vermelho mesmo guardando
+  // tudo o que dá. O aviso aparece em todo ciclo até ele: é neles que dá para
+  // economizar para cobrir.
+  const shortfall =
+    periods.find((item) => item.offset >= offset && item.endBalance < -0.005) ?? null;
 
   const inheritedLabel =
     period.offset > 0
-      ? "Guardado dos ciclos anteriores"
+      ? period.inherited < -0.005
+        ? "Faltou nos ciclos anteriores"
+        : "Guardado dos ciclos anteriores"
       : budget.openingSource === "account"
         ? "Já estava na conta"
         : "Veio dos períodos anteriores";
@@ -187,10 +189,10 @@ export default async function ForecastPage({
         <CardContent className="flex flex-col gap-5 py-6 xl:grid xl:grid-cols-[1fr_1fr_16rem] xl:gap-8">
           <div className="flex flex-col gap-1 xl:justify-center">
             <p className="text-sm text-muted-foreground">
-              {isNegative ? "Falta para cobrir o comprometido" : "Livre para gastar no período"}
+              {isNegative ? "Vai faltar ao fim do período" : "Livre para gastar no período"}
             </p>
             <AnimatedCurrency
-              value={period.freeToSpend}
+              value={isNegative ? period.endBalance : period.freeToSpend}
               className={cn(
                 "font-heading text-[2.75rem] leading-[1.02] font-bold tracking-[-0.03em] tabular-nums lg:text-[3.25rem]",
                 isNegative ? "text-negative" : "text-primary",
@@ -259,9 +261,10 @@ export default async function ForecastPage({
                 : `No ciclo de ${periodLabel(shortfall)}`}
               , o que está comprometido passa do que existe em{" "}
               <span className="font-medium tabular-nums">
-                {formatCurrency(Math.abs(shortfall.balance))}
+                {formatCurrency(Math.abs(shortfall.endBalance))}
               </span>
-              , mesmo sem gastar nada além disso até lá.
+              , mesmo sem gastar nada além disso até lá. O que faltar passa para o ciclo
+              seguinte.
             </p>
           </CardContent>
         </Card>
@@ -290,10 +293,11 @@ export default async function ForecastPage({
               <span
                 className={cn(
                   "font-medium tabular-nums",
-                  item.freeToSpend < -0.005 ? "text-negative" : "text-foreground",
+                  item.endBalance < -0.005 ? "text-negative" : "text-foreground",
                 )}
               >
-                {formatCurrency(item.freeToSpend)}
+                {/* O mesmo número do destaque: o livre, ou o que vai faltar. */}
+                {formatCurrency(item.endBalance < -0.005 ? item.endBalance : item.freeToSpend)}
               </span>
             </Link>
           ))}

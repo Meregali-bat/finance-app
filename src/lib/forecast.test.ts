@@ -622,7 +622,26 @@ describe("forecastPeriods — quanto cada ciclo pode gastar", () => {
     expect(periods[2].periodResult).toBe(-2000);
   });
 
-  it("diz no ciclo corrente quando nem tudo o que existe cobre o que vem", () => {
+  it("passa o vermelho do ciclo corrente para o seguinte", () => {
+    // Setembro sem salário confirmado e com aluguel de 1.800: fecha em −1.800.
+    // Outubro ganha 5.000 e paga 1.800, mas antes cobre os 1.800 de setembro.
+    const periods = forecast({
+      fixedExpenses: [{ id: "aluguel", label: "Aluguel", amount: 1800, dueDay: 10 }],
+      count: 2,
+    });
+
+    expect(periods[0].freeToSpend).toBe(0);
+    expect(periods[0].endBalance).toBe(-1800);
+    expect(periods[0].dailyAvailable).toBeCloseTo(-1800 / 25, 10);
+    expect(periods[1].inherited).toBe(-1800);
+    expect(periods[1].periodResult).toBe(3200);
+    expect(periods[1].freeToSpend).toBe(1400);
+    // Coberto o buraco, novembro volta a ter o próprio resultado livre.
+    expect(periods[2].inherited).toBe(0);
+    expect(periods[2].freeToSpend).toBe(3200);
+  });
+
+  it("não oferece nada até o dinheiro alcançar um ciclo à frente que não se paga", () => {
     const periods = forecast({
       incomeReceipts: confirmed,
       fixedExpenses: [
@@ -635,14 +654,15 @@ describe("forecastPeriods — quanto cada ciclo pode gastar", () => {
           endedAt: new Date(2026, 10, 20),
         },
       ],
-      count: 3,
+      count: 4,
     });
 
-    // Novembro fecha em −2.000 mesmo sem gasto nenhum: o corrente já nasce
-    // devendo, e os ciclos até lá não têm nada livre.
-    expect(periods[0].freeToSpend).toBe(-2000);
-    expect(periods[1].freeToSpend).toBe(0);
-    expect(periods[2].freeToSpend).toBe(0);
+    // Acumulado: 5.000, 10.000, −2.000, 3.000, 8.000. Nada é livre até
+    // novembro, que fecha 2.000 no vermelho mesmo guardando tudo; dezembro
+    // cobre esse buraco e fica com 3.000.
+    expect(periods.map((p) => p.freeToSpend)).toEqual([0, 0, 0, 3000, 5000]);
+    expect(periods.map((p) => p.endBalance)).toEqual([5000, 10000, -2000, 0, 0]);
+    expect(periods[3].inherited).toBe(-2000);
   });
 
   it("reserva mesmo quando só o ciclo corrente foi pedido", () => {
