@@ -12,20 +12,33 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { CurrencyInput } from "@/components/currency-input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+
+const ACCOUNT = "__account__";
 
 export function ConfirmPaymentDialog({
   action,
   label,
   dueDate,
   amount,
+  cards,
 }: {
   /** A server action já ligada ao id da despesa ou do cartão pelo `.bind`. */
   action: (formData: FormData) => Promise<void>;
   label: string;
   dueDate: Date;
   amount: number;
+  /** Só para despesa fixa: permite dizer que aquele mês foi pago no cartão. */
+  cards?: { id: string; name: string }[];
 }) {
   const [open, setOpen] = useState(false);
+  const [cardId, setCardId] = useState(ACCOUNT);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
@@ -62,6 +75,29 @@ export function ConfirmPaymentDialog({
             <Label htmlFor="payment-amount">Valor pago</Label>
             <CurrencyInput id="payment-amount" name="amount" defaultValue={amount} required />
           </div>
+          {cards && cards.length > 0 && (
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="payment-card">Como foi pago</Label>
+              <input type="hidden" name="cardId" value={cardId === ACCOUNT ? "" : cardId} />
+              <Select value={cardId} onValueChange={(v) => setCardId(v as string)}>
+                <SelectTrigger id="payment-card" className="w-full">
+                  <SelectValue>
+                    {(value: string) =>
+                      value === ACCOUNT ? "Conta corrente" : cards.find((c) => c.id === value)?.name
+                    }
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ACCOUNT}>Conta corrente</SelectItem>
+                  {cards.map((card) => (
+                    <SelectItem key={card.id} value={card.id}>
+                      {card.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           {error && (
             <p role="alert" className="text-sm text-negative">
               {error}

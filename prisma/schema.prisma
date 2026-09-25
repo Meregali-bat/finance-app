@@ -132,9 +132,15 @@ model ExpensePayment {
   /// agrupa o pagamento em um mês.
   paidAt         DateTime      @default(now())
   createdAt      DateTime      @default(now())
+  /// Preenchido quando a despesa fixa daquele mês foi paga no cartão. O
+  /// dinheiro passa a morar na compra, que entra na fatura; este pagamento
+  /// fica com amount 0 e só existe para quitar a ocorrência. Apagar a compra
+  /// apaga o pagamento junto, e o lembrete volta.
+  cardPurchaseId String?       @unique
   user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   fixedExpense   FixedExpense? @relation(fields: [fixedExpenseId], references: [id], onDelete: Cascade)
   card           CreditCard?   @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  cardPurchase   CardPurchase? @relation(fields: [cardPurchaseId], references: [id], onDelete: Cascade)
 
   @@unique([fixedExpenseId, dueDate])
   @@unique([cardId, dueDate])
@@ -188,22 +194,23 @@ model CreditCard {
 }
 
 model CardPurchase {
-  id           String     @id @default(cuid())
-  cardId       String
-  userId       String
-  amount       Decimal
-  description  String
-  date         DateTime   @default(now())
+  id             String          @id @default(cuid())
+  cardId         String
+  userId         String
+  amount         Decimal
+  description    String
+  date           DateTime        @default(now())
   /// Mesma coisa que em Transaction: o dia vem de `date`, a hora daqui.
-  createdAt    DateTime?  @default(now())
+  createdAt      DateTime?       @default(now())
   /// Em quantas parcelas a compra foi dividida. 1 = à vista no cartão.
   /// `amount` continua sendo o TOTAL da compra — a parcela é derivada em
   /// src/lib/period.ts, não gravada.
-  installments Int        @default(1)
-  categoryId   String?
-  card         CreditCard @relation(fields: [cardId], references: [id], onDelete: Cascade)
-  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  category     Category?  @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  installments   Int             @default(1)
+  categoryId     String?
+  card           CreditCard      @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category       Category?       @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  expensePayment ExpensePayment?
 
   @@index([cardId, date])
   @@index([userId])
