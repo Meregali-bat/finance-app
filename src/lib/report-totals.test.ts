@@ -114,7 +114,7 @@ describe("calculateReportTotals", () => {
 
   it("zera tudo sem lançamento nenhum", () => {
     const totals = calculateReportTotals({ items: [], ...august, today: afterAugust });
-    expect(totals).toEqual({ spent: 0, received: 0, balance: 0, dailyAverage: 0 });
+    expect(totals).toEqual({ spent: 0, received: 0, saved: 0, balance: 0, dailyAverage: 0 });
   });
 });
 
@@ -133,5 +133,40 @@ describe("assinatura cobrada no cartão", () => {
     // 200 da compra + 55 da assinatura. A fatura de 255 sai, senão o mesmo
     // dinheiro contaria duas vezes.
     expect(totals.spent).toBe(255);
+  });
+});
+
+describe("caixinhas e diferenças de fatura", () => {
+  it("separa o guardado do gasto, e tira do saldo o que foi para a caixinha", () => {
+    const totals = calculateReportTotals({
+      items: [
+        item({ kind: "incomeReceipt", amount: -5000 }),
+        item({ kind: "transaction", amount: 1000 }),
+        item({ kind: "jarDeposit", amount: 800 }),
+        item({ kind: "jarDeposit", amount: -300 }),
+      ],
+      ...august,
+      today: afterAugust,
+    });
+
+    expect(totals.spent).toBe(1000);
+    expect(totals.received).toBe(5000);
+    expect(totals.saved).toBe(500);
+    expect(totals.balance).toBe(3500);
+  });
+
+  it("conta a diferença da fatura como gasto, com o sinal que tiver", () => {
+    const totals = calculateReportTotals({
+      items: [
+        item({ kind: "card", amount: 200 }),
+        item({ kind: "cardBillAdjustment", amount: 15 }),
+        item({ kind: "cardBillAdjustment", amount: -40 }),
+      ],
+      ...august,
+      today: afterAugust,
+    });
+
+    expect(totals.spent).toBe(175);
+    expect(totals.received).toBe(0);
   });
 });

@@ -3,6 +3,7 @@ import { ChevronRight, CreditCard as CardIcon } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/auth-helpers";
 import { formatCurrency } from "@/lib/format";
+import { toFixedExpenseInput } from "@/lib/budget-inputs";
 import { buildCardBillSeries, findNextOpenBill, getCardLimitUsage } from "@/lib/period";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
@@ -13,11 +14,13 @@ import { CardFormDialog } from "@/components/forms/card-form-dialog";
 export default async function CardsPage() {
   const userId = await requireUserId();
   const cards = await prisma.creditCard.findMany({
-    where: { userId },
+    where: { userId, deletedAt: null },
     orderBy: { name: "asc" },
     include: {
       purchases: true,
-      fixedExpenses: { where: { active: true } },
+      // Todas, e não só as ativas: são as datas (cadastro, pausas, encerramento)
+        // que dizem em quais faturas a assinatura entra — a mesma regra da Início.
+        fixedExpenses: { include: { pauses: true } },
       billEstimates: true,
       payments: true,
     },
@@ -54,13 +57,7 @@ export default async function CardsPage() {
             }));
             // As assinaturas cobradas no cartão fazem parte da fatura: sem elas
             // esta tela mostrava um número menor que o do início.
-            const cardFixedExpenses = card.fixedExpenses.map((e) => ({
-              id: e.id,
-              amount: Number(e.amount),
-              cardId: e.cardId ?? undefined,
-              createdAt: e.createdAt,
-              endedAt: e.endedAt ?? undefined,
-            }));
+            const cardFixedExpenses = card.fixedExpenses.map(toFixedExpenseInput);
             const expensePayments = card.payments.map((p) => ({
               cardId: p.cardId ?? undefined,
               dueDate: p.dueDate,

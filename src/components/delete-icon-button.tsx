@@ -14,6 +14,9 @@ export function DeleteIconButton({
 }) {
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
+  // Uma exclusão recusada (caixinha com saldo, cartão com assinatura) precisa
+  // dizer por quê; antes o erro subia sem ninguém para mostrá-lo.
+  const [error, setError] = useState<string | null>(null);
 
   return (
     <>
@@ -29,16 +32,23 @@ export function DeleteIconButton({
       </Button>
       <ConfirmDialog
         open={open}
-        onOpenChange={setOpen}
-        title="Excluir?"
-        description={confirmMessage}
+        onOpenChange={(next) => {
+          setOpen(next);
+          if (!next) setError(null);
+        }}
+        title={error ? "Não deu para excluir" : "Excluir?"}
+        description={error ?? confirmMessage}
         confirmLabel="Excluir"
         destructive
         isPending={isPending}
         onConfirm={() => {
           startTransition(async () => {
-            await action();
-            setOpen(false);
+            try {
+              await action();
+              setOpen(false);
+            } catch (e) {
+              setError(e instanceof Error ? e.message : "Erro ao excluir");
+            }
           });
         }}
       />

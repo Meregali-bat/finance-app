@@ -79,7 +79,7 @@ export async function loadBudgetInputs(userId: string): Promise<BudgetInputs> {
   ] = await Promise.all([
     prisma.income.findMany({ where: { userId } }),
     prisma.incomeReceipt.findMany({ where: { userId } }),
-    prisma.fixedExpense.findMany({ where: { userId } }),
+    prisma.fixedExpense.findMany({ where: { userId }, include: { pauses: true } }),
     prisma.creditCard.findMany({ where: { userId }, include: { purchases: true } }),
     prisma.transaction.findMany({ where: { userId }, orderBy: { date: "desc" } }),
     prisma.expensePayment.findMany({ where: { userId } }),
@@ -102,17 +102,7 @@ export async function loadBudgetInputs(userId: string): Promise<BudgetInputs> {
       occurrenceDate: r.occurrenceDate,
       amount: Number(r.amount),
     })),
-    fixedExpenses: fixedExpenses.map((e) => ({
-      id: e.id,
-      label: e.label,
-      amount: Number(e.amount),
-      dueDay: e.dueDay ?? undefined,
-      createdAt: e.createdAt,
-      // É esta data, e não `active`, que corta a despesa: toda despesa
-      // desligada tem uma (a migration que criou a coluna carimbou as antigas).
-      endedAt: e.endedAt ?? undefined,
-      cardId: e.cardId ?? undefined,
-    })),
+    fixedExpenses: fixedExpenses.map((e) => ({ ...toFixedExpenseInput(e), label: e.label })),
     creditCards: creditCards.map((c) => ({
       id: c.id,
       name: c.name,
@@ -193,6 +183,32 @@ export async function loadBudgetInputs(userId: string): Promise<BudgetInputs> {
           })),
       ],
     },
+  };
+}
+
+/**
+ * Uma despesa fixa do banco no formato de period.ts. Um lugar só, porque são
+ * as datas daqui — cadastro, encerramento e pausas, e não `active` — que dizem
+ * em quais meses ela é cobrada, e uma tela que esquecesse as pausas cobraria
+ * meses que as outras não cobram.
+ */
+export function toFixedExpenseInput(e: {
+  id: string;
+  amount: unknown;
+  dueDay: number | null;
+  createdAt: Date;
+  endedAt: Date | null;
+  cardId: string | null;
+  pauses: { startedAt: Date; endedAt: Date | null }[];
+}): FixedExpenseInput {
+  return {
+    id: e.id,
+    amount: Number(e.amount),
+    dueDay: e.dueDay ?? undefined,
+    createdAt: e.createdAt,
+    endedAt: e.endedAt ?? undefined,
+    pauses: e.pauses.map((p) => ({ start: p.startedAt, end: p.endedAt ?? undefined })),
+    cardId: e.cardId ?? undefined,
   };
 }
 

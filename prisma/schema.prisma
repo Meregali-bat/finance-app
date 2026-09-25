@@ -27,6 +27,7 @@ model User {
   expensePayments    ExpensePayment[]
   cardBillEstimates  CardBillEstimate[]
   balanceAdjustments BalanceAdjustment[]
+  fixedExpensePauses FixedExpensePause[]
   createdAt          DateTime            @default(now())
 
   /// Quanto da renda o usuário aceita ver comprometido com despesa fixa e fatura
@@ -59,6 +60,11 @@ model Income {
   amount     Decimal
   dayOfMonth Int
   active     Boolean         @default(true)
+  /// Apagada pelo usuário: some das listas, mas a linha continua no banco para
+  /// os recebimentos dela seguirem contando no Histórico, no saldo em conta e
+  /// nos períodos passados. Apagar de verdade levaria os recebimentos junto por
+  /// cascade e reescreveria o dinheiro que de fato entrou.
+  deletedAt  DateTime?
   createdAt  DateTime        @default(now())
   user       User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   receipts   IncomeReceipt[]
@@ -107,10 +113,33 @@ model FixedExpense {
   card       CreditCard?      @relation(fields: [cardId], references: [id], onDelete: SetNull)
   category   Category?        @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   payments   ExpensePayment[]
+  pauses     FixedExpensePause[]
 
   @@index([userId])
   @@index([cardId])
   @@index([categoryId])
+}
+
+/// Um intervalo em que a despesa fixa ficou pausada. As ocorrências dentro dele
+/// não são cobradas; as de antes e as de depois, sim.
+///
+/// Antes a pausa era gravada em `FixedExpense.endedAt`, e reativar apagava a
+/// data — e com ela o corte: os meses pausados voltavam a ser cobrados, e o
+/// saldo de hoje caía por um dinheiro que nunca saiu. Uma linha por pausa
+/// guarda cada intervalo. `endedAt` nulo = ainda pausada.
+/// Ver isExpenseOccurrenceValid em src/lib/period.ts.
+model FixedExpensePause {
+  id             String       @id @default(cuid())
+  fixedExpenseId String
+  userId         String
+  startedAt      DateTime
+  endedAt        DateTime?
+  createdAt      DateTime     @default(now())
+  fixedExpense   FixedExpense @relation(fields: [fixedExpenseId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([fixedExpenseId])
+  @@index([userId])
 }
 
 /// Confirmação de que uma ocorrência específica de despesa (fatura de cartão
@@ -183,6 +212,11 @@ model CreditCard {
   /// O nome não é `limit` porque essa é palavra reservada em SQL e precisaria de
   /// aspas em toda migration escrita à mão.
   creditLimit   Decimal?
+  /// Apagado pelo usuário: some das listas, mas continua no banco com as compras,
+  /// os pagamentos e as previsões. Apagar de verdade levava tudo por cascade — o
+  /// Histórico perdia os gastos e o saldo em conta subia pelos pagamentos que
+  /// sumiam. As parcelas que ainda faltam continuam devidas.
+  deletedAt     DateTime?
   createdAt     DateTime           @default(now())
   user          User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   purchases     CardPurchase[]
@@ -248,6 +282,10 @@ model Jar {
   name      String
   color     String?
   balance   Decimal      @default(0)
+  /// Apagada pelo usuário: some da lista, mas os depósitos continuam — foi
+  /// dinheiro que saiu do disponível. Só dá para apagar uma caixinha vazia; o
+  /// saldo dela sai antes por um resgate.
+  deletedAt DateTime?
   createdAt DateTime     @default(now())
   user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   deposits  JarDeposit[]

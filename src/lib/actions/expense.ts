@@ -82,12 +82,16 @@ export async function updateFixedExpense(id: string, formData: FormData) {
 export async function deleteFixedExpense(id: string) {
   const userId = await requireUserId();
   const now = new Date();
-  // Primeiro o corte, e só onde ainda não existe um: apagar uma despesa que já
-  // estava pausada não deve empurrar o encerramento para hoje e ressuscitar as
-  // ocorrências do meio do caminho.
+  // Uma despesa pausada foi cobrada pela última vez quando a pausa começou:
+  // encerrá-la hoje deixaria a pausa aberta decidir o mesmo corte, mas ler o
+  // encerramento pela pausa deixa a linha dizer a verdade sozinha.
+  const openPause = await prisma.fixedExpensePause.findFirst({
+    where: { fixedExpenseId: id, userId, endedAt: null },
+    orderBy: { startedAt: "desc" },
+  });
   await prisma.fixedExpense.updateMany({
     where: { id, userId, endedAt: null },
-    data: { endedAt: now },
+    data: { endedAt: openPause?.startedAt ?? now },
   });
   await prisma.fixedExpense.update({
     where: { id, userId },
@@ -98,17 +102,33 @@ export async function deleteFixedExpense(id: string) {
   revalidatePath("/historico");
 }
 
+/**
+ * Pausar abre um intervalo; reativar fecha o intervalo aberto. Nenhum dos dois
+ * apaga o outro: os meses pausados continuam sem cobrança depois que a despesa
+ * volta — antes, reativar limpava a data do corte e esses meses voltavam a ser
+ * cobrados, derrubando o saldo por um dinheiro que nunca saiu.
+ */
 export async function toggleFixedExpenseActive(id: string, active: boolean) {
   const userId = await requireUserId();
-  await prisma.fixedExpense.update({
-    where: { id, userId },
-    // Reativar limpa a data, e com ela o corte: as ocorrências do intervalo
-    // pausado voltam a contar. A vigência é um intervalo só, não um histórico
-    // deles — guardar cada pausa exigiria uma tabela à parte, e o caso que
-    // custa dinheiro é o encerramento definitivo, que `deletedAt` cobre.
-    data: { active, endedAt: active ? null : new Date() },
+  const now = new Date();
+  const expense = await prisma.fixedExpense.findUnique({ where: { id, userId } });
+  if (!expense) throw new Error("Despesa não encontrada");
+
+  await prisma.$transaction(async (tx) => {
+    if (active) {
+      await tx.fixedExpensePause.updateMany({
+        where: { fixedExpenseId: id, userId, endedAt: null },
+        data: { endedAt: now },
+      });
+    } else if (expense.active) {
+      await tx.fixedExpensePause.create({
+        data: { fixedExpenseId: id, userId, startedAt: now },
+      });
+    }
+    await tx.fixedExpense.update({ where: { id, userId }, data: { active } });
   });
   revalidatePath("/rendas");
   revalidatePath("/");
   revalidatePath("/historico");
+  revalidatePath("/previsao");
 }

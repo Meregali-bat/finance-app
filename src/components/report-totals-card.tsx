@@ -40,6 +40,15 @@ export function ReportTotalsCard({ totals }: { totals: ReportTotals }) {
             <p className={cn("font-heading text-lg font-semibold tabular-nums", figure.tone)}>
               {formatCurrency(figure.value)}
             </p>
+            {/* A caixinha não é gasto nem receita, mas sai do saldo: sem dizer
+                isso, o saldo pareceria não bater com as duas colunas. */}
+            {figure.label === "Saldo" && Math.abs(totals.saved) >= 0.005 && (
+              <p className="text-xs text-muted-foreground tabular-nums">
+                {totals.saved > 0
+                  ? `descontados ${formatCurrency(totals.saved)} guardados`
+                  : `somados ${formatCurrency(-totals.saved)} resgatados`}
+              </p>
+            )}
           </div>
         ))}
       </CardContent>
