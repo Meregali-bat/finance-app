@@ -34,12 +34,13 @@ export interface AccountMovementInput {
 
 export interface AccountBalanceInput {
   adjustment?: AccountBalanceAdjustmentInput;
-  /**
-   * Entram somando: recebimentos confirmados. Só os de dia posterior ao do
-   * ajuste — ver `receiptAlreadyRead`.
-   */
+  /** Entram somando: recebimentos confirmados. */
   credits: AccountMovementInput[];
-  /** Entram subtraindo. Entrada avulsa chega com `amount` negativo e soma. */
+  /**
+   * Entram subtraindo. Entrada avulsa chega com `amount` negativo e soma.
+   * Créditos e débitos datados antes do ajuste ficam de fora mesmo registrados
+   * depois — ver `alreadyInReading`.
+   */
   debits: AccountMovementInput[];
   today: Date;
 }
@@ -79,20 +80,30 @@ function sumCounted(
 }
 
 /**
- * Um recebimento com dia até o do ajuste já está no saldo informado.
+ * O movimento já estava no extrato quando o saldo foi informado?
  *
- * O caminho comum no dia do pagamento é ver o salário no banco, corrigir o
- * saldo e só depois confirmar o lembrete. A confirmação é registrada depois do
- * marco, e pela regra geral entraria de novo — o mesmo salário duas vezes, e
- * com ele o orçamento, a previsão e a simulação de compra inflados.
+ * Registrado antes do ajuste, sempre: é a regra de `countsTowardBalance`. Mas
+ * registrar depois não prova que aconteceu depois. O salário que caiu dia 5 e
+ * só foi confirmado dia 7, a compra do dia 3 lançada dia 8, a fatura paga dia
+ * 2 e marcada dia 6: se o saldo foi corrigido no meio, o banco já os mostrava,
+ * e somá-los de novo contaria o mesmo dinheiro duas vezes. Então vale a data
+ * do movimento: de um dia anterior ao do ajuste, ele já estava lá.
  *
- * O recebimento só tem o dia, não a hora, então o dia do próprio ajuste não
- * dá para separar. Ele fica de fora: se o dinheiro de fato caiu depois da
- * leitura, o saldo fica menor do que é até a próxima correção, e errar para
- * menos é o lado seguro quando o número decide quanto se pode gastar.
+ * O próprio dia do ajuste não dá para separar — os movimentos têm dia, não
+ * hora. Ali a dúvida se resolve para o lado seguro, porque o saldo decide
+ * quanto se pode gastar: o que tira dinheiro conta (o gasto das 15h depois do
+ * ajuste das 9h), e o que põe dinheiro fica de fora (o salário que já estava
+ * na tela quando o saldo foi corrigido). Se era o contrário, o saldo fica
+ * menor do que é até a próxima correção — nunca maior.
  */
-function receiptAlreadyRead(movement: AccountMovementInput, adjustedAt: Date): boolean {
-  return startOfDay(movement.occurredOn).getTime() <= startOfDay(adjustedAt).getTime();
+function alreadyInReading(
+  movement: AccountMovementInput,
+  adjustedAt: Date,
+  raisesBalance: boolean,
+): boolean {
+  const day = startOfDay(movement.occurredOn).getTime();
+  const readingDay = startOfDay(adjustedAt).getTime();
+  return raisesBalance ? day <= readingDay : day < readingDay;
 }
 
 /** Nulo quando nunca houve ajuste: não há saldo a inventar. */
@@ -102,15 +113,23 @@ export function calculateAccountBalance(input: AccountBalanceInput): number | nu
 
   const adjustedAt = adjustment.createdAt;
   const todayStart = startOfDay(today).getTime();
+  // Um crédito sobe o saldo; um débito também, quando é a entrada avulsa que
+  // chega com valor negativo.
+  const notYetRead = (raises: (m: AccountMovementInput) => boolean) => (m: AccountMovementInput) =>
+    !alreadyInReading(m, adjustedAt, raises(m));
 
   return (
     adjustment.balance +
     sumCounted(
-      credits.filter((c) => !receiptAlreadyRead(c, adjustedAt)),
+      credits.filter(notYetRead((m) => m.amount > 0)),
       adjustedAt,
       todayStart,
     ) -
-    sumCounted(debits, adjustedAt, todayStart)
+    sumCounted(
+      debits.filter(notYetRead((m) => m.amount < 0)),
+      adjustedAt,
+      todayStart,
+    )
   );
 }
 

@@ -70,7 +70,10 @@ O saldo informado já contém a sobra ou a falta de todos os meses anteriores; s
 
 - A Início diz "a partir do seu saldo em conta" em vez de "inclui R$ X dos períodos anteriores".
 - O fechamento oferece guardar só o **resultado do próprio período anterior**, limitado à herança — nunca o saldo da conta.
-- Um recebimento com dia até o do ajuste é tratado como já incluído no saldo informado, mesmo confirmado depois; antes ele entrava de novo.
+- **Nada entra duas vezes.** Registrado antes do ajuste, o movimento já está no saldo informado. Registrado depois, mas com data anterior ao dia do ajuste — o salário confirmado atrasado, a compra lançada atrasada, a fatura paga antes e marcada depois —, também: o banco já o mostrava. No próprio dia do ajuste, sem hora para separar, a dúvida vai para o lado seguro: o que tira dinheiro conta, o que põe fica de fora.
+- "Marcar como paga" pergunta **quando** foi pago ("Pago em", padrão hoje). Antes a data gravada era a do clique, e não havia como saber se o pagamento já estava no extrato. A compra criada ao pagar uma despesa fixa no cartão usa o mesmo dia, em meia-noite UTC.
+
+Isso revoga o "lançamento esquecido entra" do spec do saldo em conta (2026-09-11): decisão do usuário em 25/09 — se o movimento já tinha acontecido quando o saldo foi informado, ele faz parte do ajuste.
 
 ## Fora de escopo
 
