@@ -3,6 +3,7 @@ import {
   MAX_CARRY_PERIODS,
   calculateCurrentBudget,
   historyOpeningBalance,
+  previousPeriodLeftover,
   previousPeriods,
 } from "./carry-over";
 import type { BudgetInput } from "./period";
@@ -255,5 +256,59 @@ describe("calculateCurrentBudget", () => {
     expect(budget.periodEnd).toEqual(new Date(2026, 9, 5));
     expect(budget.incomeTotal).toBe(5800);
     expect(budget.incomeReminders.map((r) => r.incomeId)).toEqual([]);
+  });
+});
+
+describe("previousPeriodLeftover — o que o fechamento oferece guardar", () => {
+  const rent = [{ id: "aluguel", amount: 2000, dueDay: 10, createdAt: new Date(2026, 6, 1) }];
+
+  it("oferece a sobra do mês anterior, não a de todos os meses", () => {
+    // Julho e agosto sobraram 3.000 cada: a herança é 6.000, a sobra é 3.000.
+    const withRent = input({ fixedExpenses: rent });
+    const budget = calculateCurrentBudget(withRent);
+
+    expect(budget.openingBalance).toBe(6000);
+    expect(previousPeriodLeftover(withRent, budget)).toBe(3000);
+  });
+
+  it("com saldo em conta, não oferece as economias guardadas na conta", () => {
+    const withRent = input({ fixedExpenses: rent });
+    const budget = calculateCurrentBudget({ ...withRent, accountBalance: 20000 });
+
+    expect(budget.openingBalance).toBeGreaterThan(10000);
+    expect(previousPeriodLeftover(withRent, budget)).toBe(3000);
+  });
+
+  it("não oferece a sobra que um déficit anterior já comeu", () => {
+    // Julho gastou 6.000 a mais; agosto sobrou 3.000, mas a herança é −3.000.
+    const scenario = input({
+      fixedExpenses: rent,
+      transactions: [{ amount: 9000, date: day(2026, 6, 20) }],
+    });
+    const budget = calculateCurrentBudget(scenario);
+
+    expect(budget.openingBalance).toBe(-3000);
+    expect(previousPeriodLeftover(scenario, budget)).toBe(0);
+  });
+
+  it("limita pela herança quando só parte da sobra sobreviveu", () => {
+    const scenario = input({
+      fixedExpenses: rent,
+      transactions: [{ amount: 4000, date: day(2026, 6, 20) }],
+    });
+    const budget = calculateCurrentBudget(scenario);
+
+    // Julho: −1.000. Agosto: +3.000. A herança é 2.000.
+    expect(previousPeriodLeftover(scenario, budget)).toBe(2000);
+  });
+
+  it("não oferece nada quando o mês anterior fechou no vermelho", () => {
+    const scenario = input({
+      fixedExpenses: rent,
+      transactions: [{ amount: 3500, date: day(2026, 7, 20) }],
+    });
+    const budget = calculateCurrentBudget(scenario);
+
+    expect(previousPeriodLeftover(scenario, budget)).toBe(0);
   });
 });

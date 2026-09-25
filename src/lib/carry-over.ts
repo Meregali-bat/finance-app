@@ -138,3 +138,32 @@ export function calculateCurrentBudget(
     openingBalance: historyOpeningBalance(input, periodStart),
   });
 }
+
+/**
+ * Quanto o período anterior deixou de sobra — o que o fechamento oferece para
+ * guardar numa caixinha.
+ *
+ * Não é a herança do período atual. A herança acumula todos os meses (sem
+ * saldo em conta) ou é o próprio dinheiro da conta (com ele), e oferecê-la
+ * como "sobra do período anterior" mandaria para a caixinha meses de sobra
+ * já oferecidos antes — ou as economias inteiras de quem as guarda na conta.
+ * A sobra é o resultado do próprio período anterior: o que entrou nele menos
+ * o que saiu.
+ *
+ * E é limitada pela herança: não dá para guardar uma sobra que um déficit
+ * anterior já comeu, nem mais do que existe.
+ */
+export function previousPeriodLeftover(input: BudgetInput, current: PeriodBudget): number {
+  const previous = previousPeriods(input, current.periodStart).at(-1);
+  if (!previous) return 0;
+
+  const { periodResult } = budgetForBounds({
+    ...input,
+    ...previous,
+    today: addDays(previous.periodEnd, -1),
+    accountBalance: null,
+    openingBalance: 0,
+  });
+
+  return Math.max(0, Math.min(periodResult, current.openingBalance));
+}

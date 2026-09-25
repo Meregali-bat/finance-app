@@ -2,7 +2,8 @@ import { differenceInCalendarDays } from "date-fns";
 import { AlertTriangle, ArrowDownLeft, Receipt } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/auth-helpers";
-import { fallsOnDay } from "@/lib/period";
+import { fallsOnDay, type OpeningSource } from "@/lib/period";
+import { forecastPeriods } from "@/lib/forecast";
 import { calculateCurrentBudget } from "@/lib/carry-over";
 import { accountBalanceOf, loadBudgetInputs, registeredMovementOf } from "@/lib/budget-inputs";
 import { formatCurrency, formatDate, formatDateLong } from "@/lib/format";
@@ -21,11 +22,19 @@ import { PeriodCloseCheck } from "@/components/period-close-check";
 import { AccountBalanceCard } from "@/components/account-balance-card";
 import { PurchaseSimulationDialog } from "@/components/forms/purchase-simulation-dialog";
 
-/** O que o período herdou, dito do jeito que a pessoa leria. */
-function openingCaption(opening: number) {
+/**
+ * O que o período herdou, dito do jeito que a pessoa leria.
+ *
+ * Com o saldo em conta, a herança é o dinheiro que já estava na conta — a
+ * sobra de todos os meses e o que havia antes do app —, e chamá-la de "sobra
+ * do período anterior" seria dizer outra coisa. Aí a legenda só diz de onde o
+ * número parte.
+ */
+function openingCaption(opening: number, source: OpeningSource) {
+  if (source === "account") return "a partir do seu saldo em conta";
   if (Math.abs(opening) < 0.005) return null;
   return opening > 0
-    ? `inclui ${formatCurrency(opening)} do período anterior`
+    ? `inclui ${formatCurrency(opening)} dos períodos anteriores`
     : `desconta ${formatCurrency(Math.abs(opening))} que faltaram antes`;
 }
 
@@ -46,6 +55,18 @@ export default async function DashboardPage() {
   const budget = calculateCurrentBudget({ ...inputs, accountBalance, today });
   const transactions = inputs.transactions.filter((t) => !t.fromPeriodClose);
 
+  // O "pode gastar hoje" é o livre do período corrente da Previsão: o saldo do
+  // período menos o que precisa ficar guardado para um ciclo à frente que não
+  // se paga. Sem renda não há ciclos, e vale o saldo do período dividido.
+  const [current] = forecastPeriods({
+    ...inputs,
+    openingBalance: budget.openingBalance,
+    today,
+    count: 0,
+  });
+  const dailyAvailable = current?.dailyAvailable ?? budget.dailyAvailable;
+  const reservedForLater = current?.reservedForLater ?? 0;
+
   const totalDays = differenceInCalendarDays(budget.periodEnd, budget.periodStart);
   const elapsedDays = totalDays - budget.daysRemaining + 1;
   const progressPercent = totalDays > 0 ? Math.min(100, Math.round((elapsedDays / totalDays) * 100)) : 0;
@@ -62,7 +83,7 @@ export default async function DashboardPage() {
     .filter((t) => fallsOnDay(t.date, tomorrow))
     .sort((a, b) => a.date.getTime() - b.date.getTime());
 
-  const isOverBudget = budget.dailyAvailable < 0;
+  const isOverBudget = dailyAvailable < 0;
 
   const cardOptions = inputs.creditCards
     .filter((c) => c.active)
@@ -74,7 +95,7 @@ export default async function DashboardPage() {
   const cardNameById = new Map(inputs.creditCards.map((c) => [c.id, c.name]));
   const expenseLabelById = new Map(inputs.fixedExpenses.map((e) => [e.id, e.label]));
   const incomeLabelById = new Map(inputs.incomes.map((i) => [i.id, i.label]));
-  const caption = openingCaption(budget.openingBalance);
+  const caption = openingCaption(budget.openingBalance, budget.openingSource);
 
   const reminders = [
     ...budget.cardBillReminders.map((bill) => ({
@@ -135,7 +156,7 @@ export default async function DashboardPage() {
               {isOverBudget ? "Você já estourou o orçamento de hoje" : "Você pode gastar hoje"}
             </p>
             <AnimatedCurrency
-              value={budget.dailyAvailable}
+              value={dailyAvailable}
               className={`font-heading text-[2.75rem] leading-[1.02] font-bold tracking-[-0.03em] tabular-nums lg:text-[3.25rem] ${
                 isOverBudget ? "text-negative" : "text-primary"
               }`}
@@ -163,6 +184,11 @@ export default async function DashboardPage() {
               <SectionLabel>Saldo do período</SectionLabel>
               <p className="font-medium tabular-nums">{formatCurrency(budget.periodBalance)}</p>
               {caption && <p className="text-xs text-muted-foreground">{caption}</p>}
+              {reservedForLater > 0.005 && (
+                <p className="text-xs text-muted-foreground">
+                  já contando {formatCurrency(reservedForLater)} que vão faltar mais à frente
+                </p>
+              )}
             </div>
             <div className="flex flex-col gap-1">
               <SectionLabel>Recebe em</SectionLabel>

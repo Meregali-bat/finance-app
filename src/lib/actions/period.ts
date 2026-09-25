@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/auth-helpers";
 import { accountBalanceOf, loadBudgetInputs } from "@/lib/budget-inputs";
-import { calculateCurrentBudget } from "@/lib/carry-over";
+import { calculateCurrentBudget, previousPeriodLeftover } from "@/lib/carry-over";
 import { getPreviousPeriodBounds } from "@/lib/period";
 
 export interface PendingPeriodClose {
@@ -29,8 +29,8 @@ const EPSILON = 0.005;
  * guardar, e é registrado como resolvido sem abrir o diálogo — mas o que
  * faltou continua pesando no período atual.
  *
- * A sobra oferecida é a herança do período atual, a mesma que a Início mostra
- * em "inclui R$ X do período anterior", para os dois números nunca discordarem.
+ * A sobra oferecida é o que o próprio período anterior produziu, e não a
+ * herança inteira — ver `previousPeriodLeftover`.
  */
 export async function getPendingPeriodClose(): Promise<PendingPeriodClose | null> {
   const userId = await requireUserId();
@@ -57,7 +57,7 @@ export async function getPendingPeriodClose(): Promise<PendingPeriodClose | null
   });
   if (existing?.resolvedAt) return null;
 
-  const leftoverAmount = budget.openingBalance;
+  const leftoverAmount = previousPeriodLeftover({ ...inputs, today }, budget);
   const nothingToKeep = leftoverAmount <= EPSILON;
 
   await prisma.periodAllocation.upsert({

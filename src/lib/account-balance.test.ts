@@ -29,12 +29,41 @@ describe("calculateAccountBalance", () => {
 
   it("soma o recebimento e subtrai o gasto registrados depois do ajuste", () => {
     const balance = calculateAccountBalance({
-      adjustment,
+      // Ajuste da véspera: o recebimento de hoje não podia estar nele.
+      adjustment: { balance: 1000, createdAt: new Date(2026, 8, 9, 9, 0) },
       credits: [movement({ amount: 500 })],
       debits: [movement({ amount: 80 })],
       today: now,
     });
     expect(balance).toBe(1420);
+  });
+
+  it("não soma de novo o salário que já estava no banco quando o saldo foi informado", () => {
+    // O salário caiu dia 5, o saldo foi corrigido dia 6 já com ele, e o
+    // lembrete só foi confirmado dia 7.
+    const balance = calculateAccountBalance({
+      adjustment: { balance: 5500, createdAt: new Date(2026, 8, 6, 12, 0) },
+      credits: [
+        movement({
+          amount: 5000,
+          registeredAt: new Date(2026, 8, 7, 9, 0),
+          occurredOn: new Date(2026, 8, 5),
+        }),
+      ],
+      debits: [],
+      today: now,
+    });
+    expect(balance).toBe(5500);
+  });
+
+  it("trata o recebimento do próprio dia do ajuste como já incluído", () => {
+    const balance = calculateAccountBalance({
+      adjustment,
+      credits: [movement({ amount: 500 })],
+      debits: [],
+      today: now,
+    });
+    expect(balance).toBe(1000);
   });
 
   it("ignora o que já estava lançado quando o extrato foi lido", () => {

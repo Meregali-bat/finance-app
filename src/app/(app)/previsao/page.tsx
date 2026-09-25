@@ -127,13 +127,14 @@ export default async function ForecastPage({
     today,
   });
 
-  // A faixa de tendência precisa dos primeiros ciclos mesmo quando a navegação
-  // está lá na frente, e vice-versa — daí o maior dos dois.
+  // O horizonte inteiro, sempre: a faixa de tendência precisa dos primeiros
+  // ciclos, e o aviso de falta precisa achar o pior deles, esteja a navegação
+  // onde estiver.
   const periods = forecastPeriods({
     ...inputs,
     openingBalance: budget.openingBalance,
     today,
-    count: Math.max(offset, TIMELINE_LENGTH - 1),
+    count: MAX_FORECAST_OFFSET,
   });
 
   if (periods.length === 0) {
@@ -150,14 +151,27 @@ export default async function ForecastPage({
   }
 
   const period = periods[offset];
-  const isNegative = period.balance < 0;
+  const isNegative = period.freeToSpend < -0.005;
   const timeline = periods.slice(0, TIMELINE_LENGTH);
+
+  // O ciclo em que o acumulado fica mais baixo. Se ele é negativo, nem gastando
+  // só o comprometido o dinheiro chega até lá — e o aviso aparece em todo ciclo
+  // até ele, porque é neles que dá para economizar para cobrir.
+  const worst = periods.reduce((low, item) => (item.balance < low.balance ? item : low));
+  const shortfall = worst.balance < -0.005 && offset <= worst.offset ? worst : null;
+
+  const inheritedLabel =
+    period.offset > 0
+      ? "Guardado dos ciclos anteriores"
+      : budget.openingSource === "account"
+        ? "Já estava na conta"
+        : "Veio dos períodos anteriores";
 
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
         title="Previsão"
-        subtitle="O saldo de cada ciclo, somando o que vem do anterior"
+        subtitle="Quanto cada ciclo pode gastar, levando em conta os outros"
       />
 
       <ForecastNav
@@ -173,10 +187,10 @@ export default async function ForecastPage({
         <CardContent className="flex flex-col gap-5 py-6 xl:grid xl:grid-cols-[1fr_1fr_16rem] xl:gap-8">
           <div className="flex flex-col gap-1 xl:justify-center">
             <p className="text-sm text-muted-foreground">
-              {isNegative ? "Vai faltar ao fim do período" : "Deve sobrar ao fim do período"}
+              {isNegative ? "Falta para cobrir o comprometido" : "Livre para gastar no período"}
             </p>
             <AnimatedCurrency
-              value={period.balance}
+              value={period.freeToSpend}
               className={cn(
                 "font-heading text-[2.75rem] leading-[1.02] font-bold tracking-[-0.03em] tabular-nums lg:text-[3.25rem]",
                 isNegative ? "text-negative" : "text-primary",
@@ -194,12 +208,20 @@ export default async function ForecastPage({
                 ? `${period.daysLeft} ${period.daysLeft === 1 ? "dia restante" : "dias restantes"} até ${formatDate(lastDay(period))}`
                 : `${period.totalDays} ${period.totalDays === 1 ? "dia" : "dias"} de ${formatDate(period.periodStart)} a ${formatDate(lastDay(period))}`}
             </p>
-            {/* A conta por trás do número grande: o que veio de antes mais o
-                que este ciclo movimenta. Sem ela, um mês com renda maior que as
-                contas aparecer negativo parece erro. */}
+            {/* A conta por trás do número grande: o que veio de antes, mais o
+                que este ciclo movimenta, menos o que ele guarda para a frente.
+                Sem ela, um mês com renda maior que as contas aparecer negativo
+                — ou menor do que parece — parece erro. */}
             <div className="flex flex-col gap-0.5 text-xs text-muted-foreground tabular-nums">
-              <span>Veio do anterior: {formatCurrency(period.openingBalance)}</span>
+              <span>
+                {inheritedLabel}: {formatCurrency(period.inherited)}
+              </span>
               <span>Resultado do período: {formatCurrency(period.periodResult)}</span>
+              {period.reservedForLater > 0.005 && (
+                <span>
+                  Reservado para ciclos à frente: {formatCurrency(period.reservedForLater)}
+                </span>
+              )}
             </div>
           </div>
 
@@ -227,19 +249,19 @@ export default async function ForecastPage({
         </CardContent>
       </Card>
 
-      {isNegative && (
+      {shortfall && (
         <Card className="pl-1 before:absolute before:inset-y-0 before:left-0 before:w-1 before:bg-negative">
           <CardContent className="flex items-start gap-3 py-3">
             <AlertTriangle className="mt-0.5 size-4 shrink-0 text-negative" aria-hidden="true" />
             <p className="text-sm">
-              {period.openingBalance < 0 && period.periodResult >= 0
-                ? "Este ciclo paga as próprias contas, mas não cobre o que já vem faltando dos anteriores. "
-                : "Somando o que vem do período anterior, o que está comprometido passa do que entra. "}
-              O saldo fecha negativo em{" "}
+              {shortfall.offset === period.offset
+                ? "Neste ciclo"
+                : `No ciclo de ${periodLabel(shortfall)}`}
+              , o que está comprometido passa do que existe em{" "}
               <span className="font-medium tabular-nums">
-                {formatCurrency(Math.abs(period.balance))}
+                {formatCurrency(Math.abs(shortfall.balance))}
               </span>
-              , e isso ainda não inclui o gasto do dia a dia.
+              , mesmo sem gastar nada além disso até lá.
             </p>
           </CardContent>
         </Card>
@@ -268,10 +290,10 @@ export default async function ForecastPage({
               <span
                 className={cn(
                   "font-medium tabular-nums",
-                  item.balance < 0 ? "text-negative" : "text-foreground",
+                  item.freeToSpend < -0.005 ? "text-negative" : "text-foreground",
                 )}
               >
-                {formatCurrency(item.balance)}
+                {formatCurrency(item.freeToSpend)}
               </span>
             </Link>
           ))}

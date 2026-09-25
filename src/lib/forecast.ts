@@ -94,8 +94,29 @@ export interface PeriodForecast {
   jarTotal: number;
   /** Só o que acontece no período: entradas menos saídas, sem a herança. */
   periodResult: number;
-  /** O saldo com que o período fecha: `openingBalance + periodResult`. */
+  /**
+   * O saldo com que o período fecha se nada além do comprometido for gasto —
+   * nem neste ciclo nem nos anteriores: `openingBalance + periodResult`. É a
+   * régua de "algum ciclo fica no vermelho?", não um dinheiro livre: a sobra
+   * que ele acumula é a mesma que os ciclos anteriores já ofereceram para gastar.
+   */
   balance: number;
+  /**
+   * O que o ciclo recebe dos anteriores se cada um gastar só o seu livre: no
+   * corrente, a herança de verdade (`openingBalance`); nos futuros, a reserva
+   * que o ciclo anterior guardou para eles.
+   */
+  inherited: number;
+  /**
+   * Quanto dá para gastar neste ciclo sem deixar nenhum ciclo seguinte do
+   * horizonte no vermelho: `inherited + periodResult − reservedForLater`.
+   * Somado ciclo a ciclo, nunca passa do dinheiro que existe — ao contrário de
+   * `balance`, que oferece a mesma sobra em todo mês.
+   */
+  freeToSpend: number;
+  /** O que este ciclo precisa guardar para um ciclo mais à frente que não se paga. */
+  reservedForLater: number;
+  /** `freeToSpend` dividido pelos dias: o "pode gastar por dia". */
   dailyAvailable: number;
   entries: ForecastEntry[];
 }
@@ -357,9 +378,56 @@ function forecastOnePeriod(
     jarTotal,
     periodResult,
     balance,
+    // Provisórios: `forecastPeriods` só sabe quanto reservar depois de ver
+    // os ciclos seguintes, e reescreve os quatro em `withReserves`.
+    inherited: openingBalance,
+    freeToSpend: balance,
+    reservedForLater: 0,
     dailyAvailable: daysLeft > 0 ? balance / daysLeft : 0,
     entries,
   };
+}
+
+/**
+ * Quanto cada ciclo pode gastar sem que nenhum ciclo seguinte feche no vermelho.
+ *
+ * `balance` é o saldo acumulado supondo que nada além do comprometido seja
+ * gasto. Se cada ciclo gastar o seu livre, o gasto se acumula também, e a
+ * condição é que o acumulado nunca passe do `balance` de nenhum ciclo à
+ * frente. O maior gasto acumulado possível até o ciclo N é então o menor
+ * `balance` de N até o fim do horizonte — o mínimo dos sufixos, M(N) —, e o
+ * livre de cada ciclo é o quanto esse teto sobe dele para o anterior:
+ * `livre(N) = M(N) − M(N − 1)`, com M(−1) = 0.
+ *
+ * Na prática, com meses que se pagam, M(N) é o próprio `balance` e o livre de
+ * um ciclo futuro é só o resultado dele — a sobra de um mês não é prometida de
+ * novo no seguinte. Quando um ciclo à frente não se paga (um IPVA, uma fatura
+ * grande), M cai até ele, e os ciclos antes dele guardam a diferença.
+ *
+ * O livre do ciclo corrente pode ser negativo: é quando nem tudo o que existe
+ * cobre o que está comprometido no horizonte. Os futuros, nunca.
+ */
+function withReserves(periods: PeriodForecast[]): PeriodForecast[] {
+  const suffixMin = new Array<number>(periods.length);
+  let min = Infinity;
+  for (let i = periods.length - 1; i >= 0; i--) {
+    min = Math.min(min, periods[i].balance);
+    suffixMin[i] = min;
+  }
+
+  return periods.map((period, i) => {
+    const spentBefore = i === 0 ? 0 : suffixMin[i - 1];
+    const freeToSpend = suffixMin[i] - spentBefore;
+    const inherited = i === 0 ? period.openingBalance : periods[i - 1].balance - suffixMin[i - 1];
+    const reservedForLater = period.balance - suffixMin[i];
+    return {
+      ...period,
+      inherited,
+      freeToSpend,
+      reservedForLater,
+      dailyAvailable: period.daysLeft > 0 ? freeToSpend / period.daysLeft : 0,
+    };
+  });
 }
 
 /**
@@ -385,11 +453,15 @@ export function forecastPeriods(
   if (boundingIncomes(input.incomes).length === 0) return [];
 
   const count = Math.min(Math.max(0, input.count), input.maxOffset ?? MAX_FORECAST_OFFSET);
+  // A reserva olha sempre pelo menos MAX_FORECAST_OFFSET ciclos à frente,
+  // mesmo quando se pede só o corrente: é o que faz o "por dia" da Início e o
+  // do ciclo corrente da Previsão serem o mesmo número.
+  const horizon = Math.max(count, MAX_FORECAST_OFFSET);
   const forecasts: PeriodForecast[] = [];
 
   let bounds = getPeriodBounds(input.incomes, input.today, input.incomeReceipts);
   let opening = input.openingBalance ?? 0;
-  for (let offset = 0; offset <= count; offset++) {
+  for (let offset = 0; offset <= horizon; offset++) {
     const period = forecastOnePeriod(input, bounds.periodStart, bounds.periodEnd, offset, opening);
     forecasts.push(period);
     // O fechamento de um ciclo é a abertura do seguinte — inclusive quando ele
@@ -398,5 +470,5 @@ export function forecastPeriods(
     bounds = getNextPeriodBounds(input.incomes, bounds.periodEnd, input.incomeReceipts);
   }
 
-  return forecasts;
+  return withReserves(forecasts).slice(0, count + 1);
 }
