@@ -96,24 +96,65 @@ describe("calculateAccountBalance", () => {
     expect(balance).toBe(1000);
   });
 
-  it("conta o lançamento esquecido: registrado hoje, datado ontem", () => {
+  it("não desconta de novo o gasto de antes do ajuste lançado depois dele", () => {
+    // O gasto de ontem já tinha saído do banco quando o saldo foi lido hoje às
+    // 9h; lançá-lo às 10h não pode tirá-lo uma segunda vez.
     const balance = calculateAccountBalance({
       adjustment,
       credits: [],
       debits: [movement({ amount: 30, occurredOn: new Date(2026, 8, 9) })],
       today: now,
     });
+    expect(balance).toBe(1000);
+  });
+
+  it("desconta o gasto do próprio dia do ajuste lançado depois dele", () => {
+    // Sem hora no lançamento, o dia do ajuste fica do lado seguro: um gasto
+    // desconta.
+    const balance = calculateAccountBalance({
+      adjustment,
+      credits: [],
+      debits: [movement({ amount: 30 })],
+      today: now,
+    });
     expect(balance).toBe(970);
   });
 
+  it("não desconta de novo a fatura paga antes do ajuste e marcada depois", () => {
+    const balance = calculateAccountBalance({
+      adjustment,
+      credits: [],
+      debits: [
+        movement({
+          amount: 800,
+          registeredAt: new Date(2026, 8, 10, 11, 0),
+          occurredOn: new Date(2026, 8, 8),
+        }),
+      ],
+      today: now,
+    });
+    expect(balance).toBe(1000);
+  });
+
   it("soma a entrada avulsa, que chega como valor negativo", () => {
+    const balance = calculateAccountBalance({
+      // Ajuste da véspera: a entrada de hoje não podia estar nele.
+      adjustment: { balance: 1000, createdAt: new Date(2026, 8, 9, 9, 0) },
+      credits: [],
+      debits: [movement({ amount: -200 })],
+      today: now,
+    });
+    expect(balance).toBe(1200);
+  });
+
+  it("trata a entrada avulsa do próprio dia do ajuste como já incluída", () => {
     const balance = calculateAccountBalance({
       adjustment,
       credits: [],
       debits: [movement({ amount: -200 })],
       today: now,
     });
-    expect(balance).toBe(1200);
+    expect(balance).toBe(1000);
   });
 
   it("conta o pagamento confirmado à noite como movimento de hoje", () => {

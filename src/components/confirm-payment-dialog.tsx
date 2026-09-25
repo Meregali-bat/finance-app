@@ -12,6 +12,8 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { CurrencyInput } from "@/components/currency-input";
+import { Input } from "@/components/ui/input";
+import { todayInputValue } from "@/lib/format";
 import {
   Select,
   SelectContent,
@@ -74,6 +76,21 @@ export function ConfirmPaymentDialog({
           <div className="flex flex-col gap-2">
             <Label htmlFor="payment-amount">Valor pago</Label>
             <CurrencyInput id="payment-amount" name="amount" defaultValue={amount} required />
+          </div>
+          {/*
+            O dia em que o dinheiro saiu. Com a data do clique, uma conta paga
+            antes da última correção de saldo sairia dele de novo.
+          */}
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="payment-date">Pago em</Label>
+            <Input
+              id="payment-date"
+              name="paidOn"
+              type="date"
+              defaultValue={todayInputValue()}
+              max={todayInputValue()}
+              required
+            />
           </div>
           {cards && cards.length > 0 && (
             <div className="flex flex-col gap-2">
