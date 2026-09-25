@@ -57,10 +57,12 @@ O saldo acumulado (`balance`) supõe que nada além do comprometido é gasto, e 
 
 ```
 M(N)            = menor balance de N até o fim do horizonte (12 ciclos, no mínimo)
-livre(N)        = M(N) − M(N − 1),   com M(−1) = 0
-reservado(N)    = balance(N) − M(N)
-por dia(N)      = livre(N) / dias
+livre(N)        = max(0, M(N) − gasto acumulado até N − 1)
+fim(N)          = balance(N) − gasto acumulado até N   (a herança do ciclo seguinte)
+por dia(N)      = livre(N) / dias, ou fim(N) / dias quando fim(N) < 0
 ```
+
+O livre nunca é negativo. Um ciclo que não se paga fecha negativo, e esse negativo é herdado pelo seguinte, que só tem livre depois de cobri-lo. (A primeira versão permitia livre negativo no ciclo corrente, o que concentrava nele o buraco de todo o horizonte e fazia outubro abrir limpo depois de um setembro no vermelho.)
 
 Com meses que se pagam, o livre de um ciclo futuro é só o resultado dele. Quando um ciclo à frente não se paga, os anteriores guardam a diferença — e a Início, que usa o livre do ciclo corrente, já reserva hoje para o IPVA de novembro. Somado ciclo a ciclo, o livre nunca passa do dinheiro que existe.
 
