@@ -2,7 +2,9 @@ import { differenceInCalendarDays } from "date-fns";
 import { AlertTriangle, ArrowDownLeft, Receipt } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/auth-helpers";
-import { calculateDailyBudget, fallsOnDay, storedDay } from "@/lib/period";
+import { fallsOnDay } from "@/lib/period";
+import { calculateCurrentBudget } from "@/lib/carry-over";
+import { accountBalanceOf, loadBudgetInputs, registeredMovementOf } from "@/lib/budget-inputs";
 import { formatCurrency, formatDate, formatDateLong } from "@/lib/format";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -16,136 +18,33 @@ import { MarkIncomeReceivedDialog } from "@/components/mark-income-received-dial
 import { ConfirmPaymentDialog } from "@/components/confirm-payment-dialog";
 import { markCardBillPaid, markFixedExpensePaid } from "@/lib/actions/expense-payment";
 import { PeriodCloseCheck } from "@/components/period-close-check";
-import { calculateAccountBalance, calculateRegisteredMovement } from "@/lib/account-balance";
 import { AccountBalanceCard } from "@/components/account-balance-card";
 import { PurchaseSimulationDialog } from "@/components/forms/purchase-simulation-dialog";
+
+/** O que o período herdou, dito do jeito que a pessoa leria. */
+function openingCaption(opening: number) {
+  if (Math.abs(opening) < 0.005) return null;
+  return opening > 0
+    ? `inclui ${formatCurrency(opening)} do período anterior`
+    : `desconta ${formatCurrency(Math.abs(opening))} que faltaram antes`;
+}
 
 export default async function DashboardPage() {
   const userId = await requireUserId();
   const today = new Date();
 
-  const [
-    incomes,
-    incomeReceipts,
-    fixedExpenses,
-    creditCards,
-    transactions,
-    categories,
-    expensePayments,
-    billEstimates,
-    balanceAdjustment,
-    jarDeposits,
-  ] = await Promise.all([
-      prisma.income.findMany({ where: { userId, active: true } }),
-      prisma.incomeReceipt.findMany({ where: { userId } }),
-      prisma.fixedExpense.findMany({ where: { userId, active: true } }),
-      prisma.creditCard.findMany({ where: { userId, active: true }, include: { purchases: true } }),
-      prisma.transaction.findMany({ where: { userId }, orderBy: { date: "desc" } }),
-      prisma.category.findMany({ where: { userId, active: true }, orderBy: { name: "asc" } }),
-      prisma.expensePayment.findMany({ where: { userId } }),
-      prisma.cardBillEstimate.findMany({ where: { userId } }),
-      prisma.balanceAdjustment.findFirst({ where: { userId }, orderBy: { createdAt: "desc" } }),
-      prisma.jarDeposit.findMany({ where: { userId } }),
-    ]);
+  const [inputs, categories] = await Promise.all([
+    loadBudgetInputs(userId),
+    prisma.category.findMany({ where: { userId, active: true }, orderBy: { name: "asc" } }),
+  ]);
 
-  const budget = calculateDailyBudget({
-    incomes: incomes.map((i) => ({
-      id: i.id,
-      amount: Number(i.amount),
-      dayOfMonth: i.dayOfMonth,
-      createdAt: i.createdAt,
-    })),
-    incomeReceipts: incomeReceipts.map((r) => ({
-      incomeId: r.incomeId,
-      occurrenceDate: r.occurrenceDate,
-      amount: Number(r.amount),
-    })),
-    fixedExpenses: fixedExpenses.map((e) => ({
-      id: e.id,
-      amount: Number(e.amount),
-      dueDay: e.dueDay ?? undefined,
-      createdAt: e.createdAt,
-      endedAt: e.endedAt ?? undefined,
-      cardId: e.cardId ?? undefined,
-    })),
-    creditCards: creditCards.map((c) => ({ id: c.id, closingDay: c.closingDay, dueDay: c.dueDay })),
-    cardPurchases: creditCards.flatMap((c) =>
-      c.purchases.map((p) => ({
-        cardId: c.id,
-        amount: Number(p.amount),
-        date: p.date,
-        installments: p.installments,
-      })),
-    ),
-    billEstimates: billEstimates.map((e) => ({
-      cardId: e.cardId,
-      dueDate: e.dueDate,
-      amount: Number(e.amount),
-    })),
-    expensePayments: expensePayments.map((p) => ({
-      // null vira undefined: period.ts compara os dois lados por igualdade
-      // estrita, e null !== undefined faria o pagamento nunca casar.
-      fixedExpenseId: p.fixedExpenseId ?? undefined,
-      cardId: p.cardId ?? undefined,
-      dueDate: p.dueDate,
-      amount: Number(p.amount),
-    })),
-    transactions: transactions.map((t) => ({ amount: Number(t.amount), date: t.date })),
-    today,
-  });
+  const accountBalance = accountBalanceOf(inputs, today);
+  const registeredMovement = registeredMovementOf(inputs, today);
 
-  // Os quatro modelos viram duas listas genéricas aqui, e não dentro do
-  // módulo: a regra dos filtros mora em um lugar só, e tanto o saldo em conta
-  // quanto a movimentação registrada saem da mesma matéria-prima, com
-  // `account-balance.ts` puro, sem conhecer nome de tabela.
-  const accountCredits = incomeReceipts.map((r) => ({
-    amount: Number(r.amount),
-    registeredAt: r.createdAt,
-    occurredOn: storedDay(r.occurrenceDate),
-  }));
-  // Fora as linhas do fechamento de período: a sobra devolvida ao orçamento já
-  // estava na conta, e contá-la como movimento faria o saldo andar sozinho uma
-  // vez a cada fechamento, sem um centavo ter entrado ou saído do banco.
-  const accountDebits = [
-    ...transactions
-      .filter((t) => !t.fromPeriodClose)
-      .map((t) => ({
-        amount: Number(t.amount),
-        registeredAt: t.createdAt,
-        occurredOn: storedDay(t.date),
-      })),
-    ...expensePayments.map((p) => ({
-      amount: Number(p.amount),
-      registeredAt: p.createdAt,
-      // `paidAt`, não `dueDate`: o dinheiro sai quando se paga, e uma fatura
-      // quitada adiantada sairia do saldo só no vencimento.
-      occurredOn: p.paidAt,
-    })),
-    ...jarDeposits
-      .filter((d) => !d.fromPeriodClose)
-      .map((d) => ({
-        amount: Number(d.amount),
-        registeredAt: d.createdAt,
-        occurredOn: d.createdAt,
-      })),
-  ];
-
-  const accountBalance = calculateAccountBalance({
-    adjustment: balanceAdjustment
-      ? { balance: Number(balanceAdjustment.balance), createdAt: balanceAdjustment.createdAt }
-      : undefined,
-    credits: accountCredits,
-    debits: accountDebits,
-    today,
-  });
-
-  // A mesma matéria-prima do saldo, somada sem marco: é o que o dialog mostra
-  // como referência quando ainda não existe ajuste nenhum para calcular saldo.
-  const registeredMovement = calculateRegisteredMovement({
-    credits: accountCredits,
-    debits: accountDebits,
-    today,
-  });
+  // Com o saldo em conta informado, o período sai do dinheiro real; sem ele, da
+  // corrente dos períodos anteriores. Nos dois casos o mês passado pesa neste.
+  const budget = calculateCurrentBudget({ ...inputs, accountBalance, today });
+  const transactions = inputs.transactions.filter((t) => !t.fromPeriodClose);
 
   const totalDays = differenceInCalendarDays(budget.periodEnd, budget.periodStart);
   const elapsedDays = totalDays - budget.daysRemaining + 1;
@@ -165,12 +64,17 @@ export default async function DashboardPage() {
 
   const isOverBudget = budget.dailyAvailable < 0;
 
-  const cardOptions = creditCards.map((c) => ({ id: c.id, name: c.name }));
+  const cardOptions = inputs.creditCards
+    .filter((c) => c.active)
+    .map((c) => ({ id: c.id, name: c.name }));
   const categoryOptions = categories.map((c) => ({ id: c.id, name: c.name }));
 
-  const cardNameById = new Map(creditCards.map((c) => [c.id, c.name]));
-  const expenseLabelById = new Map(fixedExpenses.map((e) => [e.id, e.label]));
-  const incomeLabelById = new Map(incomes.map((i) => [i.id, i.label]));
+  // Com os inativos: uma fatura de cartão desativado ou uma despesa encerrada
+  // ainda podem ter um lembrete em aberto, e ele precisa de nome.
+  const cardNameById = new Map(inputs.creditCards.map((c) => [c.id, c.name]));
+  const expenseLabelById = new Map(inputs.fixedExpenses.map((e) => [e.id, e.label]));
+  const incomeLabelById = new Map(inputs.incomes.map((i) => [i.id, i.label]));
+  const caption = openingCaption(budget.openingBalance);
 
   const reminders = [
     ...budget.cardBillReminders.map((bill) => ({
@@ -179,6 +83,7 @@ export default async function DashboardPage() {
       label: `Fatura do ${cardNameById.get(bill.cardId) ?? "cartão"}`,
       amount: bill.amount,
       dueDate: bill.dueDate,
+      overdue: bill.overdue ?? false,
       payAction: markCardBillPaid.bind(null, bill.cardId),
       cards: undefined,
     })),
@@ -188,6 +93,7 @@ export default async function DashboardPage() {
       label: expenseLabelById.get(exp.expenseId) ?? "Despesa fixa",
       amount: exp.amount,
       dueDate: exp.dueDate,
+      overdue: exp.overdue ?? false,
       payAction: markFixedExpensePaid.bind(null, exp.expenseId),
       cards: cardOptions,
     })),
@@ -197,6 +103,7 @@ export default async function DashboardPage() {
       label: incomeLabelById.get(inc.incomeId) ?? "Receita fixa",
       amount: inc.amount,
       dueDate: inc.dueDate,
+      overdue: false,
       incomeId: inc.incomeId,
     })),
   ].sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime());
@@ -255,6 +162,7 @@ export default async function DashboardPage() {
             <div className="flex flex-col gap-1">
               <SectionLabel>Saldo do período</SectionLabel>
               <p className="font-medium tabular-nums">{formatCurrency(budget.periodBalance)}</p>
+              {caption && <p className="text-xs text-muted-foreground">{caption}</p>}
             </div>
             <div className="flex flex-col gap-1">
               <SectionLabel>Recebe em</SectionLabel>
@@ -266,7 +174,7 @@ export default async function DashboardPage() {
 
       <AccountBalanceCard
         balance={accountBalance}
-        adjustedAt={balanceAdjustment?.createdAt ?? null}
+        adjustedAt={inputs.account.adjustment?.createdAt ?? null}
         registeredMovement={registeredMovement}
       />
 
@@ -330,7 +238,8 @@ export default async function DashboardPage() {
                               do lembrete, que era o que o "…" comia. */}
                           <p className="text-sm text-muted-foreground tabular-nums">
                             {formatCurrency(reminder.amount)} ·{" "}
-                            {isIncome ? "previsto em" : "vence em"} {formatDate(reminder.dueDate)}
+                            {isIncome ? "previsto em" : reminder.overdue ? "venceu em" : "vence em"}{" "}
+                            {formatDate(reminder.dueDate)}
                           </p>
                         </div>
                       </div>
@@ -378,7 +287,7 @@ export default async function DashboardPage() {
                       id: t.id,
                       kind: "transaction",
                       description: t.description,
-                      amount: Number(t.amount),
+                      amount: t.amount,
                       date: t.date,
                       categoryId: t.categoryId,
                     })}
@@ -401,7 +310,7 @@ export default async function DashboardPage() {
                       id: t.id,
                       kind: "transaction",
                       description: t.description,
-                      amount: Number(t.amount),
+                      amount: t.amount,
                       date: t.date,
                       categoryId: t.categoryId,
                     })}

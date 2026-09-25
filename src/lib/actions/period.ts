@@ -3,8 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/auth-helpers";
-import { loadBudgetInputs } from "@/lib/budget-inputs";
-import { calculateDailyBudget, getPeriodBounds, getPreviousPeriodBounds } from "@/lib/period";
+import { accountBalanceOf, loadBudgetInputs } from "@/lib/budget-inputs";
+import { calculateCurrentBudget } from "@/lib/carry-over";
+import { getPreviousPeriodBounds } from "@/lib/period";
 
 export interface PendingPeriodClose {
   periodStart: string;
@@ -13,19 +14,41 @@ export interface PendingPeriodClose {
 }
 
 /**
- * Checks whether the period that just ended (before today's current period)
- * still needs a jar allocation decision. Periods with leftover <= 0 are
- * auto-resolved silently since there's nothing to allocate.
+ * Meio centavo: abaixo disso não há sobra a oferecer — ver o EPSILON de
+ * purchase-simulation.ts.
+ */
+const EPSILON = 0.005;
+
+/**
+ * O fechamento do período que acabou de terminar.
+ *
+ * O saldo passa de um período ao outro sozinho — com sobra ou com falta, sem
+ * ninguém precisar decidir nada (ver src/lib/carry-over.ts). O que sobra aqui
+ * é uma pergunta só: quando o período anterior deixou dinheiro, quer guardá-lo
+ * numa caixinha? Um período que fechou no zero ou no vermelho não tem o que
+ * guardar, e é registrado como resolvido sem abrir o diálogo — mas o que
+ * faltou continua pesando no período atual.
+ *
+ * A sobra oferecida é a herança do período atual, a mesma que a Início mostra
+ * em "inclui R$ X do período anterior", para os dois números nunca discordarem.
  */
 export async function getPendingPeriodClose(): Promise<PendingPeriodClose | null> {
   const userId = await requireUserId();
   const today = new Date();
   const inputs = await loadBudgetInputs(userId);
 
-  const { periodStart } = getPeriodBounds(inputs.incomes, today, inputs.incomeReceipts);
-  const previous = getPreviousPeriodBounds(inputs.incomes, periodStart, inputs.incomeReceipts);
+  const budget = calculateCurrentBudget({
+    ...inputs,
+    accountBalance: accountBalanceOf(inputs, today),
+    today,
+  });
+  const previous = getPreviousPeriodBounds(
+    inputs.incomes,
+    budget.periodStart,
+    inputs.incomeReceipts,
+  );
 
-  if (previous.periodEnd.getTime() !== periodStart.getTime()) {
+  if (previous.periodEnd.getTime() !== budget.periodStart.getTime()) {
     return null;
   }
 
@@ -34,40 +57,21 @@ export async function getPendingPeriodClose(): Promise<PendingPeriodClose | null
   });
   if (existing?.resolvedAt) return null;
 
-  const lastDayOfPreviousPeriod = new Date(previous.periodEnd);
-  lastDayOfPreviousPeriod.setDate(lastDayOfPreviousPeriod.getDate() - 1);
-
-  const previousBudget = calculateDailyBudget({
-    ...inputs,
-    today: lastDayOfPreviousPeriod,
-  });
-  const leftoverAmount = previousBudget.periodBalance;
-
-  if (leftoverAmount <= 0) {
-    await prisma.periodAllocation.upsert({
-      where: { userId_periodEnd: { userId, periodEnd: previous.periodEnd } },
-      update: { resolvedAt: new Date(), leftoverAmount },
-      create: {
-        userId,
-        periodStart: previous.periodStart,
-        periodEnd: previous.periodEnd,
-        leftoverAmount,
-        resolvedAt: new Date(),
-      },
-    });
-    return null;
-  }
+  const leftoverAmount = budget.openingBalance;
+  const nothingToKeep = leftoverAmount <= EPSILON;
 
   await prisma.periodAllocation.upsert({
     where: { userId_periodEnd: { userId, periodEnd: previous.periodEnd } },
-    update: { leftoverAmount },
+    update: { leftoverAmount, ...(nothingToKeep ? { resolvedAt: new Date() } : {}) },
     create: {
       userId,
       periodStart: previous.periodStart,
       periodEnd: previous.periodEnd,
       leftoverAmount,
+      resolvedAt: nothingToKeep ? new Date() : null,
     },
   });
+  if (nothingToKeep) return null;
 
   return {
     periodStart: previous.periodStart.toISOString(),
@@ -76,11 +80,16 @@ export async function getPendingPeriodClose(): Promise<PendingPeriodClose | null
   };
 }
 
-export async function resolvePeriodAllocation(
-  periodEndIso: string,
-  leftoverAmount: number,
-  jarId: string | null,
-) {
+/**
+ * Responde o fechamento. Sem caixinha, não há o que fazer além de marcar como
+ * respondido: a sobra já está no saldo do período atual.
+ *
+ * Com caixinha, a sobra vira um depósito comum — o mesmo de "Guardar" na tela
+ * de Caixinhas. Ele sai do dinheiro disponível, então o período atual passa a
+ * contar com menos, e sai do saldo em conta, que trata a caixinha como outro
+ * lugar. O valor é o gravado no fechamento, não um que o navegador mandou.
+ */
+export async function resolvePeriodAllocation(periodEndIso: string, jarId: string | null) {
   const userId = await requireUserId();
   const periodEnd = new Date(periodEndIso);
 
@@ -91,28 +100,13 @@ export async function resolvePeriodAllocation(
 
   await prisma.$transaction(async (tx) => {
     if (jarId) {
-      await tx.jarDeposit.create({
-        data: {
-          jarId,
-          userId,
-          amount: leftoverAmount,
-          note: "Sobra do período anterior",
-          fromPeriodClose: true,
-        },
-      });
+      const amount = allocation.leftoverAmount;
       await tx.jar.update({
         where: { id: jarId, userId },
-        data: { balance: { increment: leftoverAmount } },
+        data: { balance: { increment: amount } },
       });
-    } else {
-      await tx.transaction.create({
-        data: {
-          userId,
-          amount: -leftoverAmount,
-          description: "Saldo do período anterior",
-          date: new Date(),
-          fromPeriodClose: true,
-        },
+      await tx.jarDeposit.create({
+        data: { jarId, userId, amount, note: "Sobra do período anterior" },
       });
     }
     await tx.periodAllocation.update({
@@ -123,5 +117,5 @@ export async function resolvePeriodAllocation(
 
   revalidatePath("/");
   revalidatePath("/caixinhas");
-  revalidatePath("/historico");
+  revalidatePath("/previsao");
 }

@@ -26,6 +26,9 @@ const today = new Date(2026, 8, 10);
 
 const base: SimulatePurchaseInput = {
   incomes: [{ id: "salario", label: "Salário", amount: 5000, dayOfMonth: 5 }],
+  // O salário de 05/set já caiu e foi confirmado: sem isto o período corrente
+  // não teria renda nenhuma, como na Início.
+  incomeReceipts: [{ incomeId: "salario", occurrenceDate: storedDate(2026, 8, 5), amount: 5000 }],
   fixedExpenses: [],
   creditCards: [{ id: "nubank", name: "Nubank", closingDay: 20, dueDay: 28 }],
   cardPurchases: [],
@@ -187,13 +190,19 @@ describe("simulatePurchase — o parcelamento", () => {
         { id: "salario", label: "Salário", amount: 3000, dayOfMonth: 5 },
         { id: "freela", label: "Freela", amount: 2000, dayOfMonth: 20 },
       ],
+      incomeReceipts: [
+        { incomeId: "salario", occurrenceDate: storedDate(2026, 8, 5), amount: 3000 },
+      ],
       purchase: { ...base.purchase, amount: 300, installments: 3 },
     });
 
     expect(result.firstDueDate).toEqual(new Date(2026, 8, 28));
     expect(result.lastDueDate).toEqual(new Date(2026, 10, 28));
     // A fatura vence dia 28, sempre no período que abre no dia 20.
-    expect(result.periods).toHaveLength(3);
+    expect(result.periods.filter((p) => p.installmentAmount > 0)).toHaveLength(3);
+    // Os ciclos do meio, que abrem no dia 5, não têm parcela mas entram: o
+    // saldo deles já carrega as parcelas anteriores.
+    expect(result.periods.map((p) => p.offset)).toEqual([1, 2, 3, 4, 5]);
     expect(result.truncatedAfter).toBeNull();
   });
 
@@ -224,11 +233,16 @@ describe("simulatePurchase — o parcelamento", () => {
         { id: "salario", label: "Salário", amount: 3000, dayOfMonth: 5 },
         { id: "freela", label: "Freela", amount: 2000, dayOfMonth: 20 },
       ],
+      incomeReceipts: [
+        { incomeId: "salario", occurrenceDate: storedDate(2026, 8, 5), amount: 3000 },
+      ],
     });
 
     expect(result.truncatedAfter).toBeNull();
     expect(result.unevaluatedAmount).toBe(0);
-    expect(result.periods).toHaveLength(MAX_SIMULATION_INSTALLMENTS);
+    expect(result.periods.filter((p) => p.installmentAmount > 0)).toHaveLength(
+      MAX_SIMULATION_INSTALLMENTS,
+    );
   });
 
   it("mede o comprometimento no mês, e não no ciclo, para quem recebe duas vezes", () => {
@@ -239,6 +253,9 @@ describe("simulatePurchase — o parcelamento", () => {
       incomes: [
         { id: "salario", label: "Salário", amount: 3000, dayOfMonth: 5 },
         { id: "freela", label: "Freela", amount: 2000, dayOfMonth: 20 },
+      ],
+      incomeReceipts: [
+        { incomeId: "salario", occurrenceDate: storedDate(2026, 8, 5), amount: 3000 },
       ],
       fixedExpenses: [{ id: "aluguel", label: "Aluguel", amount: 1400, dueDay: 10 }],
       purchase: { ...base.purchase, amount: 100 },
@@ -336,13 +353,59 @@ describe("simulatePurchase — o contexto que a tela mostra", () => {
     expect(result.worstPeriod?.offset).toBe(1);
   });
 
-  it("compara a sobra de antes e depois em cada período tocado", () => {
+  it("compara o saldo encadeado de antes e depois em cada período", () => {
     const result = simulate({ purchase: { ...base.purchase, amount: 2000, installments: 2 } });
 
     expect(result.periods[0].balanceBefore).toBe(5000);
     expect(result.periods[0].balanceAfter).toBe(4000);
-    expect(result.periods[1].balanceBefore).toBe(5000);
-    expect(result.periods[1].balanceAfter).toBe(4000);
+    // O segundo ciclo abre com o que o primeiro fechou: 5.000 herdados mais os
+    // 5.000 dele, e as duas parcelas pesando no depois.
+    expect(result.periods[1].balanceBefore).toBe(10000);
+    expect(result.periods[1].balanceAfter).toBe(8000);
+  });
+
+  it("aprova a parcela que a sobra do mês anterior cobre", () => {
+    // O segundo ciclo sozinho não paga um aluguel de 6.000 com renda de 5.000,
+    // mas herda 5.000 do primeiro. Medido ciclo a ciclo, era um NÃO.
+    const result = simulate({
+      fixedExpenses: [
+        {
+          id: "aluguel",
+          label: "Aluguel",
+          amount: 6000,
+          dueDay: 10,
+          createdAt: new Date(2026, 9, 1),
+          endedAt: new Date(2026, 9, 20),
+        },
+      ],
+      commitmentLimitPercent: 100,
+      purchase: { ...base.purchase, amount: 1000, installments: 2 },
+    });
+
+    expect(result.periods[1].balanceBefore).toBe(4000);
+    expect(result.blockers).not.toContain("negativeBalance");
+  });
+
+  it("reprova quando o saldo encadeado fica negativo depois da última parcela", () => {
+    // A parcela cai só no primeiro ciclo, que aguenta. Mas o segundo tem uma
+    // despesa de 9.500 e fecha em 500 sem a compra — a parcela herdada o
+    // derruba, e medir só o ciclo tocado deixaria passar.
+    const result = simulate({
+      fixedExpenses: [
+        {
+          id: "ipva",
+          label: "IPVA",
+          amount: 9500,
+          dueDay: 15,
+          createdAt: new Date(2026, 9, 1),
+          endedAt: new Date(2026, 9, 20),
+        },
+      ],
+      commitmentLimitPercent: 100,
+      purchase: { ...base.purchase, amount: 1000, installments: 1 },
+    });
+
+    expect(result.blockers).toContain("negativeBalance");
   });
 
   it("devolve o uso do limite do cartão quando ele tem limite informado", () => {
@@ -367,7 +430,8 @@ describe("simulatePurchase — o contexto que a tela mostra", () => {
     const result = simulate({ purchase: { ...base.purchase, amount: 1200 } });
 
     expect(result.periods[0].dailyAfter).toBeLessThan(result.periods[0].dailyBefore);
-    expect(result.periods[0].dailyAfter).toBeCloseTo(3800 / 30, 5);
+    // Dividido pelos 25 dias que faltam até 05/out, como o "pode gastar hoje".
+    expect(result.periods[0].dailyAfter).toBeCloseTo(3800 / 25, 5);
   });
 
   it("avisa quando o ciclo já estava reprovado antes da compra", () => {
@@ -403,6 +467,7 @@ describe("simulatePurchase — o contexto que a tela mostra", () => {
           createdAt: new Date(2026, 10, 1),
         },
       ],
+      incomeReceipts: [],
       purchase: { ...base.purchase, amount: 100 },
     });
 

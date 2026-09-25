@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { AlertTriangle, ArrowDownLeft, ArrowUpRight, CalendarClock, Wallet } from "lucide-react";
 import { requireUserId } from "@/lib/auth-helpers";
-import { loadBudgetInputs } from "@/lib/budget-inputs";
+import { accountBalanceOf, loadBudgetInputs } from "@/lib/budget-inputs";
+import { calculateCurrentBudget } from "@/lib/carry-over";
 import {
   forecastPeriods,
   resolveForecastOffset,
@@ -26,6 +27,7 @@ const GROUPS: { kind: ForecastEntryKind; label: string; incoming: boolean }[] = 
   { kind: "fixedExpense", label: "Despesas fixas", incoming: false },
   { kind: "cardBill", label: "Faturas", incoming: false },
   { kind: "scheduled", label: "Agendados", incoming: false },
+  { kind: "jar", label: "Guardado em caixinhas", incoming: false },
 ];
 
 /**
@@ -77,14 +79,21 @@ function EntryRow({ entry, incoming }: { entry: ForecastEntry; incoming: boolean
             {/* "Confirmado" só distingue alguma coisa onde existe o contrário:
                 uma ocorrência recorrente pode estar projetada ou já ter
                 acontecido. Um lançamento é sempre um registro real. */}
-            {entry.confirmed && entry.kind !== "scheduled" && " · confirmado"}
+            {entry.confirmed &&
+              entry.kind !== "scheduled" &&
+              entry.kind !== "jar" &&
+              " · confirmado"}
             {entry.partial && " · fatura ainda aberta"}
+            {/* Mostrado mas fora da conta, como na Início: um salário que
+                ninguém disse ter chegado não pode virar saldo. */}
+            {entry.awaiting && " · aguardando confirmação, fora da conta"}
           </p>
         </div>
         <p
           className={cn(
             "shrink-0 font-medium tabular-nums",
             incoming ? "text-primary" : "text-foreground",
+            entry.awaiting && "text-muted-foreground line-through",
           )}
         >
           {incoming ? "+" : "−"}
@@ -105,14 +114,24 @@ export default async function ForecastPage({
   const offset = resolveForecastOffset(p);
   const today = new Date();
 
-  // Só o que está ativo: projetar uma renda ou despesa que o usuário desligou
-  // seria prever dinheiro que ele já decidiu que não existe mais.
-  const inputs = await loadBudgetInputs(userId, { activeOnly: true });
+  // Tudo, inclusive o desligado: quem decide o que cada coisa inativa ainda
+  // faz é o módulo puro — renda desligada não é projetada, despesa encerrada
+  // para no `endedAt` —, e é a mesma regra que a Início usa.
+  const inputs = await loadBudgetInputs(userId);
+
+  // O ciclo corrente parte da mesma herança que a Início mostra: o saldo em
+  // conta, quando informado, ou a corrente dos períodos anteriores.
+  const budget = calculateCurrentBudget({
+    ...inputs,
+    accountBalance: accountBalanceOf(inputs, today),
+    today,
+  });
 
   // A faixa de tendência precisa dos primeiros ciclos mesmo quando a navegação
   // está lá na frente, e vice-versa — daí o maior dos dois.
   const periods = forecastPeriods({
     ...inputs,
+    openingBalance: budget.openingBalance,
     today,
     count: Math.max(offset, TIMELINE_LENGTH - 1),
   });
@@ -136,7 +155,10 @@ export default async function ForecastPage({
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader title="Previsão" subtitle="O que já está comprometido nos próximos ciclos" />
+      <PageHeader
+        title="Previsão"
+        subtitle="O saldo de cada ciclo, somando o que vem do anterior"
+      />
 
       <ForecastNav
         label={periodLabel(period)}
@@ -151,7 +173,7 @@ export default async function ForecastPage({
         <CardContent className="flex flex-col gap-5 py-6 xl:grid xl:grid-cols-[1fr_1fr_16rem] xl:gap-8">
           <div className="flex flex-col gap-1 xl:justify-center">
             <p className="text-sm text-muted-foreground">
-              {isNegative ? "Vai faltar neste período" : "Deve sobrar neste período"}
+              {isNegative ? "Vai faltar ao fim do período" : "Deve sobrar ao fim do período"}
             </p>
             <AnimatedCurrency
               value={period.balance}
@@ -168,9 +190,17 @@ export default async function ForecastPage({
               <p className="font-medium tabular-nums">{formatCurrency(period.dailyAvailable)}</p>
             </div>
             <p className="text-xs text-muted-foreground tabular-nums">
-              {period.totalDays} {period.totalDays === 1 ? "dia" : "dias"} de{" "}
-              {formatDate(period.periodStart)} a {formatDate(lastDay(period))}
+              {period.offset === 0
+                ? `${period.daysLeft} ${period.daysLeft === 1 ? "dia restante" : "dias restantes"} até ${formatDate(lastDay(period))}`
+                : `${period.totalDays} ${period.totalDays === 1 ? "dia" : "dias"} de ${formatDate(period.periodStart)} a ${formatDate(lastDay(period))}`}
             </p>
+            {/* A conta por trás do número grande: o que veio de antes mais o
+                que este ciclo movimenta. Sem ela, um mês com renda maior que as
+                contas aparecer negativo parece erro. */}
+            <div className="flex flex-col gap-0.5 text-xs text-muted-foreground tabular-nums">
+              <span>Veio do anterior: {formatCurrency(period.openingBalance)}</span>
+              <span>Resultado do período: {formatCurrency(period.periodResult)}</span>
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3 border-t border-border/60 pt-4 xl:grid-cols-1 xl:content-center xl:gap-6 xl:border-t-0 xl:border-l xl:pt-0 xl:pl-8">
@@ -186,7 +216,10 @@ export default async function ForecastPage({
               <p className="flex items-center gap-1.5 font-medium tabular-nums">
                 <ArrowUpRight className="size-4 shrink-0 text-negative" aria-hidden="true" />
                 {formatCurrency(
-                  period.fixedExpenseTotal + period.cardBillTotal + period.scheduledTotal,
+                  period.fixedExpenseTotal +
+                    period.cardBillTotal +
+                    period.scheduledTotal +
+                    period.jarTotal,
                 )}
               </p>
             </div>
@@ -199,11 +232,14 @@ export default async function ForecastPage({
           <CardContent className="flex items-start gap-3 py-3">
             <AlertTriangle className="mt-0.5 size-4 shrink-0 text-negative" aria-hidden="true" />
             <p className="text-sm">
-              O que já está comprometido passa da renda prevista em{" "}
+              {period.openingBalance < 0 && period.periodResult >= 0
+                ? "Este ciclo paga as próprias contas, mas não cobre o que já vem faltando dos anteriores. "
+                : "Somando o que vem do período anterior, o que está comprometido passa do que entra. "}
+              O saldo fecha negativo em{" "}
               <span className="font-medium tabular-nums">
                 {formatCurrency(Math.abs(period.balance))}
               </span>
-              . E isso ainda não inclui o gasto do dia a dia.
+              , e isso ainda não inclui o gasto do dia a dia.
             </p>
           </CardContent>
         </Card>

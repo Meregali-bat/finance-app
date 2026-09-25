@@ -6,6 +6,7 @@ import {
   type ForecastEntry,
   type ForecastInput,
 } from "./forecast";
+import { calculateCurrentBudget } from "./carry-over";
 
 /**
  * Um dia de calendário do jeito que o banco guarda: meia-noite UTC. Escrever
@@ -348,7 +349,11 @@ describe("forecastPeriods — os totais", () => {
     expect(proximo.fixedExpenseTotal).toBe(1800);
     expect(proximo.cardBillTotal).toBe(700);
     expect(proximo.scheduledTotal).toBe(500);
-    expect(proximo.balance).toBe(2000);
+    expect(proximo.periodResult).toBe(2000);
+    // O corrente fecha em −1.800 (o aluguel de 10/09, sem salário confirmado),
+    // e o próximo começa daí.
+    expect(proximo.openingBalance).toBe(periods[0].balance);
+    expect(proximo.balance).toBe(periods[0].balance + 2000);
   });
 
   it("divide o saldo pelos dias do ciclo inteiro, e não pelos que faltam", () => {
@@ -394,4 +399,172 @@ describe("resolveForecastOffset", () => {
   it("usa o primeiro valor quando o parâmetro vem repetido na URL", () => {
     expect(resolveForecastOffset(["3", "7"])).toBe(3);
   });
+});
+
+describe("forecastPeriods — o saldo passa de um ciclo para o outro", () => {
+  const confirmed = [
+    { incomeId: "salario", occurrenceDate: storedDate(2026, 8, 5), amount: 5000 },
+  ];
+
+  it("abre cada ciclo com o fechamento do anterior", () => {
+    const periods = forecast({ incomeReceipts: confirmed, count: 3 });
+
+    expect(periods.map((p) => p.openingBalance)).toEqual([0, 5000, 10000, 15000]);
+    expect(periods.map((p) => p.balance)).toEqual([5000, 10000, 15000, 20000]);
+  });
+
+  it("começa do saldo de abertura que recebe", () => {
+    const periods = forecast({ incomeReceipts: confirmed, openingBalance: -2000 });
+
+    expect(periods[0].openingBalance).toBe(-2000);
+    expect(periods[0].balance).toBe(3000);
+    expect(periods[1].openingBalance).toBe(3000);
+  });
+
+  it("leva o vermelho de um mês para o seguinte", () => {
+    // Uma despesa de 7.000 só em outubro: o ciclo fecha em −2.000, e novembro
+    // começa devendo — em vez de voltar a 5.000 como se nada tivesse havido.
+    const periods = forecast({
+      incomeReceipts: confirmed,
+      fixedExpenses: [
+        {
+          id: "ipva",
+          label: "IPVA",
+          amount: 12000,
+          dueDay: 15,
+          createdAt: new Date(2026, 9, 1),
+          endedAt: new Date(2026, 9, 20),
+        },
+      ],
+    });
+
+    expect(periods[1].periodResult).toBe(-7000);
+    expect(periods[1].balance).toBe(-2000);
+    expect(periods[2].openingBalance).toBe(-2000);
+    expect(periods[2].balance).toBe(3000);
+  });
+
+  it("mostra o salário que já passou sem confirmação, mas não o soma", () => {
+    const periods = forecast();
+    const [salary] = entriesOf(periods, 0, "income");
+
+    expect(salary.awaiting).toBe(true);
+    expect(periods[0].incomeTotal).toBe(0);
+    expect(periods[0].expectedIncomeTotal).toBe(5000);
+    // O próximo ainda não chegou, então é projeção comum.
+    expect(entriesOf(periods, 1, "income")[0].awaiting).toBeUndefined();
+    expect(periods[1].incomeTotal).toBe(5000);
+  });
+
+  it("conta o recebimento confirmado de uma renda desligada", () => {
+    const periods = forecast({
+      incomes: [
+        { id: "salario", label: "Salário", amount: 5000, dayOfMonth: 5 },
+        { id: "freela", label: "Freela", amount: 800, dayOfMonth: 20, active: false },
+      ],
+      incomeReceipts: [
+        ...confirmed,
+        { incomeId: "freela", occurrenceDate: storedDate(2026, 8, 8), amount: 800 },
+      ],
+    });
+
+    expect(periods[0].incomeTotal).toBe(5800);
+    // Desligado, o freela não é projetado nos próximos ciclos.
+    expect(periods[1].incomeTotal).toBe(5000);
+  });
+
+  it("desconta o que foi guardado em caixinha no período", () => {
+    const periods = forecast({
+      incomeReceipts: confirmed,
+      jarDeposits: [{ amount: 1500, date: new Date(2026, 8, 8, 14, 0) }],
+    });
+
+    expect(periods[0].jarTotal).toBe(1500);
+    expect(periods[0].balance).toBe(3500);
+  });
+
+  it("ignora as linhas do fechamento antigo", () => {
+    const periods = forecast({
+      incomeReceipts: confirmed,
+      transactions: [
+        {
+          id: "t1",
+          description: "Saldo do período anterior",
+          amount: -900,
+          date: storedDate(2026, 8, 6),
+          fromPeriodClose: true,
+        },
+      ],
+    });
+
+    expect(periods[0].incomeTotal).toBe(5000);
+  });
+
+  it("divide o saldo do ciclo corrente pelos dias que faltam, como a Início", () => {
+    const periods = forecast({ incomeReceipts: confirmed });
+
+    expect(periods[0].daysLeft).toBe(25);
+    expect(periods[0].dailyAvailable).toBeCloseTo(5000 / 25, 10);
+  });
+});
+
+describe("forecastPeriods — o ciclo corrente é o mesmo número da Início", () => {
+  // Um pouco de tudo: renda confirmada e aguardando, despesa paga e não paga,
+  // fatura com parcela, lançamentos passados e futuros, caixinha e uma linha
+  // do fechamento antigo.
+  const scenario: ForecastInput = {
+    ...base,
+    incomes: [
+      { id: "salario", label: "Salário", amount: 5000, dayOfMonth: 5, createdAt: new Date(2026, 5, 1) },
+      { id: "freela", label: "Freela", amount: 900, dayOfMonth: 5, createdAt: new Date(2026, 5, 1) },
+    ],
+    incomeReceipts: [
+      { incomeId: "salario", occurrenceDate: storedDate(2026, 6, 5), amount: 5000 },
+      { incomeId: "salario", occurrenceDate: storedDate(2026, 7, 5), amount: 5000 },
+      { incomeId: "salario", occurrenceDate: storedDate(2026, 8, 5), amount: 5100 },
+    ],
+    fixedExpenses: [
+      { id: "aluguel", label: "Aluguel", amount: 1800, dueDay: 10, createdAt: new Date(2026, 5, 1) },
+      { id: "luz", label: "Luz", amount: 250, dueDay: 7, createdAt: new Date(2026, 5, 1) },
+      { id: "spotify", label: "Spotify", amount: 30, cardId: "c1", createdAt: new Date(2026, 5, 1) },
+    ],
+    creditCards: [{ id: "c1", name: "Nubank", closingDay: 20, dueDay: 28 }],
+    cardPurchases: [
+      { cardId: "c1", amount: 900, date: storedDate(2026, 7, 25), installments: 3 },
+      { cardId: "c1", amount: 120, date: storedDate(2026, 8, 2) },
+    ],
+    expensePayments: [
+      { fixedExpenseId: "luz", dueDate: storedDate(2026, 8, 7), amount: 260 },
+      { cardId: "c1", dueDate: storedDate(2026, 7, 28), amount: 400 },
+    ],
+    transactions: [
+      { id: "t1", description: "Mercado", amount: 350, date: storedDate(2026, 8, 6) },
+      { id: "t2", description: "Viagem", amount: 700, date: storedDate(2026, 8, 25) },
+      { id: "t3", description: "Reembolso", amount: -120, date: storedDate(2026, 8, 9) },
+      { id: "t4", description: "Mercado", amount: 1200, date: storedDate(2026, 7, 15) },
+      {
+        id: "t5",
+        description: "Saldo do período anterior",
+        amount: -3000,
+        date: storedDate(2026, 8, 5),
+        fromPeriodClose: true,
+      },
+    ],
+    jarDeposits: [{ amount: 500, date: new Date(2026, 8, 6, 9, 0) }],
+  };
+
+  for (const accountBalance of [null, 2345.67]) {
+    it(accountBalance === null ? "sem saldo em conta" : "com saldo em conta", () => {
+      const budget = calculateCurrentBudget({ ...scenario, accountBalance });
+      const [current] = forecastPeriods({
+        ...scenario,
+        openingBalance: budget.openingBalance,
+        count: 0,
+      });
+
+      expect(current.periodResult).toBeCloseTo(budget.periodResult, 10);
+      expect(current.balance).toBeCloseTo(budget.periodBalance, 10);
+      expect(current.dailyAvailable).toBeCloseTo(budget.dailyAvailable, 10);
+    });
+  }
 });

@@ -30,6 +30,14 @@ import {
  */
 const day = (y: number, m: number, d: number) => new Date(Date.UTC(y, m, d));
 
+/**
+ * Só os lembretes do próprio período. Os vencidos do período anterior têm
+ * suíte própria; as suítes antigas pagam apenas a ocorrência corrente e
+ * querem saber dela.
+ */
+const current = <T extends { overdue?: boolean }>(reminders: T[]) =>
+  reminders.filter((r) => !r.overdue);
+
 describe("getPeriodBounds", () => {
   it("finds the current period for a single monthly income", () => {
     const today = new Date(2026, 0, 15); // Jan 15
@@ -350,7 +358,7 @@ describe("calculateDailyBudget", () => {
       transactions: [],
       today,
     });
-    expect(result.fixedExpenseReminders).toEqual([
+    expect(current(result.fixedExpenseReminders)).toEqual([
       { expenseId: "rent", dueDate: new Date(2026, 0, 10), amount: 1200 },
     ]);
   });
@@ -490,7 +498,7 @@ describe("calculateDailyBudget", () => {
     expect(result.fixedExpenseTotal).toBe(0);
     expect(result.fixedExpenseReminders).toEqual([]);
     expect(result.cardBillTotal).toBe(34.9);
-    expect(result.cardBillReminders).toEqual([
+    expect(current(result.cardBillReminders)).toEqual([
       { cardId: "c1", dueDate: new Date(2026, 0, 27), amount: 34.9 },
     ]);
   });
@@ -992,7 +1000,7 @@ describe("calculateDailyBudget com pagamentos confirmados", () => {
       fixedExpenses: [{ id: "e1", amount: 500, dueDay: 20 }],
       expensePayments: [{ fixedExpenseId: "e1", dueDate: new Date(2026, 0, 20), amount: 500 }],
     });
-    expect(budget.fixedExpenseReminders).toEqual([]);
+    expect(current(budget.fixedExpenseReminders)).toEqual([]);
   });
 
   it("mantém a despesa fixa paga no total do período", () => {
@@ -1039,7 +1047,7 @@ describe("calculateDailyBudget com pagamentos confirmados", () => {
         { fixedExpenseId: "e1", dueDate: new Date(2026, 0, 20, 15, 30), amount: 500 },
       ],
     });
-    expect(budget.fixedExpenseReminders).toEqual([]);
+    expect(current(budget.fixedExpenseReminders)).toEqual([]);
   });
 
   it("tira a fatura paga dos lembretes sem mexer no total", () => {
@@ -1079,7 +1087,7 @@ describe("calculateDailyBudget com pagamentos confirmados", () => {
       cardPurchases: [{ cardId: "c1", amount: 500, date: new Date(2025, 11, 20) }],
       expensePayments: [{ fixedExpenseId: "e1", dueDate: new Date(2026, 0, 20), amount: 0 }],
     });
-    expect(onCard.fixedExpenseReminders).toEqual([]);
+    expect(current(onCard.fixedExpenseReminders)).toEqual([]);
     expect(onCard.periodBalance).toBe(unpaid.periodBalance);
   });
 
@@ -1091,7 +1099,7 @@ describe("calculateDailyBudget com pagamentos confirmados", () => {
       fixedExpenses: [{ id: "x", amount: 500, dueDay: 20 }],
       expensePayments: [{ cardId: "x", dueDate: new Date(2026, 0, 20), amount: 500 }],
     });
-    expect(budget.fixedExpenseReminders).toHaveLength(1);
+    expect(current(budget.fixedExpenseReminders)).toHaveLength(1);
   });
 });
 
@@ -1121,7 +1129,7 @@ describe("confirmações gravadas por servidores de fusos diferentes", () => {
       ...baseInput,
       expensePayments: [{ fixedExpenseId: "e1", dueDate, amount: 500 }],
     });
-    expect(budget.fixedExpenseReminders).toEqual([]);
+    expect(current(budget.fixedExpenseReminders)).toEqual([]);
   });
 
   it.each([
@@ -1365,6 +1373,45 @@ describe("despesa fixa avulsa encerrada", () => {
   });
 
   it("some dos lembretes depois de encerrada", () => {
-    expect(budgetFor(new Date(2026, 7, 1)).fixedExpenseReminders).toEqual([]);
+    expect(current(budgetFor(new Date(2026, 7, 1)).fixedExpenseReminders)).toEqual([]);
+  });
+});
+
+describe("calculateDailyBudget — contas vencidas do período anterior", () => {
+  // Salário dia 5; hoje 10/set. O período anterior é 05/ago → 05/set.
+  const base = {
+    incomes: [{ id: "i1", amount: 3000, dayOfMonth: 5 }],
+    fixedExpenses: [],
+    creditCards: [{ id: "c1", closingDay: 20, dueDay: 28 }],
+    cardPurchases: [{ cardId: "c1", amount: 400, date: day(2026, 7, 1) }],
+    transactions: [],
+    today: new Date(2026, 8, 10),
+  };
+
+  it("mantém a fatura vencida e não paga nos lembretes, marcada como vencida", () => {
+    const budget = calculateDailyBudget(base);
+
+    expect(budget.cardBillReminders).toEqual([
+      { cardId: "c1", dueDate: new Date(2026, 7, 28), amount: 400, overdue: true },
+    ]);
+  });
+
+  it("não soma a vencida no total do período: ela pesou no período dela", () => {
+    expect(calculateDailyBudget(base).cardBillTotal).toBe(0);
+  });
+
+  it("tira dos lembretes a vencida que foi paga", () => {
+    const budget = calculateDailyBudget({
+      ...base,
+      expensePayments: [{ cardId: "c1", dueDate: day(2026, 7, 28), amount: 400 }],
+    });
+
+    expect(budget.cardBillReminders).toEqual([]);
+  });
+
+  it("não olha mais de um período para trás", () => {
+    const budget = calculateDailyBudget({ ...base, today: new Date(2026, 9, 10) });
+
+    expect(budget.cardBillReminders).toEqual([]);
   });
 });

@@ -12,6 +12,12 @@ export interface IncomeInput {
   dayOfMonth: number;
   /** When omitted, every occurrence is treated as valid (useful for tests). */
   createdAt?: Date;
+  /**
+   * Desligada pelo usuário. Uma renda inativa não marca mais onde os períodos
+   * começam e terminam nem é projetada, mas o que ela já pagou continua valendo:
+   * os recebimentos confirmados dela seguem somando. Ausente = ativa.
+   */
+  active?: boolean;
 }
 
 export interface IncomeReceiptInput {
@@ -83,12 +89,31 @@ export interface ExpensePaymentInput {
 export interface TransactionInput {
   amount: number;
   date: Date;
+  /**
+   * Linha que o fechamento de período antigo gravava para devolver a sobra ao
+   * orçamento seguinte. O saldo agora passa de um período ao outro sozinho, e
+   * contar essas linhas também levaria a mesma sobra duas vezes.
+   */
+  fromPeriodClose?: boolean;
+}
+
+/**
+ * Dinheiro guardado numa caixinha. Sai do dinheiro disponível — a caixinha é
+ * outro lugar, como o saldo em conta já trata —, então pesa no período em que
+ * foi feito como qualquer outra saída.
+ */
+export interface JarDepositInput {
+  amount: number;
+  /** O instante do depósito (`createdAt`), não um dia de calendário. */
+  date: Date;
 }
 
 export interface CardBillReminder {
   cardId: string;
   dueDate: Date;
   amount: number;
+  /** Venceu no período anterior e continua sem pagamento confirmado. */
+  overdue?: boolean;
 }
 
 /** Uma fatura de um cartão: o que ela cobra, de onde vem, e se já foi paga. */
@@ -114,6 +139,8 @@ export interface FixedExpenseReminder {
   expenseId: string;
   dueDate: Date;
   amount: number;
+  /** Venceu no período anterior e continua sem pagamento confirmado. */
+  overdue?: boolean;
 }
 
 export interface IncomeReminder {
@@ -137,14 +164,35 @@ export interface CardLimitUsage {
   overdueBillCount: number;
 }
 
+/**
+ * De onde veio o saldo com que o período abriu.
+ *
+ * - `account`: do saldo em conta que o usuário informou. É o dinheiro real, e
+ *   por isso manda quando existe.
+ * - `history`: dos períodos anteriores encadeados, a partir do primeiro que o
+ *   app acompanhou — sem saber o que havia no banco antes dele.
+ */
+export type OpeningSource = "account" | "history";
+
 export interface PeriodBudget {
   periodStart: Date;
   periodEnd: Date;
   daysRemaining: number;
+  /**
+   * O que o período herdou do anterior: a sobra, ou o que faltou, com sinal.
+   * `periodBalance` já o inclui.
+   */
+  openingBalance: number;
+  openingSource: OpeningSource;
   incomeTotal: number;
   fixedExpenseTotal: number;
   cardBillTotal: number;
   transactionTotal: number;
+  /** Guardado em caixinhas durante o período. */
+  jarDepositTotal: number;
+  /** Só o que aconteceu no período: renda menos todas as saídas, sem a herança. */
+  periodResult: number;
+  /** O saldo com que o período termina: `openingBalance + periodResult`. */
   periodBalance: number;
   dailyAvailable: number;
   cardBillReminders: CardBillReminder[];
@@ -336,6 +384,11 @@ export function findExpensePayment(
   );
 }
 
+/** Só as rendas ativas marcam onde um período começa e termina. */
+export function boundingIncomes<T extends IncomeInput>(incomes: T[]): T[] {
+  return incomes.filter((income) => income.active !== false);
+}
+
 /**
  * The current period's boundaries, derived from every active income's
  * recurring day-of-month. periodStart is the most recent payday across all
@@ -347,6 +400,9 @@ export function findExpensePayment(
  * registering an income doesn't retroactively invent a period that was never
  * tracked. Confirming it lifts that restriction: the user saying the money
  * arrived is first-hand evidence, not an invention.
+ *
+ * Rendas desativadas (`active: false`) ficam de fora: elas não pagam mais, e
+ * deixá-las cortar o mês produziria períodos que não existem.
  */
 export function getPeriodBounds(
   incomes: IncomeInput[],
@@ -356,15 +412,35 @@ export function getPeriodBounds(
   periodStart: Date;
   periodEnd: Date;
 } {
-  if (incomes.length === 0) {
+  const { periodStart, periodEnd } = getPeriodBoundsDetailed(incomes, today, incomeReceipts);
+  return { periodStart, periodEnd };
+}
+
+/**
+ * `getPeriodBounds` dizendo também se o início é um dia de pagamento de verdade
+ * ou o "hoje" de reserva — o que acontece antes do primeiro pagamento que o app
+ * acompanhou. O encadeamento de saldos precisa saber disso para parar ali.
+ */
+export function getPeriodBoundsDetailed(
+  incomes: IncomeInput[],
+  today: Date,
+  incomeReceipts: IncomeReceiptInput[] = [],
+): {
+  periodStart: Date;
+  periodEnd: Date;
+  /** O início é o próprio `today`, e não um dia de pagamento. */
+  fallback: boolean;
+} {
+  const active = boundingIncomes(incomes);
+  if (active.length === 0) {
     const start = startOfDay(today);
     const end = new Date(start);
     end.setDate(end.getDate() + 1);
-    return { periodStart: start, periodEnd: end };
+    return { periodStart: start, periodEnd: end, fallback: true };
   }
 
-  const futureOccurrences = incomes.map((inc) => earliestOccurrenceAfter(inc.dayOfMonth, today));
-  const validPastOccurrences = incomes
+  const futureOccurrences = active.map((inc) => earliestOccurrenceAfter(inc.dayOfMonth, today));
+  const validPastOccurrences = active
     .map((inc) => ({ income: inc, occurrence: latestOccurrenceOnOrBefore(inc.dayOfMonth, today) }))
     .filter(
       ({ income, occurrence }) =>
@@ -373,13 +449,13 @@ export function getPeriodBounds(
     )
     .map(({ occurrence }) => occurrence);
 
-  const periodStart =
-    validPastOccurrences.length > 0
-      ? new Date(Math.max(...validPastOccurrences.map((d) => d.getTime())))
-      : startOfDay(today);
+  const fallback = validPastOccurrences.length === 0;
+  const periodStart = fallback
+    ? startOfDay(today)
+    : new Date(Math.max(...validPastOccurrences.map((d) => d.getTime())));
   const periodEnd = new Date(Math.min(...futureOccurrences.map((d) => d.getTime())));
 
-  return { periodStart, periodEnd };
+  return { periodStart, periodEnd, fallback };
 }
 
 /** Sem um parcelamento válido, é uma parcela. Puro: não lança. */
@@ -736,7 +812,7 @@ export function getCardLimitUsage(input: {
   };
 }
 
-export function calculateDailyBudget(input: {
+export interface BudgetInput {
   incomes: IncomeInput[];
   incomeReceipts?: IncomeReceiptInput[];
   fixedExpenses: FixedExpenseInput[];
@@ -745,20 +821,85 @@ export function calculateDailyBudget(input: {
   billEstimates?: CardBillEstimateInput[];
   expensePayments?: ExpensePaymentInput[];
   transactions: TransactionInput[];
+  jarDeposits?: JarDepositInput[];
   today: Date;
-}): PeriodBudget {
+}
+
+/**
+ * As saídas comprometidas de um intervalo, pagas ou não: as ocorrências de
+ * despesa fixa avulsa e as faturas que vencem nele, cada uma com o pagamento
+ * que a quitou, se houver.
+ */
+function obligationsInRange(input: BudgetInput, start: Date, end: Date) {
   const {
-    incomes,
-    incomeReceipts = [],
     fixedExpenses,
     creditCards,
     cardPurchases,
     billEstimates = [],
     expensePayments = [],
-    transactions,
-    today,
   } = input;
-  const { periodStart, periodEnd } = getPeriodBounds(incomes, today, incomeReceipts);
+
+  const fixedExpenseOccurrences = fixedExpenses
+    .filter((exp) => !exp.cardId)
+    .flatMap((exp) => {
+      if (exp.dueDay == null) return [];
+      return occurrencesInRange(exp.dueDay, start, end)
+        .filter((occ) => isExpenseOccurrenceValid(occ, exp))
+        .map((dueDate) => ({
+          expenseId: exp.id,
+          dueDate,
+          estimate: exp.amount,
+          payment: findExpensePayment(expensePayments, { fixedExpenseId: exp.id }, dueDate),
+        }));
+    });
+
+  const cardBills = getCardBillsInPeriod(
+    creditCards,
+    cardPurchases,
+    start,
+    end,
+    fixedExpenses.filter((exp) => exp.cardId),
+    billEstimates,
+  ).map((bill) => ({
+    ...bill,
+    payment: findExpensePayment(expensePayments, { cardId: bill.cardId }, bill.dueDate),
+  }));
+
+  return { fixedExpenseOccurrences, cardBills };
+}
+
+/**
+ * O orçamento de um período com limites já conhecidos. `calculateDailyBudget`
+ * acha os limites a partir de hoje; o encadeamento de saldos chama esta
+ * direto, com os limites de cada período passado.
+ */
+export function budgetForBounds(
+  input: BudgetInput & {
+    periodStart: Date;
+    periodEnd: Date;
+    /**
+     * O saldo em conta de agora, quando o usuário o informou. Com ele, o saldo
+     * do período sai do dinheiro real: o que está no banco, mais o que ainda
+     * vai entrar, menos o que ainda vai sair até o próximo pagamento.
+     */
+    accountBalance?: number | null;
+    /** Sem saldo em conta: o que o período herdou do anterior. */
+    openingBalance?: number;
+  },
+): PeriodBudget {
+  const {
+    incomes,
+    incomeReceipts = [],
+    transactions,
+    jarDeposits = [],
+    today,
+    periodStart,
+    periodEnd,
+    accountBalance = null,
+    openingBalance: historyOpening = 0,
+  } = input;
+  const todayStart = startOfDay(today);
+  const active = boundingIncomes(incomes);
 
   /**
    * The most recent payday each income has already reached. Only the latest
@@ -770,7 +911,7 @@ export function calculateDailyBudget(input: {
    * from just before the user set the income up costs nothing, and it's the
    * only way that money can ever be accounted for.
    */
-  const arrivedPaydays = incomes
+  const arrivedPaydays = active
     .map((inc) => ({ income: inc, occurrence: latestOccurrenceOnOrBefore(inc.dayOfMonth, today) }))
     .filter(({ income, occurrence }) => isPaydayAskable(occurrence, income.createdAt));
 
@@ -787,91 +928,156 @@ export function calculateDailyBudget(input: {
       amount: income.amount,
     }));
 
+  const inPeriod = (day: Date) =>
+    day.getTime() >= periodStart.getTime() && day.getTime() < periodEnd.getTime();
+
   /**
    * Confirmed money funds the period its payday falls in, at the amount that
    * actually landed. An unconfirmed payday contributes nothing, so a salary
    * that hasn't arrived yet can't inflate the available budget.
    */
-  const incomeTotal = incomeReceipts
-    .filter((r) => {
-      const payday = storedDay(r.occurrenceDate);
-      return payday.getTime() >= periodStart.getTime() && payday.getTime() < periodEnd.getTime();
-    })
-    .reduce((sum, r) => sum + r.amount, 0);
-
-  const standaloneFixedExpenses = fixedExpenses.filter((exp) => !exp.cardId);
-  const cardFixedExpenses = fixedExpenses.filter((exp) => exp.cardId);
+  const periodReceipts = incomeReceipts.filter((r) => inPeriod(storedDay(r.occurrenceDate)));
+  const incomeTotal = periodReceipts.reduce((sum, r) => sum + r.amount, 0);
 
   /**
-   * Toda ocorrência de despesa fixa no período, paga ou não. Os totais saem
-   * daqui, não dos lembretes: confirmar um pagamento tira o lembrete da tela
-   * mas o dinheiro continua comprometido — se o total caísse junto, o
-   * orçamento diário daria um salto na hora do "marcar como paga".
+   * Toda ocorrência de despesa fixa e toda fatura do período, pagas ou não. Os
+   * totais saem daqui, não dos lembretes: confirmar um pagamento tira o
+   * lembrete da tela mas o dinheiro continua comprometido — se o total caísse
+   * junto, o orçamento diário daria um salto na hora do "marcar como paga".
    */
-  const fixedExpenseOccurrences = standaloneFixedExpenses.flatMap((exp) => {
-    if (exp.dueDay == null) return [];
-    return occurrencesInRange(exp.dueDay, periodStart, periodEnd)
-      .filter((occ) => isExpenseOccurrenceValid(occ, exp))
-      .map((dueDate) => ({
-        expenseId: exp.id,
-        dueDate,
-        estimate: exp.amount,
-        payment: findExpensePayment(expensePayments, { fixedExpenseId: exp.id }, dueDate),
-      }));
-  });
-
-  const fixedExpenseReminders: FixedExpenseReminder[] = fixedExpenseOccurrences
-    .filter((occ) => !occ.payment)
-    .map((occ) => ({ expenseId: occ.expenseId, dueDate: occ.dueDate, amount: occ.estimate }));
+  const { fixedExpenseOccurrences, cardBills } = obligationsInRange(input, periodStart, periodEnd);
 
   const fixedExpenseTotal = fixedExpenseOccurrences.reduce(
     (sum, occ) => sum + (occ.payment ? occ.payment.amount : occ.estimate),
     0,
   );
-
-  const cardBills = getCardBillsInPeriod(
-    creditCards,
-    cardPurchases,
-    periodStart,
-    periodEnd,
-    cardFixedExpenses,
-    billEstimates,
-  );
-  const cardBillPayments = cardBills.map((bill) =>
-    findExpensePayment(expensePayments, { cardId: bill.cardId }, bill.dueDate),
-  );
-
-  const cardBillReminders = cardBills.filter((_, i) => !cardBillPayments[i]);
   const cardBillTotal = cardBills.reduce(
-    (sum, bill, i) => sum + (cardBillPayments[i]?.amount ?? bill.amount),
+    (sum, bill) => sum + (bill.payment?.amount ?? bill.amount),
     0,
   );
 
-  const transactionTotal = transactions
-    .filter((t) => {
-      const day = storedDay(t.date).getTime();
-      return day >= periodStart.getTime() && day < periodEnd.getTime();
-    })
-    .reduce((sum, t) => sum + t.amount, 0);
+  /**
+   * O que venceu no período anterior e segue sem pagamento. Sem isto a conta
+   * sumia da tela no dia em que o período virava, como se tivesse sido paga.
+   * Olha um período para trás, não a história inteira: é o mesmo limite de
+   * "o mês anterior" que o resto do encadeamento usa, e uma conta de meses
+   * atrás que nunca foi marcada quase certamente foi paga e esquecida.
+   */
+  const previous = getPeriodBounds(incomes, addDaysLocal(periodStart, -1), incomeReceipts);
+  const overdue =
+    previous.periodEnd.getTime() === periodStart.getTime()
+      ? obligationsInRange(input, previous.periodStart, previous.periodEnd)
+      : { fixedExpenseOccurrences: [], cardBills: [] };
 
-  const periodBalance = incomeTotal - fixedExpenseTotal - cardBillTotal - transactionTotal;
+  const fixedExpenseReminders: FixedExpenseReminder[] = [
+    ...overdue.fixedExpenseOccurrences
+      .filter((occ) => !occ.payment)
+      .map((occ) => ({
+        expenseId: occ.expenseId,
+        dueDate: occ.dueDate,
+        amount: occ.estimate,
+        overdue: true,
+      })),
+    ...fixedExpenseOccurrences
+      .filter((occ) => !occ.payment)
+      .map((occ) => ({ expenseId: occ.expenseId, dueDate: occ.dueDate, amount: occ.estimate })),
+  ];
+
+  const cardBillReminders: CardBillReminder[] = [
+    ...overdue.cardBills
+      .filter((bill) => !bill.payment)
+      .map((bill) => ({
+        cardId: bill.cardId,
+        dueDate: bill.dueDate,
+        amount: bill.amount,
+        overdue: true,
+      })),
+    ...cardBills
+      .filter((bill) => !bill.payment)
+      .map((bill) => ({ cardId: bill.cardId, dueDate: bill.dueDate, amount: bill.amount })),
+  ];
+
+  const periodTransactions = transactions.filter(
+    (t) => !t.fromPeriodClose && inPeriod(storedDay(t.date)),
+  );
+  const transactionTotal = periodTransactions.reduce((sum, t) => sum + t.amount, 0);
+
+  const jarDepositTotal = jarDeposits
+    .filter((d) => inPeriod(startOfDay(d.date)))
+    .reduce((sum, d) => sum + d.amount, 0);
+
+  const periodResult =
+    incomeTotal - fixedExpenseTotal - cardBillTotal - transactionTotal - jarDepositTotal;
+
+  let periodBalance: number;
+  let openingSource: OpeningSource;
+  if (accountBalance != null) {
+    /**
+     * O banco já contém tudo o que aconteceu até hoje. Falta só o que ainda
+     * não aconteceu: contas do período sem pagamento (e as vencidas do anterior,
+     * que também não saíram), lançamentos com data futura e recebimentos
+     * confirmados para um dia que ainda não chegou.
+     */
+    const pendingOut =
+      fixedExpenseReminders.reduce((sum, r) => sum + r.amount, 0) +
+      cardBillReminders.reduce((sum, r) => sum + r.amount, 0) +
+      periodTransactions
+        .filter((t) => storedDay(t.date).getTime() > todayStart.getTime())
+        .reduce((sum, t) => sum + t.amount, 0);
+    const pendingIn = periodReceipts
+      .filter((r) => storedDay(r.occurrenceDate).getTime() > todayStart.getTime())
+      .reduce((sum, r) => sum + r.amount, 0);
+
+    periodBalance = accountBalance - pendingOut + pendingIn;
+    openingSource = "account";
+  } else {
+    periodBalance = historyOpening + periodResult;
+    openingSource = "history";
+  }
+
   const daysRemaining = Math.max(1, diffCalendarDays(periodEnd, today));
-  const dailyAvailable = periodBalance / daysRemaining;
 
   return {
     periodStart,
     periodEnd,
     daysRemaining,
+    // Com saldo em conta, a herança é o que sobra quando se tira do saldo final
+    // o que o próprio período movimentou — o dinheiro que já estava lá antes.
+    openingBalance: periodBalance - periodResult,
+    openingSource,
     incomeTotal,
     fixedExpenseTotal,
     cardBillTotal,
     transactionTotal,
+    jarDepositTotal,
+    periodResult,
     periodBalance,
-    dailyAvailable,
+    dailyAvailable: periodBalance / daysRemaining,
     cardBillReminders,
     fixedExpenseReminders,
     incomeReminders,
   };
+}
+
+/**
+ * O orçamento do período corrente. Sem `accountBalance` nem `openingBalance`,
+ * o período abre do zero — é o que os testes antigos e os cálculos de um
+ * período isolado querem. Quem mostra o orçamento de verdade passa por
+ * `calculateCurrentBudget` (src/lib/carry-over.ts), que resolve a herança.
+ */
+export function calculateDailyBudget(
+  input: BudgetInput & { accountBalance?: number | null; openingBalance?: number },
+): PeriodBudget {
+  const { periodStart, periodEnd } = getPeriodBounds(
+    input.incomes,
+    input.today,
+    input.incomeReceipts,
+  );
+  return budgetForBounds({ ...input, periodStart, periodEnd });
+}
+
+function addDaysLocal(date: Date, days: number): Date {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
 }
 
 /**

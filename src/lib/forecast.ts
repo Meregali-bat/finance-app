@@ -8,11 +8,17 @@
  * Nada aqui é estimativa de gasto variável: um número chutado passaria por
  * previsão sem ser uma.
  *
+ * Cada ciclo abre com o saldo com que o anterior fechou. O primeiro abre com a
+ * herança que `calculateCurrentBudget` (carry-over.ts) resolveu para o período
+ * corrente — a mesma que a Início usa —, então o período 0 daqui e o "Saldo do
+ * período" de lá são o mesmo número.
+ *
  * Como em `period.ts`, tudo é função pura sobre entradas simples, com `today`
  * injetado, para poder ser testado sem banco.
  */
 
 import {
+  boundingIncomes,
   buildCardBills,
   findExpensePayment,
   getNextPeriodBounds,
@@ -28,6 +34,7 @@ import {
   type FixedExpenseInput,
   type IncomeInput,
   type IncomeReceiptInput,
+  type JarDepositInput,
   type TransactionInput,
 } from "./period";
 
@@ -41,7 +48,7 @@ export type ForecastFixedExpenseInput = FixedExpenseInput & { label: string };
 export type ForecastCreditCardInput = CreditCardInput & { name: string };
 export type ForecastTransactionInput = TransactionInput & { id: string; description: string };
 
-export type ForecastEntryKind = "income" | "fixedExpense" | "cardBill" | "scheduled";
+export type ForecastEntryKind = "income" | "fixedExpense" | "cardBill" | "scheduled" | "jar";
 
 export interface ForecastEntry {
   kind: ForecastEntryKind;
@@ -55,6 +62,12 @@ export interface ForecastEntry {
   confirmed: boolean;
   /** Só em `cardBill`: o ciclo ainda não fechou, então o valor pode crescer. */
   partial?: boolean;
+  /**
+   * Só em `income`: o dia do pagamento já passou e o recebimento não foi
+   * confirmado. A linha aparece, mas fica fora dos totais — a mesma regra do
+   * orçamento da Início, que não conta salário que ninguém disse ter chegado.
+   */
+  awaiting?: boolean;
 }
 
 export interface PeriodForecast {
@@ -64,10 +77,24 @@ export interface PeriodForecast {
   /** Exclusivo: o primeiro dia fora do período. */
   periodEnd: Date;
   totalDays: number;
+  /** Dias até o fim contando hoje, no corrente; o ciclo inteiro, nos futuros. */
+  daysLeft: number;
+  /** O saldo com que o período abre: o fechamento do anterior. */
+  openingBalance: number;
   incomeTotal: number;
+  /**
+   * A renda que o ciclo deveria ter, contando a que ainda aguarda confirmação.
+   * É a base do comprometimento, que mede o peso das contas sobre a renda e
+   * não pode dobrar só porque o salário de hoje ainda não foi marcado.
+   */
+  expectedIncomeTotal: number;
   fixedExpenseTotal: number;
   cardBillTotal: number;
   scheduledTotal: number;
+  jarTotal: number;
+  /** Só o que acontece no período: entradas menos saídas, sem a herança. */
+  periodResult: number;
+  /** O saldo com que o período fecha: `openingBalance + periodResult`. */
   balance: number;
   dailyAvailable: number;
   entries: ForecastEntry[];
@@ -82,6 +109,12 @@ export interface ForecastInput {
   billEstimates?: CardBillEstimateInput[];
   expensePayments?: ExpensePaymentInput[];
   transactions: ForecastTransactionInput[];
+  jarDeposits?: JarDepositInput[];
+  /**
+   * O saldo com que o período corrente abre — `openingBalance` do orçamento
+   * que `calculateCurrentBudget` devolve. Ausente, ele abre do zero.
+   */
+  openingBalance?: number;
   today: Date;
 }
 
@@ -133,6 +166,7 @@ function forecastOnePeriod(
   periodStart: Date,
   periodEnd: Date,
   offset: number,
+  openingBalance: number,
 ): PeriodForecast {
   const {
     incomes,
@@ -143,30 +177,51 @@ function forecastOnePeriod(
     billEstimates = [],
     expensePayments = [],
     transactions,
+    jarDeposits = [],
     today,
   } = input;
 
+  const todayStart = startOfDay(today);
+  const inPeriod = (day: Date) =>
+    day.getTime() >= periodStart.getTime() && day.getTime() < periodEnd.getTime();
+
   /**
-   * A renda projetada é a cadastrada, e não a confirmada. `calculateDailyBudget`
-   * conta só o que já entrou — regra certa para o orçamento de hoje, que não
-   * pode inflar com dinheiro que ainda não chegou, e errada para uma previsão,
-   * onde ela zeraria toda a receita futura. Quando o recebimento existe (o que
-   * só acontece no período corrente), o valor real prevalece sobre a estimativa.
+   * A renda tem duas origens, e as duas regras são as do orçamento da Início.
+   *
+   * O que já foi confirmado entra pelo valor que caiu, seja de qual renda for —
+   * inclusive de uma desligada depois, ou de um pagamento anterior ao cadastro:
+   * é dinheiro que entrou.
+   *
+   * O que não foi confirmado só entra se ainda vai acontecer. Um dia de
+   * pagamento que já passou sem confirmação aparece como aguardando, mas fica
+   * fora da conta: é o que impede este período de prometer um dinheiro que a
+   * Início, com razão, ainda não conta.
    */
-  const incomeEntries: ForecastEntry[] = incomes.flatMap((income) =>
+  const incomeLabel = new Map(incomes.map((income) => [income.id, income.label]));
+  const receiptEntries: ForecastEntry[] = incomeReceipts
+    .filter((receipt) => inPeriod(storedDay(receipt.occurrenceDate)))
+    .map((receipt) => ({
+      kind: "income" as const,
+      sourceId: receipt.incomeId,
+      label: incomeLabel.get(receipt.incomeId) ?? "Receita",
+      date: storedDay(receipt.occurrenceDate),
+      amount: receipt.amount,
+      confirmed: true,
+    }));
+
+  const projectedIncomeEntries: ForecastEntry[] = boundingIncomes(incomes).flatMap((income) =>
     occurrencesInRange(income.dayOfMonth, periodStart, periodEnd)
       .filter((occurrence) => isOccurrenceValid(occurrence, income.createdAt))
-      .map((occurrence) => {
-        const receipt = findIncomeReceipt(incomeReceipts, income.id, occurrence);
-        return {
-          kind: "income" as const,
-          sourceId: income.id,
-          label: income.label,
-          date: occurrence,
-          amount: receipt ? receipt.amount : income.amount,
-          confirmed: receipt !== undefined,
-        };
-      }),
+      .filter((occurrence) => !findIncomeReceipt(incomeReceipts, income.id, occurrence))
+      .map((occurrence) => ({
+        kind: "income" as const,
+        sourceId: income.id,
+        label: income.label,
+        date: occurrence,
+        amount: income.amount,
+        confirmed: false,
+        ...(occurrence.getTime() <= todayStart.getTime() ? { awaiting: true } : {}),
+      })),
   );
 
   // A despesa ligada a cartão não vira linha própria: ela já está dentro da
@@ -190,8 +245,6 @@ function forecastOnePeriod(
         };
       });
   });
-
-  const todayStart = startOfDay(today);
 
   /**
    * A fatura vem inteira de `buildCardBills`, a fonte única do "quanto é a
@@ -231,12 +284,13 @@ function forecastOnePeriod(
    * Movimentação já lançada com data dentro do período. Receita fica gravada
    * com valor negativo, então ela entra como renda com o sinal invertido — a
    * mesma leitura que `report-totals.ts` faz do histórico.
+   *
+   * As linhas do fechamento antigo ficam de fora: eram a sobra do período
+   * anterior devolvida à mão, e agora ela chega pelo `openingBalance`.
    */
   const scheduledEntries: ForecastEntry[] = transactions
-    .filter((transaction) => {
-      const day = storedDay(transaction.date).getTime();
-      return day >= periodStart.getTime() && day < periodEnd.getTime();
-    })
+    .filter((transaction) => !transaction.fromPeriodClose)
+    .filter((transaction) => inPeriod(storedDay(transaction.date)))
     .map((transaction) => ({
       kind: transaction.amount < 0 ? ("income" as const) : ("scheduled" as const),
       sourceId: transaction.id,
@@ -246,35 +300,64 @@ function forecastOnePeriod(
       confirmed: true,
     }));
 
+  const jarEntries: ForecastEntry[] = jarDeposits
+    .filter((deposit) => inPeriod(startOfDay(deposit.date)))
+    .map((deposit, index) => ({
+      kind: "jar" as const,
+      sourceId: `jar-${index}`,
+      label: "Guardado em caixinha",
+      date: startOfDay(deposit.date),
+      amount: deposit.amount,
+      confirmed: true,
+    }));
+
   const entries = [
-    ...incomeEntries,
+    ...receiptEntries,
+    ...projectedIncomeEntries,
     ...fixedExpenseEntries,
     ...cardBillEntries,
     ...scheduledEntries,
+    ...jarEntries,
   ].sort((a, b) => a.date.getTime() - b.date.getTime());
 
   const sumOf = (kind: ForecastEntryKind) =>
-    entries.filter((entry) => entry.kind === kind).reduce((sum, entry) => sum + entry.amount, 0);
+    entries
+      .filter((entry) => entry.kind === kind && !entry.awaiting)
+      .reduce((sum, entry) => sum + entry.amount, 0);
 
   const incomeTotal = sumOf("income");
+  const expectedIncomeTotal = entries
+    .filter((entry) => entry.kind === "income")
+    .reduce((sum, entry) => sum + entry.amount, 0);
   const fixedExpenseTotal = sumOf("fixedExpense");
   const cardBillTotal = sumOf("cardBill");
   const scheduledTotal = sumOf("scheduled");
+  const jarTotal = sumOf("jar");
 
-  const balance = incomeTotal - fixedExpenseTotal - cardBillTotal - scheduledTotal;
+  const periodResult =
+    incomeTotal - fixedExpenseTotal - cardBillTotal - scheduledTotal - jarTotal;
+  const balance = openingBalance + periodResult;
   const totalDays = diffCalendarDays(periodEnd, periodStart);
+  // No corrente, o dinheiro que resta tem de durar só os dias que faltam —
+  // a mesma divisão que a Início faz para o "pode gastar hoje".
+  const daysLeft = offset === 0 ? Math.max(1, diffCalendarDays(periodEnd, today)) : totalDays;
 
   return {
     offset,
     periodStart,
     periodEnd,
     totalDays,
+    daysLeft,
+    openingBalance,
     incomeTotal,
+    expectedIncomeTotal,
     fixedExpenseTotal,
     cardBillTotal,
     scheduledTotal,
+    jarTotal,
+    periodResult,
     balance,
-    dailyAvailable: totalDays > 0 ? balance / totalDays : 0,
+    dailyAvailable: daysLeft > 0 ? balance / daysLeft : 0,
     entries,
   };
 }
@@ -289,6 +372,9 @@ function forecastOnePeriod(
  * precisa alcançar a última parcela, que pode estar mais longe. O padrão
  * mantém o comportamento da tela intacto.
  *
+ * Cada ciclo abre com o fechamento do anterior, e o primeiro com
+ * `input.openingBalance`.
+ *
  * Sem nenhuma renda ativa não há de onde tirar um ciclo — `getPeriodBounds`
  * degenera num período de um dia que não avança — e a resposta honesta é uma
  * lista vazia, que a tela traduz num convite a cadastrar a primeira renda.
@@ -296,14 +382,19 @@ function forecastOnePeriod(
 export function forecastPeriods(
   input: ForecastInput & { count: number; maxOffset?: number },
 ): PeriodForecast[] {
-  if (input.incomes.length === 0) return [];
+  if (boundingIncomes(input.incomes).length === 0) return [];
 
   const count = Math.min(Math.max(0, input.count), input.maxOffset ?? MAX_FORECAST_OFFSET);
   const forecasts: PeriodForecast[] = [];
 
   let bounds = getPeriodBounds(input.incomes, input.today, input.incomeReceipts);
+  let opening = input.openingBalance ?? 0;
   for (let offset = 0; offset <= count; offset++) {
-    forecasts.push(forecastOnePeriod(input, bounds.periodStart, bounds.periodEnd, offset));
+    const period = forecastOnePeriod(input, bounds.periodStart, bounds.periodEnd, offset, opening);
+    forecasts.push(period);
+    // O fechamento de um ciclo é a abertura do seguinte — inclusive quando ele
+    // fecha no vermelho: o que faltou num mês não some no outro.
+    opening = period.balance;
     bounds = getNextPeriodBounds(input.incomes, bounds.periodEnd, input.incomeReceipts);
   }
 
