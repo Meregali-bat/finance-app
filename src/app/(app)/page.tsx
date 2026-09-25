@@ -180,6 +180,7 @@ export default async function DashboardPage() {
       amount: bill.amount,
       dueDate: bill.dueDate,
       payAction: markCardBillPaid.bind(null, bill.cardId),
+      cards: undefined,
     })),
     ...budget.fixedExpenseReminders.map((exp) => ({
       kind: "due" as const,
@@ -188,6 +189,7 @@ export default async function DashboardPage() {
       amount: exp.amount,
       dueDate: exp.dueDate,
       payAction: markFixedExpensePaid.bind(null, exp.expenseId),
+      cards: cardOptions,
     })),
     ...budget.incomeReminders.map((inc) => ({
       kind: "income" as const,
@@ -343,6 +345,7 @@ export default async function DashboardPage() {
                         ) : (
                           <ConfirmPaymentDialog
                             action={reminder.payAction}
+                            cards={reminder.cards}
                             label={reminder.label}
                             dueDate={reminder.dueDate}
                             amount={reminder.amount}

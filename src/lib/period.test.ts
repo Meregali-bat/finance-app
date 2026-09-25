@@ -1064,6 +1064,25 @@ describe("calculateDailyBudget com pagamentos confirmados", () => {
     expect(paid.cardBillTotal).toBe(unpaid.cardBillTotal);
   });
 
+  it("conta uma vez só a despesa fixa paga no cartão", () => {
+    // Pago no cartão, o valor mora na compra e o pagamento grava 0 — ver
+    // markFixedExpensePaid. Com o valor nos dois, o orçamento cobraria dobrado.
+    const input = {
+      ...baseInput,
+      fixedExpenses: [{ id: "e1", amount: 500, dueDay: 20 }],
+      creditCards: [{ id: "c1", closingDay: 28, dueDay: 8 }],
+      today: new Date(2026, 0, 6),
+    };
+    const unpaid = calculateDailyBudget(input);
+    const onCard = calculateDailyBudget({
+      ...input,
+      cardPurchases: [{ cardId: "c1", amount: 500, date: new Date(2025, 11, 20) }],
+      expensePayments: [{ fixedExpenseId: "e1", dueDate: new Date(2026, 0, 20), amount: 0 }],
+    });
+    expect(onCard.fixedExpenseReminders).toEqual([]);
+    expect(onCard.periodBalance).toBe(unpaid.periodBalance);
+  });
+
   it("não deixa o pagamento de uma despesa fixa quitar a fatura de um cartão de mesmo id", () => {
     // fixedExpenseId e cardId vivem em espaços de id diferentes; casar só por
     // data quitaria a coisa errada.

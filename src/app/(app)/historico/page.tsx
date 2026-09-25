@@ -41,8 +41,9 @@ export default async function HistoryPage({
     }),
     // Agrupado pela data em que foi pago, não pelo vencimento: pagar antes do
     // vencimento faz o registro cair no mês em que o dinheiro de fato saiu.
+    // Sem os pagos no cartão: valem 0, e quem mostra o gasto é a compra.
     prisma.expensePayment.findMany({
-      where: { userId, paidAt: { gte: rangeStart, lt: rangeEnd } },
+      where: { userId, cardPurchaseId: null, paidAt: { gte: rangeStart, lt: rangeEnd } },
       include: {
         fixedExpense: {
           select: { label: true, category: { select: { id: true, name: true } } },
