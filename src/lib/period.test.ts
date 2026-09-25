@@ -12,6 +12,7 @@ import {
   buildCardBillSeries,
   cardBillFixedExpenses,
   fallsOnDay,
+  isExpenseOccurrenceValid,
   type CardBill,
 } from "./period";
 
@@ -1035,8 +1036,8 @@ describe("calculateDailyBudget com pagamentos confirmados", () => {
       // Pagamento do vencimento de dezembro, não o de janeiro.
       expensePayments: [{ fixedExpenseId: "e1", dueDate: new Date(2025, 11, 20), amount: 500 }],
     });
-    expect(budget.fixedExpenseReminders).toHaveLength(1);
-    expect(budget.fixedExpenseReminders[0].dueDate).toEqual(new Date(2026, 0, 20));
+    expect(current(budget.fixedExpenseReminders)).toHaveLength(1);
+    expect(current(budget.fixedExpenseReminders)[0].dueDate).toEqual(new Date(2026, 0, 20));
   });
 
   it("ignora a hora do dia ao casar o pagamento com a ocorrência", () => {
@@ -1409,9 +1410,41 @@ describe("calculateDailyBudget — contas vencidas do período anterior", () => 
     expect(budget.cardBillReminders).toEqual([]);
   });
 
-  it("não olha mais de um período para trás", () => {
-    const budget = calculateDailyBudget({ ...base, today: new Date(2026, 9, 10) });
+  it("olha três meses para trás, como a tela do cartão", () => {
+    // Em 10/nov, a fatura de 28/ago ainda está dentro dos três meses.
+    const budget = calculateDailyBudget({ ...base, today: new Date(2026, 10, 10) });
+
+    expect(budget.cardBillReminders).toEqual([
+      { cardId: "c1", dueDate: new Date(2026, 7, 28), amount: 400, overdue: true },
+    ]);
+  });
+
+  it("não olha mais de três meses para trás", () => {
+    const budget = calculateDailyBudget({ ...base, today: new Date(2026, 11, 10) });
 
     expect(budget.cardBillReminders).toEqual([]);
+  });
+});
+
+describe("isExpenseOccurrenceValid — pausas", () => {
+  const pauses = [{ start: new Date(2026, 6, 15), end: new Date(2026, 8, 3) }];
+
+  it("não cobra a ocorrência de dentro da pausa", () => {
+    expect(isExpenseOccurrenceValid(new Date(2026, 7, 10), { pauses })).toBe(false);
+  });
+
+  it("cobra as de antes e as de depois, mesmo com a pausa já encerrada", () => {
+    expect(isExpenseOccurrenceValid(new Date(2026, 6, 10), { pauses })).toBe(true);
+    expect(isExpenseOccurrenceValid(new Date(2026, 8, 10), { pauses })).toBe(true);
+  });
+
+  it("cobra o dia em que foi pausada e o dia em que voltou", () => {
+    expect(isExpenseOccurrenceValid(new Date(2026, 6, 15), { pauses })).toBe(true);
+    expect(isExpenseOccurrenceValid(new Date(2026, 8, 3), { pauses })).toBe(true);
+  });
+
+  it("não cobra nada depois de uma pausa ainda aberta", () => {
+    const open = [{ start: new Date(2026, 6, 15) }];
+    expect(isExpenseOccurrenceValid(new Date(2027, 0, 10), { pauses: open })).toBe(false);
   });
 });

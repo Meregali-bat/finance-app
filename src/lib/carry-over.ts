@@ -18,7 +18,6 @@
  */
 
 import {
-  boundingIncomes,
   budgetForBounds,
   getPeriodBounds,
   getPeriodBoundsDetailed,
@@ -42,9 +41,14 @@ function addDays(date: Date, days: number): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
 }
 
-/** O primeiro dia que o app acompanhou: o cadastro da renda mais antiga. */
+/**
+ * O primeiro dia que o app acompanhou: o cadastro da renda mais antiga —
+ * inclusive uma desligada ou apagada. Quem troca de emprego desliga a renda
+ * antiga e cadastra a nova, e contar só as ativas cortaria da corrente todos
+ * os meses pagos pela antiga.
+ */
 function trackingStart(input: BudgetInput): Date | null {
-  const created = boundingIncomes(input.incomes)
+  const created = input.incomes
     .map((income) => income.createdAt)
     .filter((date): date is Date => date !== undefined)
     .map((date) => startOfDay(date).getTime());

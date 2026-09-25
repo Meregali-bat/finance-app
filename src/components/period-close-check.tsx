@@ -9,7 +9,7 @@ export async function PeriodCloseCheck() {
 
   const userId = await requireUserId();
   const jars = await prisma.jar.findMany({
-    where: { userId },
+    where: { userId, deletedAt: null },
     orderBy: { createdAt: "asc" },
     select: { id: true, name: true },
   });

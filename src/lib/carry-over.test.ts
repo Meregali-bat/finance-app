@@ -203,7 +203,10 @@ describe("calculateCurrentBudget", () => {
         fixedExpenses: [
           { id: "aluguel", amount: 2000, dueDay: 10, createdAt: new Date(2026, 6, 1) },
         ],
-        expensePayments: [{ fixedExpenseId: "aluguel", dueDate: day(2026, 8, 10), amount: 2000 }],
+        expensePayments: [
+          { fixedExpenseId: "aluguel", dueDate: day(2026, 6, 10), amount: 2000 },
+          { fixedExpenseId: "aluguel", dueDate: day(2026, 8, 10), amount: 2000 },
+        ],
       }),
       accountBalance: 5000,
     });
@@ -310,5 +313,28 @@ describe("previousPeriodLeftover — o que o fechamento oferece guardar", () => 
     const budget = calculateCurrentBudget(scenario);
 
     expect(previousPeriodLeftover(scenario, budget)).toBe(0);
+  });
+});
+
+describe("troca de renda", () => {
+  it("não corta da corrente os meses pagos por uma renda desligada", () => {
+    // O emprego antigo pagou julho e agosto e foi desligado; o novo, dia 10,
+    // foi cadastrado em 01/set. Os 10.000 de antes continuam na herança.
+    const opening = historyOpeningBalance(
+      input({
+        incomes: [
+          { id: "antigo", amount: 5000, dayOfMonth: 5, createdAt: new Date(2026, 6, 1), active: false },
+          { id: "novo", amount: 6000, dayOfMonth: 10, createdAt: new Date(2026, 8, 1) },
+        ],
+        incomeReceipts: [
+          { incomeId: "antigo", occurrenceDate: day(2026, 6, 5), amount: 5000 },
+          { incomeId: "antigo", occurrenceDate: day(2026, 7, 5), amount: 5000 },
+        ],
+        today: new Date(2026, 9, 12),
+      }),
+      new Date(2026, 9, 10),
+    );
+
+    expect(opening).toBe(10000);
   });
 });

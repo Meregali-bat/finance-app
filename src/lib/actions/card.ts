@@ -54,11 +54,33 @@ export async function updateCreditCard(id: string, formData: FormData) {
   revalidatePath("/");
 }
 
+/**
+ * Apagar esconde o cartão, mas mantém compras, pagamentos e previsões: são
+ * gastos que aconteceram, e as parcelas que faltam continuam devidas — elas
+ * seguem aparecendo nos lembretes e na previsão.
+ *
+ * Uma assinatura ainda ativa no cartão bloqueia: ela seguiria sendo cobrada
+ * num cartão que não aparece mais em lugar nenhum, e antes simplesmente
+ * sumia sem aviso.
+ */
 export async function deleteCreditCard(id: string) {
   const userId = await requireUserId();
-  await prisma.creditCard.delete({ where: { id, userId } });
+  const subscriptions = await prisma.fixedExpense.count({
+    where: { cardId: id, userId, endedAt: null, deletedAt: null },
+  });
+  if (subscriptions > 0) {
+    throw new Error(
+      "Este cartão ainda tem despesas fixas cobradas nele. Mude o cartão delas ou apague-as antes.",
+    );
+  }
+  await prisma.creditCard.update({
+    where: { id, userId },
+    data: { active: false, deletedAt: new Date() },
+  });
   revalidatePath("/cartoes");
   revalidatePath("/");
+  revalidatePath("/historico");
+  revalidatePath("/previsao");
 }
 
 const purchaseSchema = z.object({

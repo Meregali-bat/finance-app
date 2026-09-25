@@ -77,6 +77,14 @@ O saldo informado já contém a sobra ou a falta de todos os meses anteriores; s
 
 Isso revoga o "lançamento esquecido entra" do spec do saldo em conta (2026-09-11): decisão do usuário em 25/09 — se o movimento já tinha acontecido quando o saldo foi informado, ele faz parte do ajuste.
 
-## Fora de escopo
+## Demais itens da auditoria (25/09)
 
-Os demais itens da auditoria de 25/09: exclusão definitiva de renda/cartão/caixinha, Histórico por competência vs. caixa, previsões manuais de fatura fora do Histórico, datas gravadas como instante.
+- **Contas vencidas:** Início, Previsão e tela do cartão olham o mesmo prazo, `LIMIT_LOOKBACK_MONTHS` (3 meses). Intervalos longos são somados mês a mês.
+- **Assinaturas no cartão:** as telas de cartão carregam todas as despesas com as datas delas, em vez de filtrar por `active`.
+- **Pausa:** cada pausa é uma linha em `FixedExpensePause`. Reativar fecha o intervalo sem apagá-lo, e os meses pausados continuam sem cobrança. `FixedExpense.endedAt` fica só para o encerramento definitivo. A migration converte as pausas antigas.
+- **Apagar renda, cartão ou caixinha** só marca `deletedAt`; recebimentos, compras, pagamentos e depósitos continuam valendo. Um cartão com assinatura ativa não pode ser apagado. Uma caixinha precisa estar vazia, e **Resgatar** (um depósito negativo) devolve o dinheiro ao disponível.
+- **Histórico:** o cartão entra pelas faturas que vencem no período, aberta cada uma em parcelas, assinaturas, previsões manuais e a diferença entre o previsto e o pago (`src/lib/history-bills.ts`). As linhas de uma fatura somam o que ela cobrou. Caixinhas aparecem e saem do saldo do mês ("Guardado").
+- **Fuso:** `src/instrumentation.ts` põe o processo em `APP_TIME_ZONE` (padrão `America/Sao_Paulo`); o "hoje" do servidor deixa de virar às 21h.
+- **Troca de renda:** a corrente começa na renda mais antiga, inclusive desligada ou apagada.
+
+Fica como está, de propósito: os depósitos antigos do fechamento (`fromPeriodClose`) seguem fora do saldo em conta. As leituras de saldo que o usuário fez depois deles já os contaram assim, e mudar a regra agora falsificaria essas leituras.

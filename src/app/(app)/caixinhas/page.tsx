@@ -12,7 +12,10 @@ import { deleteJar } from "@/lib/actions/jar";
 
 export default async function JarsPage() {
   const userId = await requireUserId();
-  const jars = await prisma.jar.findMany({ where: { userId }, orderBy: { createdAt: "asc" } });
+  const jars = await prisma.jar.findMany({
+    where: { userId, deletedAt: null },
+    orderBy: { createdAt: "asc" },
+  });
 
   return (
     <div className="flex flex-col gap-6">
@@ -38,13 +41,18 @@ export default async function JarsPage() {
                   </div>
                   <DeleteIconButton
                     action={deleteJar.bind(null, jar.id)}
-                    confirmMessage={`Excluir a caixinha "${jar.name}"? O saldo guardado será perdido do histórico.`}
+                    confirmMessage={`Excluir a caixinha "${jar.name}"? Os depósitos continuam no Histórico.`}
                   />
                 </div>
                 <p className="font-heading text-2xl leading-tight font-semibold tracking-[-0.02em] tabular-nums">
                   {formatCurrency(Number(jar.balance))}
                 </p>
-                <JarDepositDialog jarId={jar.id} jarName={jar.name} />
+                <div className="flex flex-wrap gap-2">
+                  <JarDepositDialog jarId={jar.id} jarName={jar.name} />
+                  {Number(jar.balance) > 0 && (
+                    <JarDepositDialog jarId={jar.id} jarName={jar.name} mode="withdraw" />
+                  )}
+                </div>
               </CardContent>
             </Card>
           ))}

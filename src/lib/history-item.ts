@@ -16,6 +16,16 @@ export type HistoryItem = {
      * "Por categoria" e o dinheiro saía sem aparecer em lugar nenhum.
      */
     | "cardFixedExpense"
+    /** Um valor lançado à mão na fatura (anuidade, IOF). Editado na tela do cartão. */
+    | "cardEstimate"
+    /**
+     * A diferença entre o que a fatura previa e o que foi pago: juros, uma
+     * compra não lançada, um estorno. Sem ela, o que o Histórico soma de um
+     * cartão não bateria com o que saiu da conta.
+     */
+    | "cardBillAdjustment"
+    /** Guardado numa caixinha (positivo) ou resgatado dela (negativo). */
+    | "jarDeposit"
     | "incomeReceipt";
   description: string;
   /** Assinado: receita é negativa, como está no banco. */
@@ -30,14 +40,17 @@ export type HistoryItem = {
   categoryId: string | null;
   cardId?: string;
   cardName?: string;
-  /**
-   * Em quantas parcelas a compra foi dividida, quando kind === "card".
-   *
-   * O Histórico mostra o TOTAL da compra no mês em que ela foi feita, porque é
-   * isso que aconteceu. Sem este número para render um "12x de R$ 100,00", o
-   * total se leria como "saiu tudo isso este mês".
-   */
+  /** Em quantas parcelas a compra foi dividida, quando kind === "card". */
   installments?: number;
+  /**
+   * Quando kind === "card", o item é uma parcela: `amount` é o valor dela e
+   * `date` é o vencimento da fatura que a cobra — o mesmo mês em que o
+   * orçamento a conta. Estes campos guardam a compra inteira, que é o que o
+   * formulário de edição altera.
+   */
+  installmentNumber?: number;
+  purchaseAmount?: number;
+  purchaseDate?: Date;
   /** Presente quando kind === "incomeReceipt": a receita fixa que foi confirmada. */
   incomeId?: string;
 };
@@ -62,7 +75,8 @@ export type MovementValues = {
 
 /** Ids colidem entre tabelas, então a chave de lista precisa do kind junto. */
 export function historyItemKey(item: HistoryItem) {
-  return `${item.kind}-${item.id}`;
+  // Duas parcelas da mesma compra podem cair no mesmo intervalo.
+  return `${item.kind}-${item.id}${item.installmentNumber ? `-${item.installmentNumber}` : ""}`;
 }
 
 export function toMovementValues(item: HistoryItem): MovementValues {
@@ -70,8 +84,9 @@ export function toMovementValues(item: HistoryItem): MovementValues {
     id: item.id,
     kind: item.kind === "card" ? "card" : "transaction",
     description: item.description,
-    amount: Math.abs(item.amount),
-    date: dateOnlyInputValue(item.date),
+    // Uma parcela se edita como a compra inteira: é ela que está no banco.
+    amount: item.purchaseAmount ?? Math.abs(item.amount),
+    date: dateOnlyInputValue(item.purchaseDate ?? item.date),
     type: item.amount < 0 ? "income" : "expense",
     categoryId: item.categoryId,
     cardId: item.cardId,

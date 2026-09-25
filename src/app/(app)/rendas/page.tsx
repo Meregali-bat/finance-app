@@ -18,13 +18,13 @@ export default async function FixedPage() {
   const userId = await requireUserId();
 
   const [incomes, expenses, creditCards, categories] = await Promise.all([
-    prisma.income.findMany({ where: { userId }, orderBy: { dayOfMonth: "asc" } }),
+    prisma.income.findMany({ where: { userId, deletedAt: null }, orderBy: { dayOfMonth: "asc" } }),
     // As apagadas ficam no banco para o Histórico, mas não na lista.
     prisma.fixedExpense.findMany({
       where: { userId, deletedAt: null },
       orderBy: { dueDay: "asc" },
     }),
-    prisma.creditCard.findMany({ where: { userId, active: true } }),
+    prisma.creditCard.findMany({ where: { userId, active: true, deletedAt: null } }),
     prisma.category.findMany({ where: { userId }, orderBy: { name: "asc" } }),
   ]);
 
@@ -85,7 +85,7 @@ export default async function FixedPage() {
                       />
                       <DeleteIconButton
                         action={deleteIncome.bind(null, income.id)}
-                        confirmMessage={`Excluir a renda "${income.label}"?`}
+                        confirmMessage={`Excluir a renda "${income.label}"? Ela deixa de ser prevista; o que ela já pagou continua no Histórico e no saldo.`}
                       />
                     </div>
                   </CardContent>

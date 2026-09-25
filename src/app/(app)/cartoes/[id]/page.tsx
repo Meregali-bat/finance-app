@@ -8,6 +8,7 @@ import {
   formatDateTime,
   installmentLabel,
 } from "@/lib/format";
+import { toFixedExpenseInput } from "@/lib/budget-inputs";
 import { buildCardBillSeries, findNextOpenBill, getCardLimitUsage } from "@/lib/period";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
@@ -32,10 +33,12 @@ export default async function CardDetailPage({
 
   const [card, categories] = await Promise.all([
     prisma.creditCard.findUnique({
-      where: { id, userId },
+      where: { id, userId, deletedAt: null },
       include: {
         purchases: { orderBy: { date: "desc" } },
-        fixedExpenses: { where: { active: true } },
+        // Todas, e não só as ativas: são as datas (cadastro, pausas, encerramento)
+        // que dizem em quais faturas a assinatura entra — a mesma regra da Início.
+        fixedExpenses: { include: { pauses: true } },
         billEstimates: { orderBy: { dueDate: "asc" } },
         payments: true,
       },
@@ -62,13 +65,7 @@ export default async function CardDetailPage({
   }));
   // As assinaturas cobradas no cartão fazem parte da fatura: sem elas esta tela
   // mostrava um número menor que o do início.
-  const cardFixedExpenses = card.fixedExpenses.map((e) => ({
-    id: e.id,
-    amount: Number(e.amount),
-    cardId: e.cardId ?? undefined,
-    createdAt: e.createdAt,
-    endedAt: e.endedAt ?? undefined,
-  }));
+  const cardFixedExpenses = card.fixedExpenses.map(toFixedExpenseInput);
   const expensePayments = card.payments.map((p) => ({
     cardId: p.cardId ?? undefined,
     dueDate: p.dueDate,
@@ -156,7 +153,7 @@ export default async function CardDetailPage({
             />
             <DeleteIconButton
               action={deleteCreditCard.bind(null, card.id)}
-              confirmMessage={`Excluir o cartão "${card.name}" e todas as suas compras?`}
+              confirmMessage={`Excluir o cartão "${card.name}"? As compras e faturas dele continuam no Histórico, e as parcelas que faltam continuam na previsão.`}
             />
           </div>
         }

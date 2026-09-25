@@ -43,6 +43,12 @@ export interface FixedExpenseInput {
    * e o Histórico perdia dinheiro que saiu. Ausente = ainda vigente.
    */
   endedAt?: Date;
+  /**
+   * Os intervalos em que a despesa ficou pausada. As ocorrências dentro de um
+   * deles não são cobradas; reativar fecha o intervalo sem apagá-lo, então os
+   * meses pausados continuam sem cobrança. `end` ausente = ainda pausada.
+   */
+  pauses?: { start: Date; end?: Date }[];
   /** When set, this expense is billed on a credit card instead of standing alone. */
   cardId?: string;
 }
@@ -333,11 +339,20 @@ export function isOccurrenceValid(occurrence: Date, createdAt: Date | undefined)
  */
 export function isExpenseOccurrenceValid(
   occurrence: Date,
-  expense: { createdAt?: Date; endedAt?: Date },
+  expense: { createdAt?: Date; endedAt?: Date; pauses?: { start: Date; end?: Date }[] },
 ): boolean {
   if (!isOccurrenceValid(occurrence, expense.createdAt)) return false;
-  if (!expense.endedAt) return true;
-  return occurrence.getTime() <= startOfDay(expense.endedAt).getTime();
+  if (expense.endedAt && occurrence.getTime() > startOfDay(expense.endedAt).getTime()) {
+    return false;
+  }
+  // Uma pausa corta só o que cai estritamente dentro dela. As duas pontas
+  // seguem as regras de cima: o dia em que foi pausada ainda é cobrado, como o
+  // do encerramento, e o dia em que voltou já é, como o do cadastro.
+  return !(expense.pauses ?? []).some(
+    (pause) =>
+      occurrence.getTime() > startOfDay(pause.start).getTime() &&
+      (!pause.end || occurrence.getTime() < startOfDay(pause.end).getTime()),
+  );
 }
 
 /**
@@ -830,7 +845,32 @@ export interface BudgetInput {
  * despesa fixa avulsa e as faturas que vencem nele, cada uma com o pagamento
  * que a quitou, se houver.
  */
-function obligationsInRange(input: BudgetInput, start: Date, end: Date) {
+function obligationsInRange(
+  input: BudgetInput,
+  start: Date,
+  end: Date,
+): {
+  fixedExpenseOccurrences: {
+    expenseId: string;
+    dueDate: Date;
+    estimate: number;
+    payment: ExpensePaymentInput | undefined;
+  }[];
+  cardBills: (CardBillReminder & { payment: ExpensePaymentInput | undefined })[];
+} {
+  // `occurrencesInRange` e `getCardBillsInPeriod` só enxergam intervalos de
+  // até uns dois meses. Um intervalo maior — as contas vencidas de três meses,
+  // o primeiro período esticado até o cadastro da renda — é somado mês a mês.
+  const monthLater = new Date(start.getFullYear(), start.getMonth() + 1, start.getDate());
+  if (monthLater.getTime() < end.getTime()) {
+    const head = obligationsInRange(input, start, monthLater);
+    const tail = obligationsInRange(input, monthLater, end);
+    return {
+      fixedExpenseOccurrences: [...head.fixedExpenseOccurrences, ...tail.fixedExpenseOccurrences],
+      cardBills: [...head.cardBills, ...tail.cardBills],
+    };
+  }
+
   const {
     fixedExpenses,
     creditCards,
@@ -957,16 +997,23 @@ export function budgetForBounds(
   );
 
   /**
-   * O que venceu no período anterior e segue sem pagamento. Sem isto a conta
+   * O que venceu antes do período e segue sem pagamento. Sem isto a conta
    * sumia da tela no dia em que o período virava, como se tivesse sido paga.
-   * Olha um período para trás, não a história inteira: é o mesmo limite de
-   * "o mês anterior" que o resto do encadeamento usa, e uma conta de meses
-   * atrás que nunca foi marcada quase certamente foi paga e esquecida.
+   *
+   * Olha LIMIT_LOOKBACK_MONTHS para trás, o mesmo prazo que a tela do cartão
+   * usa para "fatura vencida": as duas telas precisam concordar sobre o que
+   * ainda está em aberto. Mais que isso, uma conta que nunca foi marcada quase
+   * certamente foi paga e esquecida.
    */
-  const previous = getPeriodBounds(incomes, addDaysLocal(periodStart, -1), incomeReceipts);
+  const todayLocal = startOfDay(today);
+  const lookbackStart = new Date(
+    todayLocal.getFullYear(),
+    todayLocal.getMonth() - LIMIT_LOOKBACK_MONTHS,
+    todayLocal.getDate(),
+  );
   const overdue =
-    previous.periodEnd.getTime() === periodStart.getTime()
-      ? obligationsInRange(input, previous.periodStart, previous.periodEnd)
+    lookbackStart.getTime() < periodStart.getTime()
+      ? obligationsInRange(input, lookbackStart, periodStart)
       : { fixedExpenseOccurrences: [], cardBills: [] };
 
   const fixedExpenseReminders: FixedExpenseReminder[] = [
@@ -1076,9 +1123,6 @@ export function calculateDailyBudget(
   return budgetForBounds({ ...input, periodStart, periodEnd });
 }
 
-function addDaysLocal(date: Date, days: number): Date {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
-}
 
 /**
  * The period immediately preceding [periodStart, periodEnd) — used to detect

@@ -40,11 +40,22 @@ export async function updateIncome(id: string, formData: FormData) {
   revalidatePath("/");
 }
 
+/**
+ * Apagar tira a renda das listas e dos períodos, mas mantém a linha: os
+ * recebimentos dela são dinheiro que entrou, e o cascade de um delete de
+ * verdade os levaria junto — do Histórico, do saldo em conta e dos meses que
+ * eles pagaram.
+ */
 export async function deleteIncome(id: string) {
   const userId = await requireUserId();
-  await prisma.income.delete({ where: { id, userId } });
+  await prisma.income.update({
+    where: { id, userId },
+    data: { active: false, deletedAt: new Date() },
+  });
   revalidatePath("/rendas");
   revalidatePath("/");
+  revalidatePath("/historico");
+  revalidatePath("/previsao");
 }
 
 export async function toggleIncomeActive(id: string, active: boolean) {

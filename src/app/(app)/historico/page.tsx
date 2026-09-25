@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/auth-helpers";
 import { resolveRange, type RangeParams } from "@/lib/date-range";
-import { calculateReportTotals } from "@/lib/report-totals";
+import { calculateReportTotals, countsAsSpending } from "@/lib/report-totals";
 import { PeriodPicker } from "@/components/period-picker";
 import { ReportTotalsCard } from "@/components/report-totals-card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -10,7 +10,8 @@ import { PageHeader } from "@/components/page-header";
 import { HistoryRow } from "@/components/movement-row";
 import { CategoryBreakdown, type CategoryGroup } from "@/components/category-breakdown";
 import { historyItemKey, type HistoryItem } from "@/lib/history-item";
-import { cardBillFixedExpenses } from "@/lib/period";
+import { billLinesInRange } from "@/lib/history-bills";
+import { toFixedExpenseInput } from "@/lib/budget-inputs";
 
 const UNCATEGORIZED = "__none__";
 
@@ -26,59 +27,53 @@ export default async function HistoryPage({
   // do calendário em meia-noite UTC, confirmações guardam instantes locais.
   const { rangeStart, rangeEnd, utcRangeStart, utcRangeEnd } = range;
 
-  const [transactions, cardPurchases, expensePayments, incomeReceipts, categories, creditCards] =
+  const [transactions, expensePayments, incomeReceipts, categories, creditCards, jarDeposits] =
     await Promise.all([
-    // Sem as linhas do fechamento de período antigo: eram a sobra do mês
-    // anterior devolvida ao orçamento, e o total de recebido as lia como renda
-    // nova — o mesmo salário contado duas vezes.
-    prisma.transaction.findMany({
-      where: { userId, fromPeriodClose: false, date: { gte: utcRangeStart, lt: utcRangeEnd } },
-      include: { category: { select: { id: true, name: true } } },
-    }),
-    prisma.cardPurchase.findMany({
-      where: { userId, date: { gte: utcRangeStart, lt: utcRangeEnd } },
-      include: {
-        card: { select: { name: true } },
-        category: { select: { id: true, name: true } },
-      },
-    }),
-    // Agrupado pela data em que foi pago, não pelo vencimento: pagar antes do
-    // vencimento faz o registro cair no mês em que o dinheiro de fato saiu.
-    // Sem os pagos no cartão: valem 0, e quem mostra o gasto é a compra.
-    prisma.expensePayment.findMany({
-      where: { userId, cardPurchaseId: null, paidAt: { gte: rangeStart, lt: rangeEnd } },
-      include: {
-        fixedExpense: {
-          select: { label: true, category: { select: { id: true, name: true } } },
+      // Sem as linhas do fechamento de período antigo: eram a sobra do mês
+      // anterior devolvida ao orçamento, e o total de recebido as lia como renda
+      // nova — o mesmo salário contado duas vezes.
+      prisma.transaction.findMany({
+        where: { userId, fromPeriodClose: false, date: { gte: utcRangeStart, lt: utcRangeEnd } },
+        include: { category: { select: { id: true, name: true } } },
+      }),
+      // Agrupado pela data em que foi pago, não pelo vencimento: pagar antes do
+      // vencimento faz o registro cair no mês em que o dinheiro de fato saiu.
+      // Sem os pagos no cartão: valem 0, e quem mostra o gasto é a compra.
+      prisma.expensePayment.findMany({
+        where: { userId, cardPurchaseId: null, paidAt: { gte: rangeStart, lt: rangeEnd } },
+        include: {
+          fixedExpense: {
+            select: { label: true, category: { select: { id: true, name: true } } },
+          },
+          card: { select: { name: true } },
         },
-        card: { select: { name: true } },
-      },
-    }),
-    // Agrupado pelo dia do pagamento — é quando o dinheiro entrou. Não existe
-    // "recebido em" separado: confirmar é dizer que aquele pagamento chegou.
-    prisma.incomeReceipt.findMany({
-      where: { userId, occurrenceDate: { gte: rangeStart, lt: rangeEnd } },
-      include: { income: { select: { label: true } } },
-    }),
-    prisma.category.findMany({ where: { userId, active: true }, orderBy: { name: "asc" } }),
-    // Sem filtrar por ativo, e com as assinaturas junto: um pagamento pode ser
-    // de um cartão que o usuário desativou depois, e o histórico dele não pode
-    // sumir por causa disso. A lista de opções do formulário filtra à parte.
-    prisma.creditCard.findMany({
-      where: { userId },
-      orderBy: { name: "asc" },
-      include: {
-        // Sem filtro de ativo: uma assinatura pausada ou apagada precisa
-        // continuar aparecendo nos meses em que foi cobrada. Quem corta é a
-        // janela [createdAt, endedAt] em cardBillFixedExpenses.
-        fixedExpenses: {
-          include: { category: { select: { id: true, name: true } } },
+      }),
+      // Agrupado pelo dia do pagamento — é quando o dinheiro entrou. Não existe
+      // "recebido em" separado: confirmar é dizer que aquele pagamento chegou.
+      prisma.incomeReceipt.findMany({
+        where: { userId, occurrenceDate: { gte: rangeStart, lt: rangeEnd } },
+        include: { income: { select: { label: true } } },
+      }),
+      prisma.category.findMany({ where: { userId, active: true }, orderBy: { name: "asc" } }),
+      // Todos os cartões, inclusive os desativados e apagados, com tudo o que
+      // forma uma fatura: o histórico de um cartão não pode sumir com ele.
+      prisma.creditCard.findMany({
+        where: { userId },
+        orderBy: { name: "asc" },
+        include: {
+          purchases: { include: { category: { select: { id: true, name: true } } } },
+          fixedExpenses: {
+            include: { pauses: true, category: { select: { id: true, name: true } } },
+          },
+          billEstimates: true,
+          payments: true,
         },
-      },
-    }),
-  ]);
-
-  const cardById = new Map(creditCards.map((c) => [c.id, c]));
+      }),
+      prisma.jarDeposit.findMany({
+        where: { userId, createdAt: { gte: rangeStart, lt: rangeEnd } },
+        include: { jar: { select: { name: true } } },
+      }),
+    ]);
 
   // O nome vem junto de cada lançamento, e não só da lista de categorias
   // ativas: um lançamento pode apontar para uma categoria já desativada.
@@ -87,6 +82,102 @@ export default async function HistoryPage({
     if (category) categoryNameById.set(category.id, category.name);
     return category?.id ?? null;
   };
+
+  /**
+   * O cartão entra pelas faturas que vencem no intervalo, aberta cada uma nas
+   * linhas que a compõem — o mesmo mês em que o orçamento e a previsão contam
+   * cada parcela. Antes a compra entrava inteira no dia em que foi feita, e o
+   * Histórico de um mês nunca batia com o que o orçamento dele descontava.
+   */
+  const cardItems: HistoryItem[] = creditCards.flatMap((card) => {
+    const purchaseById = new Map(card.purchases.map((p) => [p.id, p]));
+    const expenseById = new Map(card.fixedExpenses.map((e) => [e.id, e]));
+    const estimateById = new Map(card.billEstimates.map((e) => [e.id, e]));
+
+    const lines = billLinesInRange({
+      card: { id: card.id, closingDay: card.closingDay, dueDay: card.dueDay },
+      purchases: card.purchases.map((p) => ({
+        id: p.id,
+        cardId: card.id,
+        amount: Number(p.amount),
+        date: p.date,
+        installments: p.installments,
+      })),
+      cardFixedExpenses: card.fixedExpenses.map(toFixedExpenseInput),
+      billEstimates: card.billEstimates.map((e) => ({
+        id: e.id,
+        cardId: card.id,
+        dueDate: e.dueDate,
+        amount: Number(e.amount),
+      })),
+      expensePayments: card.payments.map((p) => ({
+        cardId: p.cardId ?? undefined,
+        dueDate: p.dueDate,
+        amount: Number(p.amount),
+      })),
+      start: rangeStart,
+      end: rangeEnd,
+    });
+
+    const onCard = { cardId: card.id, cardName: card.name };
+    return lines.map((line): HistoryItem => {
+      switch (line.kind) {
+        case "installment": {
+          const purchase = purchaseById.get(line.purchaseId)!;
+          return {
+            ...onCard,
+            id: purchase.id,
+            kind: "card",
+            description: purchase.description,
+            amount: line.amount,
+            date: line.dueDate,
+            createdAt: purchase.createdAt,
+            categoryId: rememberCategory(purchase.category),
+            installments: purchase.installments,
+            installmentNumber: line.installmentNumber,
+            purchaseAmount: Number(purchase.amount),
+            purchaseDate: purchase.date,
+          };
+        }
+        case "subscription": {
+          const expense = expenseById.get(line.fixedExpenseId)!;
+          return {
+            ...onCard,
+            // Derivada da fatura: o id diz de qual fatura, senão se repetiria
+            // em todo mês.
+            id: `${card.id}-${line.dueDate.toISOString()}-${expense.id}`,
+            kind: "cardFixedExpense",
+            description: expense.label,
+            amount: line.amount,
+            date: line.dueDate,
+            categoryId: rememberCategory(expense.category),
+          };
+        }
+        case "estimate": {
+          const estimate = estimateById.get(line.estimateId)!;
+          return {
+            ...onCard,
+            id: estimate.id,
+            kind: "cardEstimate",
+            description: estimate.description,
+            amount: line.amount,
+            date: line.dueDate,
+            categoryId: null,
+          };
+        }
+        case "adjustment":
+          return {
+            ...onCard,
+            id: `${card.id}-${line.dueDate.toISOString()}-adjustment`,
+            kind: "cardBillAdjustment",
+            description: `Diferença na fatura do ${card.name}`,
+            amount: line.amount,
+            date: line.dueDate,
+            categoryId: null,
+          };
+      }
+    });
+  });
 
   const items: HistoryItem[] = [
     ...transactions.map((t) => ({
@@ -98,18 +189,7 @@ export default async function HistoryPage({
       createdAt: t.createdAt,
       categoryId: rememberCategory(t.category),
     })),
-    ...cardPurchases.map((p) => ({
-      id: p.id,
-      kind: "card" as const,
-      description: p.description,
-      amount: Number(p.amount),
-      date: p.date,
-      createdAt: p.createdAt,
-      categoryId: rememberCategory(p.category),
-      cardId: p.cardId,
-      cardName: p.card.name,
-      installments: p.installments,
-    })),
+    ...cardItems,
     ...expensePayments.map((p) => ({
       id: p.id,
       kind: p.cardId ? ("cardBillPayment" as const) : ("fixedExpensePayment" as const),
@@ -122,47 +202,6 @@ export default async function HistoryPage({
       cardId: p.cardId ?? undefined,
       cardName: p.card?.name,
     })),
-    // A assinatura cobrada no cartão, aberta a partir da fatura que a pagou.
-    // Ela não é uma CardPurchase e não aparece em nenhuma outra tabela: sem
-    // isto, o dinheiro saía sem entrar em nenhum total nem em nenhuma
-    // categoria — as compras da fatura contam uma a uma, mas a assinatura
-    // existia só dentro do valor da fatura, que fica de fora justamente para
-    // não contar as compras duas vezes.
-    ...expensePayments.flatMap((payment) => {
-      const card = payment.cardId ? cardById.get(payment.cardId) : undefined;
-      if (!card) return [];
-      // Quem decide o que esta fatura cobra é period.ts, a mesma regra que
-      // monta o valor dela; aqui só se volta do id para a linha do banco, que
-      // é de onde saem o rótulo e a categoria.
-      const billed = new Set(
-        cardBillFixedExpenses({
-          card: { id: card.id, closingDay: card.closingDay, dueDay: card.dueDay },
-          cardFixedExpenses: card.fixedExpenses.map((e) => ({
-            id: e.id,
-            amount: Number(e.amount),
-            cardId: e.cardId ?? undefined,
-            createdAt: e.createdAt,
-            endedAt: e.endedAt ?? undefined,
-          })),
-          dueDate: payment.dueDate,
-        }).map((expense) => expense.id),
-      );
-
-      return card.fixedExpenses
-        .filter((expense) => billed.has(expense.id))
-        .map((expense) => ({
-          // A assinatura é derivada, então o id da linha precisa dizer de qual
-          // fatura ela saiu: o mesmo id se repetiria em todo mês pago.
-          id: `${payment.id}-${expense.id}`,
-          kind: "cardFixedExpense" as const,
-          description: expense.label,
-          amount: Number(expense.amount),
-          date: payment.paidAt,
-          categoryId: rememberCategory(expense.category),
-          cardId: card.id,
-          cardName: card.name,
-        }));
-    }),
     // Negativo porque é receita, que é como o HistoryItem marca dinheiro que
     // entra — é assim que o total de recebido enxerga a receita fixa.
     ...incomeReceipts.map((r) => ({
@@ -174,15 +213,21 @@ export default async function HistoryPage({
       categoryId: null,
       incomeId: r.incomeId,
     })),
+    // O dinheiro que foi para as caixinhas ou voltou delas. O orçamento já o
+    // tirava do disponível; sem ele aqui, o saldo do mês no Histórico nunca
+    // batia com o da Início.
+    ...jarDeposits.map((d) => ({
+      id: d.id,
+      kind: "jarDeposit" as const,
+      description:
+        Number(d.amount) < 0 ? `Resgate de "${d.jar.name}"` : `Guardado em "${d.jar.name}"`,
+      amount: Number(d.amount),
+      date: d.createdAt,
+      categoryId: null,
+    })),
   ].sort((a, b) => b.date.getTime() - a.date.getTime());
 
   const totals = calculateReportTotals({ items, rangeStart, rangeEnd, today: new Date() });
-
-  // Mesmo critério que os totais usam: a receita é negativa e cairia num balde
-  // de categoria como se fosse gasto, e a fatura paga repetiria compras que já
-  // estão listadas uma a uma.
-  const countsAsSpending = (item: HistoryItem) =>
-    item.amount > 0 && item.kind !== "cardBillPayment";
 
   // Agrupado por id, não por nome: nada impede duas categorias homônimas, e
   // fundi-las num balde só esconderia a diferença.
