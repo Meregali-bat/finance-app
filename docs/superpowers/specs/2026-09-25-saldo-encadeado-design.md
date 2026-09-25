@@ -51,6 +51,27 @@ Não carrega mais nada — isso é automático. Quando o período anterior deixo
 
 A régua da sobra passa a olhar o saldo encadeado, do período da primeira parcela até um mês depois da última: uma parcela pesa no ciclo em que cai e em todos os seguintes. A folga por parcela divide pelo número de parcelas **acumuladas** até o ciclo. O comprometimento usa a renda esperada (com a que aguarda confirmação), já que mede o peso das contas sobre o que se ganha.
 
+## Livre para gastar e reserva (revisão de 25/09)
+
+O saldo acumulado (`balance`) supõe que nada além do comprometido é gasto, e por isso a sobra de um mês reaparecia em todos os seguintes — o "por dia" de março oferecia o mesmo dinheiro que setembro já tinha oferecido. O número que se gasta agora é outro:
+
+```
+M(N)            = menor balance de N até o fim do horizonte (12 ciclos, no mínimo)
+livre(N)        = M(N) − M(N − 1),   com M(−1) = 0
+reservado(N)    = balance(N) − M(N)
+por dia(N)      = livre(N) / dias
+```
+
+Com meses que se pagam, o livre de um ciclo futuro é só o resultado dele. Quando um ciclo à frente não se paga, os anteriores guardam a diferença — e a Início, que usa o livre do ciclo corrente, já reserva hoje para o IPVA de novembro. Somado ciclo a ciclo, o livre nunca passa do dinheiro que existe.
+
+## Depois de um ajuste de saldo
+
+O saldo informado já contém a sobra ou a falta de todos os meses anteriores; somá-las de novo contaria duas vezes, e o cálculo não soma — com ajuste, a corrente dos períodos é ignorada. Por isso:
+
+- A Início diz "a partir do seu saldo em conta" em vez de "inclui R$ X dos períodos anteriores".
+- O fechamento oferece guardar só o **resultado do próprio período anterior**, limitado à herança — nunca o saldo da conta.
+- Um recebimento com dia até o do ajuste é tratado como já incluído no saldo informado, mesmo confirmado depois; antes ele entrava de novo.
+
 ## Fora de escopo
 
 Os demais itens da auditoria de 25/09: exclusão definitiva de renda/cartão/caixinha, Histórico por competência vs. caixa, previsões manuais de fatura fora do Histórico, datas gravadas como instante.

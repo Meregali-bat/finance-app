@@ -34,7 +34,10 @@ export interface AccountMovementInput {
 
 export interface AccountBalanceInput {
   adjustment?: AccountBalanceAdjustmentInput;
-  /** Entram somando: recebimentos confirmados. */
+  /**
+   * Entram somando: recebimentos confirmados. Só os de dia posterior ao do
+   * ajuste — ver `receiptAlreadyRead`.
+   */
   credits: AccountMovementInput[];
   /** Entram subtraindo. Entrada avulsa chega com `amount` negativo e soma. */
   debits: AccountMovementInput[];
@@ -75,6 +78,23 @@ function sumCounted(
     .reduce((sum, m) => sum + m.amount, 0);
 }
 
+/**
+ * Um recebimento com dia até o do ajuste já está no saldo informado.
+ *
+ * O caminho comum no dia do pagamento é ver o salário no banco, corrigir o
+ * saldo e só depois confirmar o lembrete. A confirmação é registrada depois do
+ * marco, e pela regra geral entraria de novo — o mesmo salário duas vezes, e
+ * com ele o orçamento, a previsão e a simulação de compra inflados.
+ *
+ * O recebimento só tem o dia, não a hora, então o dia do próprio ajuste não
+ * dá para separar. Ele fica de fora: se o dinheiro de fato caiu depois da
+ * leitura, o saldo fica menor do que é até a próxima correção, e errar para
+ * menos é o lado seguro quando o número decide quanto se pode gastar.
+ */
+function receiptAlreadyRead(movement: AccountMovementInput, adjustedAt: Date): boolean {
+  return startOfDay(movement.occurredOn).getTime() <= startOfDay(adjustedAt).getTime();
+}
+
 /** Nulo quando nunca houve ajuste: não há saldo a inventar. */
 export function calculateAccountBalance(input: AccountBalanceInput): number | null {
   const { adjustment, credits, debits, today } = input;
@@ -85,7 +105,11 @@ export function calculateAccountBalance(input: AccountBalanceInput): number | nu
 
   return (
     adjustment.balance +
-    sumCounted(credits, adjustedAt, todayStart) -
+    sumCounted(
+      credits.filter((c) => !receiptAlreadyRead(c, adjustedAt)),
+      adjustedAt,
+      todayStart,
+    ) -
     sumCounted(debits, adjustedAt, todayStart)
   );
 }

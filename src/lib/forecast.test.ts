@@ -568,3 +568,100 @@ describe("forecastPeriods — o ciclo corrente é o mesmo número da Início", (
     });
   }
 });
+
+describe("forecastPeriods — quanto cada ciclo pode gastar", () => {
+  const confirmed = [
+    { incomeId: "salario", occurrenceDate: storedDate(2026, 8, 5), amount: 5000 },
+  ];
+
+  it("não oferece de novo a sobra que um ciclo anterior já ofereceu", () => {
+    // Com meses que se pagam, o acumulado cresce 5.000 por ciclo — mas o livre
+    // de cada ciclo é só o dele.
+    const periods = forecast({ incomeReceipts: confirmed, count: 3 });
+
+    expect(periods.map((p) => p.balance)).toEqual([5000, 10000, 15000, 20000]);
+    expect(periods.map((p) => p.freeToSpend)).toEqual([5000, 5000, 5000, 5000]);
+    expect(periods[1].dailyAvailable).toBeCloseTo(5000 / 31, 10);
+  });
+
+  it("nunca oferece, somando os ciclos, mais do que o acumulado", () => {
+    const periods = forecast({ incomeReceipts: confirmed, openingBalance: 1200, count: 6 });
+
+    let spent = 0;
+    for (const period of periods) {
+      spent += period.freeToSpend;
+      expect(spent).toBeLessThanOrEqual(period.balance + 1e-9);
+    }
+  });
+
+  it("guarda antes o que um ciclo à frente não consegue pagar", () => {
+    // Um IPVA de 7.000 em novembro: o ciclo de novembro fica 2.000 curto, e
+    // setembro e outubro precisam guardar essa diferença entre eles.
+    const periods = forecast({
+      incomeReceipts: confirmed,
+      fixedExpenses: [
+        {
+          id: "ipva",
+          label: "IPVA",
+          amount: 7000,
+          dueDay: 15,
+          createdAt: new Date(2026, 10, 1),
+          endedAt: new Date(2026, 10, 20),
+        },
+      ],
+      count: 3,
+    });
+
+    // Acumulado: 5.000, 10.000, 8.000, 13.000. O teto de gasto acumulado até
+    // outubro é 8.000 — o saldo de novembro.
+    expect(periods.map((p) => p.balance)).toEqual([5000, 10000, 8000, 13000]);
+    expect(periods.map((p) => p.freeToSpend)).toEqual([5000, 3000, 0, 5000]);
+    expect(periods[1].reservedForLater).toBe(2000);
+    // Novembro recebe a reserva de outubro, paga o IPVA e fica no zero.
+    expect(periods[2].inherited).toBe(2000);
+    expect(periods[2].periodResult).toBe(-2000);
+  });
+
+  it("diz no ciclo corrente quando nem tudo o que existe cobre o que vem", () => {
+    const periods = forecast({
+      incomeReceipts: confirmed,
+      fixedExpenses: [
+        {
+          id: "ipva",
+          label: "IPVA",
+          amount: 17000,
+          dueDay: 15,
+          createdAt: new Date(2026, 10, 1),
+          endedAt: new Date(2026, 10, 20),
+        },
+      ],
+      count: 3,
+    });
+
+    // Novembro fecha em −2.000 mesmo sem gasto nenhum: o corrente já nasce
+    // devendo, e os ciclos até lá não têm nada livre.
+    expect(periods[0].freeToSpend).toBe(-2000);
+    expect(periods[1].freeToSpend).toBe(0);
+    expect(periods[2].freeToSpend).toBe(0);
+  });
+
+  it("reserva mesmo quando só o ciclo corrente foi pedido", () => {
+    const input = {
+      incomeReceipts: confirmed,
+      fixedExpenses: [
+        {
+          id: "ipva",
+          label: "IPVA",
+          amount: 7000,
+          dueDay: 15,
+          createdAt: new Date(2026, 10, 1),
+          endedAt: new Date(2026, 10, 20),
+        },
+      ],
+    };
+
+    expect(forecast({ ...input, count: 0 })[0].freeToSpend).toBe(
+      forecast({ ...input, count: 6 })[0].freeToSpend,
+    );
+  });
+});
