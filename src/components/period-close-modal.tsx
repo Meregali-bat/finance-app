@@ -36,11 +36,7 @@ export function PeriodCloseModal({
 
   function handleConfirm() {
     startTransition(async () => {
-      await resolvePeriodAllocation(
-        periodEndIso,
-        leftoverAmount,
-        jarId === KEEP_BALANCE ? null : jarId,
-      );
+      await resolvePeriodAllocation(periodEndIso, jarId === KEEP_BALANCE ? null : jarId);
       setOpen(false);
     });
   }
@@ -52,19 +48,21 @@ export function PeriodCloseModal({
           <DialogTitle>Sobrou {formatCurrency(leftoverAmount)} do período anterior</DialogTitle>
         </DialogHeader>
         <div className="flex flex-col gap-4">
-          <p className="text-sm text-muted-foreground">Para onde quer mandar esse valor?</p>
+          <p className="text-sm text-muted-foreground">
+            Ele já está somado ao saldo deste período. Quer guardar numa caixinha em vez disso?
+          </p>
           <Select value={jarId} onValueChange={(v) => setJarId(v as string)}>
             <SelectTrigger className="w-full">
               <SelectValue>
                 {(value: string) =>
                   value === KEEP_BALANCE
-                    ? "Manter no saldo atual"
+                    ? "Manter no saldo deste período"
                     : jars.find((j) => j.id === value)?.name
                 }
               </SelectValue>
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value={KEEP_BALANCE}>Manter no saldo atual</SelectItem>
+              <SelectItem value={KEEP_BALANCE}>Manter no saldo deste período</SelectItem>
               {jars.map((jar) => (
                 <SelectItem key={jar.id} value={jar.id}>
                   {jar.name}

@@ -11,7 +11,10 @@
  *
  * Duas réguas decidem, e as duas precisam passar:
  *
- * 1. A sobra projetada de todo período tocado continua não-negativa.
+ * 1. O saldo projetado continua não-negativo em todo período a partir da
+ *    primeira parcela. O saldo é encadeado — cada ciclo abre com o fechamento
+ *    do anterior —, então uma parcela pesa no ciclo em que cai e em todos os
+ *    seguintes, e a sobra de um mês bom pode cobrir a parcela de um mês justo.
  * 2. O comprometimento — despesas fixas mais faturas sobre a renda — fica
  *    dentro do teto configurado.
  *
@@ -28,6 +31,7 @@
  */
 
 import {
+  boundingIncomes,
   buildCardBills,
   getCardLimitUsage,
   getNextPeriodBounds,
@@ -80,10 +84,15 @@ export interface PeriodImpact {
   offset: number;
   periodStart: Date;
   periodEnd: Date;
-  /** Quanto das parcelas cai neste período. */
+  /**
+   * Quanto das parcelas cai neste período. Zero num ciclo sem vencimento de
+   * fatura, que entra na lista porque o saldo dele também cai: carrega as
+   * parcelas dos ciclos anteriores.
+   */
   installmentAmount: number;
   /** Quantas parcelas caem aqui — normalmente uma, mas ciclos curtos variam. */
   installmentCount: number;
+  /** O saldo com que o ciclo fecha — encadeado, com a herança dos anteriores. */
   balanceBefore: number;
   balanceAfter: number;
   /**
@@ -112,7 +121,10 @@ export interface PurchaseSimulation {
   /** O vencimento da fatura que cobra a primeira parcela. */
   firstDueDate: Date | null;
   lastDueDate: Date | null;
-  /** Só os períodos tocados por alguma parcela, em ordem de deslocamento. */
+  /**
+   * Os períodos da primeira parcela em diante, em ordem de deslocamento — os
+   * que a compra mexe no saldo.
+   */
   periods: PeriodImpact[];
   /** O período que mais aperta — o que a tela destaca ao justificar o veredito. */
   worstPeriod: PeriodImpact | null;
@@ -201,7 +213,10 @@ function normalizeInstallments(installments: number): number {
  * distintos ele tem: dois salários em dias diferentes partem o mês em dois.
  */
 function periodsPerMonth(input: SimulatePurchaseInput): number {
-  return Math.max(1, new Set(input.incomes.map((income) => income.dayOfMonth)).size);
+  return Math.max(
+    1,
+    new Set(boundingIncomes(input.incomes).map((income) => income.dayOfMonth)).size,
+  );
 }
 
 /**
@@ -272,7 +287,10 @@ function windowTotals(periods: PeriodForecast[], from: number, to: number) {
   return {
     start: slice[0].periodStart,
     end: slice[slice.length - 1].periodEnd,
-    income: sum((p) => p.incomeTotal),
+    // A renda esperada, e não só a confirmada: o teto mede o peso das contas
+    // sobre o que se ganha, e dobraria só porque o salário de hoje ainda não
+    // foi marcado como recebido.
+    income: sum((p) => p.expectedIncomeTotal),
     committed: sum((p) => p.fixedExpenseTotal + p.cardBillTotal),
   };
 }
@@ -356,15 +374,18 @@ function compare(input: SimulatePurchaseInput): Comparison {
 
   // Sem renda não há ciclo, e `forecastPeriods` devolve lista vazia. Dar um SIM
   // aqui seria aprovar a compra sobre uma projeção que não existe.
-  if (input.incomes.length === 0 || lastDueDate === null) return unanswerable;
+  if (boundingIncomes(input.incomes).length === 0 || lastDueDate === null) return unanswerable;
 
   const monthSize = periodsPerMonth(input);
   const { offset, truncatedAfter } = offsetReaching(input, lastDueDate);
   // A última janela mensal precisa fechar: cortar no meio dela contaria as
   // faturas do mês inteiro contra metade da renda e inflaria o comprometimento.
+  // E vai um mês além da última parcela: o saldo é encadeado, então a compra
+  // continua pesando depois de paga, e um mês apertado logo em seguida é
+  // justamente onde ela ainda pode faltar.
   const count = Math.min(
     MAX_SIMULATION_OFFSET,
-    offset - (offset % monthSize) + monthSize - 1,
+    offset - (offset % monthSize) + 2 * monthSize - 1,
   );
 
   const before = forecastPeriods({ ...input, count, maxOffset: MAX_SIMULATION_OFFSET });
@@ -382,15 +403,21 @@ function compare(input: SimulatePurchaseInput): Comparison {
   /** Uma entrada por janela mensal tocada, somando as parcelas que caem nela. */
   const windowSlack = new Map<number, { room: number; installments: number }>();
   let evaluatedAmount = 0;
+  const horizonStart = before[0].periodStart.getTime();
+  let reached = false;
 
   for (const [index, baseline] of before.entries()) {
     const simulated = after[index];
-    // A diferença entre as duas projeções é o que a compra adicionou a este
-    // ciclo — e só ela, porque o resto das entradas é idêntico nas duas.
+    // A diferença entre as faturas das duas projeções é o que a compra
+    // adicionou a este ciclo — e só ela, porque o resto é idêntico nas duas.
     const added = toCents(simulated.cardBillTotal - baseline.cardBillTotal);
-    if (added <= 0) continue;
+    const touched = added > 0;
+    // Antes da primeira parcela nada muda. Dali em diante todo ciclo muda,
+    // tocado ou não: o saldo encadeado carrega as parcelas já cobradas.
+    if (touched) reached = true;
+    if (!reached) continue;
 
-    evaluatedAmount += added;
+    if (touched) evaluatedAmount += added;
 
     // Quantas parcelas caem aqui: normalmente uma, mas um ciclo longo pode
     // pegar duas faturas, e dividir a folga pelo número errado sugeriria um
@@ -398,6 +425,12 @@ function compare(input: SimulatePurchaseInput): Comparison {
     const installmentCount = bills.filter(
       (bill) =>
         bill.dueDate.getTime() >= baseline.periodStart.getTime() &&
+        bill.dueDate.getTime() < baseline.periodEnd.getTime(),
+    ).length;
+    // E quantas já caíram até o fim deste ciclo: é o que o saldo dele carrega.
+    const cumulativeCount = bills.filter(
+      (bill) =>
+        bill.dueDate.getTime() >= horizonStart &&
         bill.dueDate.getTime() < baseline.periodEnd.getTime(),
     ).length;
 
@@ -416,13 +449,16 @@ function compare(input: SimulatePurchaseInput): Comparison {
     };
 
     const failsBalanceBefore = baseline.balance < -EPSILON;
-    const failsCommitmentBefore = exceedsLimit(commitment.income, commitment.committedBefore, limit);
+    // O teto só é cobrado das janelas em que cai parcela: numa janela que a
+    // compra não toca, o comprometimento é o mesmo com ou sem ela.
+    const failsCommitmentBefore =
+      touched && exceedsLimit(commitment.income, commitment.committedBefore, limit);
 
     periods.push({
       offset: baseline.offset,
       periodStart: baseline.periodStart,
       periodEnd: baseline.periodEnd,
-      installmentAmount: added,
+      installmentAmount: touched ? added : 0,
       installmentCount,
       balanceBefore: baseline.balance,
       balanceAfter: simulated.balance,
@@ -437,8 +473,15 @@ function compare(input: SimulatePurchaseInput): Comparison {
      * parcela e o baseline não muda quando a compra encolhe, então estas folgas
      * são exatas — não precisam de busca binária, que rodaria a projeção
      * inteira dezenas de vezes para chegar no mesmo número.
+     *
+     * A do saldo divide pelas parcelas acumuladas até aqui, não só pelas deste
+     * ciclo: é o total delas que o saldo encadeado carrega.
      */
-    balanceSlack.push(Math.max(0, baseline.balance) / Math.max(1, installmentCount));
+    if (cumulativeCount > 0) {
+      balanceSlack.push(Math.max(0, baseline.balance) / cumulativeCount);
+    }
+
+    if (!touched) continue;
 
     // O teto é medido na janela, então a folga dele também é: duas parcelas no
     // mesmo mês dividem a mesma folga, mesmo caindo em ciclos diferentes.
@@ -451,14 +494,31 @@ function compare(input: SimulatePurchaseInput): Comparison {
     windowSlack.set(from, entry);
   }
 
+  // Os ciclos depois da última parcela são checados, mas só aparecem na tela
+  // quando a compra os deixa no vermelho — do contrário são só a mesma
+  // parcela repetida no saldo, e alongariam a lista sem dizer nada novo.
+  const lastShown = periods.reduce(
+    (last, period, index) =>
+      period.installmentAmount > 0 || period.balanceAfter < -EPSILON ? index : last,
+    -1,
+  );
+  const checkedPeriods = [...periods];
+  periods.splice(lastShown + 1);
+
   const slackPerInstallment = [
     ...balanceSlack,
     ...[...windowSlack.values()].map((w) => w.room / Math.max(1, w.installments)),
   ];
 
   const blockers: SimulationBlocker[] = [];
-  if (periods.some((p) => p.balanceAfter < -EPSILON)) blockers.push("negativeBalance");
-  if (periods.some((p) => exceedsLimit(p.commitment.income, p.commitment.committedAfter, limit))) {
+  if (checkedPeriods.some((p) => p.balanceAfter < -EPSILON)) blockers.push("negativeBalance");
+  if (
+    periods.some(
+      (p) =>
+        p.installmentAmount > 0 &&
+        exceedsLimit(p.commitment.income, p.commitment.committedAfter, limit),
+    )
+  ) {
     blockers.push("overCommitment");
   }
 

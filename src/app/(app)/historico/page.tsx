@@ -28,8 +28,11 @@ export default async function HistoryPage({
 
   const [transactions, cardPurchases, expensePayments, incomeReceipts, categories, creditCards] =
     await Promise.all([
+    // Sem as linhas do fechamento de período antigo: eram a sobra do mês
+    // anterior devolvida ao orçamento, e o total de recebido as lia como renda
+    // nova — o mesmo salário contado duas vezes.
     prisma.transaction.findMany({
-      where: { userId, date: { gte: utcRangeStart, lt: utcRangeEnd } },
+      where: { userId, fromPeriodClose: false, date: { gte: utcRangeStart, lt: utcRangeEnd } },
       include: { category: { select: { id: true, name: true } } },
     }),
     prisma.cardPurchase.findMany({

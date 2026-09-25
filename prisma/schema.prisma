@@ -157,11 +157,11 @@ model Transaction {
   /// `date` é um dia do calendário (meia-noite UTC) e não carrega horário.
   /// Nulo nos lançamentos anteriores a esta coluna, que então só mostram o dia.
   createdAt       DateTime? @default(now())
-  /// Linha criada pelo fechamento de período, não por um movimento de dinheiro:
-  /// a sobra devolvida ao orçamento seguinte. Ela existe para o orçamento e
-  /// precisa ficar de fora do saldo em conta — o dinheiro já estava na conta,
-  /// e contá-la de novo faria o saldo subir sozinho a cada período.
-  /// Ver resolvePeriodAllocation em src/lib/actions/period.ts.
+  /// Linha que o fechamento de período antigo criava para devolver a sobra ao
+  /// orçamento seguinte. Não é criada mais: o saldo passa de um período ao
+  /// outro sozinho (src/lib/carry-over.ts). As que existem ficam de fora de
+  /// tudo — orçamento, previsão, saldo em conta e Histórico —, porque contá-las
+  /// levaria a mesma sobra duas vezes.
   fromPeriodClose Boolean   @default(false)
   categoryId      String?
   user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -262,11 +262,10 @@ model JarDeposit {
   amount          Decimal
   note            String?
   createdAt       DateTime @default(now())
-  /// Linha criada pelo fechamento de período, não por um movimento de dinheiro:
-  /// a sobra guardada na caixinha pelo fechamento. Ela existe para o orçamento e
-  /// precisa ficar de fora do saldo em conta — o dinheiro não saiu do banco por
-  /// um ato do usuário, e contá-la faria o saldo cair sozinho a cada período.
-  /// Ver resolvePeriodAllocation em src/lib/actions/period.ts.
+  /// Depósito que o fechamento de período antigo criava. Os de agora são
+  /// depósitos comuns (fromPeriodClose false): guardar a sobra numa caixinha
+  /// tira o dinheiro do disponível, como qualquer depósito. Os antigos seguem
+  /// fora do saldo em conta, que foi informado contando com eles assim.
   fromPeriodClose Boolean  @default(false)
   jar             Jar      @relation(fields: [jarId], references: [id], onDelete: Cascade)
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -275,8 +274,10 @@ model JarDeposit {
   @@index([userId])
 }
 
-/// Records the close of each period (between one payday and the next).
-/// resolvedAt null means the leftover is still pending a jar allocation decision.
+/// O fechamento de cada período (de um pagamento ao seguinte). Não é mais ele
+/// que leva a sobra adiante — isso é automático, ver src/lib/carry-over.ts —:
+/// serve para perguntar uma vez só se a sobra vai para uma caixinha.
+/// resolvedAt nulo = a pergunta ainda não foi respondida.
 model PeriodAllocation {
   id             String    @id @default(cuid())
   userId         String

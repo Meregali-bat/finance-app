@@ -4,7 +4,8 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/auth-helpers";
-import { loadBudgetInputs } from "@/lib/budget-inputs";
+import { accountBalanceOf, loadBudgetInputs } from "@/lib/budget-inputs";
+import { calculateCurrentBudget } from "@/lib/carry-over";
 import {
   DEFAULT_COMMITMENT_LIMIT_PERCENT,
   MAX_SIMULATION_INSTALLMENTS,
@@ -73,9 +74,9 @@ export async function runPurchaseSimulation(
   });
 
   const [inputs, user] = await Promise.all([
-    // `activeOnly`, como a tela de Previsão: uma renda ou um cartão desativado
-    // não deve entrar numa projeção do futuro.
-    loadBudgetInputs(userId, { activeOnly: true }),
+    // Os mesmos dados da Previsão, com as mesmas regras para o que está
+    // desligado — ver loadBudgetInputs.
+    loadBudgetInputs(userId),
     prisma.user.findUnique({
       where: { id: userId },
       select: { commitmentLimitPercent: true },
@@ -85,9 +86,19 @@ export async function runPurchaseSimulation(
   const configured = user?.commitmentLimitPercent ?? null;
   const commitmentLimitPercent = configured ?? DEFAULT_COMMITMENT_LIMIT_PERCENT;
 
+  const today = new Date();
+  // A projeção parte do saldo com que o ciclo corrente abre, como a Previsão:
+  // a sobra dos meses anteriores (ou o dinheiro na conta) também paga parcela.
+  const { openingBalance } = calculateCurrentBudget({
+    ...inputs,
+    accountBalance: accountBalanceOf(inputs, today),
+    today,
+  });
+
   const result = simulatePurchase({
     ...inputs,
-    today: new Date(),
+    openingBalance,
+    today,
     purchase,
     commitmentLimitPercent,
   });
