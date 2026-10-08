@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/auth-helpers";
-import { formatCurrency } from "@/lib/format";
+import { formatCurrency, formatShortDate } from "@/lib/format";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/page-header";
@@ -11,7 +11,12 @@ import { CategoryFormDialog } from "@/components/forms/category-form-dialog";
 import { DeleteIconButton } from "@/components/delete-icon-button";
 import { ToggleActiveButton } from "@/components/toggle-active-button";
 import { deleteIncome, toggleIncomeActive } from "@/lib/actions/income";
-import { deleteFixedExpense, toggleFixedExpenseActive } from "@/lib/actions/expense";
+import {
+  deleteFixedExpense,
+  toggleFixedExpenseActive,
+  undoExpenseDeferral,
+} from "@/lib/actions/expense";
+import { UndoDeferralButton } from "@/components/undo-deferral-button";
 import { deleteCategory, toggleCategoryActive } from "@/lib/actions/category";
 
 export default async function FixedPage() {
@@ -23,6 +28,7 @@ export default async function FixedPage() {
     prisma.fixedExpense.findMany({
       where: { userId, deletedAt: null },
       orderBy: { dueDay: "asc" },
+      include: { deferrals: { orderBy: { dueDate: "asc" } } },
     }),
     prisma.creditCard.findMany({ where: { userId, active: true, deletedAt: null } }),
     prisma.category.findMany({ where: { userId }, orderBy: { name: "asc" } }),
@@ -113,7 +119,25 @@ export default async function FixedPage() {
                           {cardName
                             ? ` · ${cardName}`
                             : ` · vence dia ${expense.dueDay}`}
+                          {expense.installmentCount != null &&
+                            ` · ${expense.installmentCount} ${expense.installmentCount === 1 ? "parcela" : "parcelas"}`}
                         </p>
+                        {/* Um adiamento não é dinheiro e não aparece no
+                            Histórico; é aqui que ele se vê e se desfaz. */}
+                        {expense.deferrals.map((deferral) => (
+                          <div
+                            key={deferral.id}
+                            className="flex items-center gap-2 text-xs text-muted-foreground"
+                          >
+                            <span className="tabular-nums">
+                              Adiada: {formatShortDate(deferral.dueDate, "UTC")} →{" "}
+                              {formatShortDate(deferral.targetDueDate)} (
+                              {formatCurrency(Number(deferral.amount))}
+                              {deferral.mode === "end" ? ", depois da última" : ""})
+                            </span>
+                            <UndoDeferralButton action={undoExpenseDeferral.bind(null, deferral.id)} />
+                          </div>
+                        ))}
                       </div>
                       <div className="flex shrink-0 items-center gap-1">
                         <ToggleActiveButton
@@ -128,6 +152,7 @@ export default async function FixedPage() {
                             dueDay: expense.dueDay,
                             cardId: expense.cardId,
                             categoryId: expense.categoryId,
+                            installmentCount: expense.installmentCount,
                           }}
                           cards={cards}
                           categories={activeCategories}

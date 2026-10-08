@@ -49,8 +49,27 @@ export interface FixedExpenseInput {
    * meses pausados continuam sem cobrança. `end` ausente = ainda pausada.
    */
   pauses?: { start: Date; end?: Date }[];
+  /**
+   * Quantas cobranças a despesa tem, a partir do primeiro vencimento em ou
+   * depois do cadastro. Ausente = não termina.
+   */
+  installmentCount?: number;
+  /** As ocorrências adiadas e para onde cada uma foi. Ver `expenseCharges`. */
+  deferrals?: ExpenseDeferralInput[];
   /** When set, this expense is billed on a credit card instead of standing alone. */
   cardId?: string;
+}
+
+export type DeferralMode = "nextMonth" | "end";
+
+export interface ExpenseDeferralInput {
+  /** A ocorrência adiada — um dia de calendário, como ExpensePayment.dueDate. */
+  dueDate: Date;
+  /** Onde o valor adiado passa a ser cobrado. */
+  targetDueDate: Date;
+  /** O valor adiado, que pode diferir do da despesa (juros, multa). */
+  amount: number;
+  mode: DeferralMode;
 }
 
 export interface CreditCardInput {
@@ -147,6 +166,8 @@ export interface FixedExpenseReminder {
   amount: number;
   /** Venceu no período anterior e continua sem pagamento confirmado. */
   overdue?: boolean;
+  /** Quanto de `amount` veio de ocorrências adiadas para esta. */
+  deferredIn?: number;
 }
 
 export interface IncomeReminder {
@@ -353,6 +374,103 @@ export function isExpenseOccurrenceValid(
       occurrence.getTime() > startOfDay(pause.start).getTime() &&
       (!pause.end || occurrence.getTime() < startOfDay(pause.end).getTime()),
   );
+}
+
+/** O primeiro vencimento da despesa: o primeiro dia `dueDay` em ou depois do cadastro. */
+function firstDueDate(expense: FixedExpenseInput): Date | null {
+  if (expense.dueDay == null || !expense.createdAt) return null;
+  return earliestOccurrenceOnOrAfter(expense.dueDay, startOfDay(expense.createdAt));
+}
+
+/** A ocorrência cabe nas parcelas da despesa? Sem número de parcelas, sempre. */
+function withinInstallments(occurrence: Date, expense: FixedExpenseInput): boolean {
+  if (expense.installmentCount == null) return true;
+  const first = firstDueDate(expense);
+  if (!first) return true;
+  const index =
+    (occurrence.getFullYear() - first.getFullYear()) * 12 +
+    (occurrence.getMonth() - first.getMonth());
+  return index < expense.installmentCount;
+}
+
+/**
+ * Quanto uma despesa fixa avulsa cobra em cada vencimento de [start, end).
+ *
+ * É a regra única de "quanto vence nesta data", que o orçamento e a previsão
+ * usam igual:
+ *
+ * - Uma ocorrência regular cobra o valor da despesa, se cair na vigência
+ *   (cadastro, pausas, encerramento) e dentro das parcelas.
+ * - Um adiamento tira a ocorrência adiada de cena por inteiro, e soma o valor
+ *   adiado no alvo dele — a ocorrência do mês seguinte, ou uma cobrança extra
+ *   depois da última parcela. O alvo cobra mesmo fora da vigência e das
+ *   parcelas: é uma dívida que ficou, não uma ocorrência nova.
+ *
+ * Adiar de novo uma ocorrência que já recebia um adiamento leva tudo junto:
+ * o valor sugerido para adiar é o total dela, e ela sai de cena inteira.
+ *
+ * Não enxerga além de uns dois meses por vez, como `occurrencesInRange`.
+ */
+export function expenseCharges(
+  expense: FixedExpenseInput,
+  start: Date,
+  end: Date,
+): { dueDate: Date; amount: number; deferredIn: number }[] {
+  if (expense.dueDay == null) return [];
+  const deferrals = expense.deferrals ?? [];
+  const inRange = (day: Date) => day.getTime() >= start.getTime() && day.getTime() < end.getTime();
+
+  const deferredAway = new Set(deferrals.map((d) => storedDay(d.dueDate).getTime()));
+  const regular = occurrencesInRange(expense.dueDay, start, end).filter(
+    (occ) => isExpenseOccurrenceValid(occ, expense) && withinInstallments(occ, expense),
+  );
+  const incoming = deferrals
+    .map((d) => ({ day: storedDay(d.targetDueDate), amount: d.amount }))
+    .filter((t) => inRange(t.day));
+
+  const days = [...new Set([...regular, ...incoming.map((t) => t.day)].map((d) => d.getTime()))]
+    .sort((a, b) => a - b)
+    .filter((time) => !deferredAway.has(time));
+
+  return days
+    .map((time) => {
+      const deferredIn = incoming
+        .filter((t) => t.day.getTime() === time)
+        .reduce((sum, t) => sum + t.amount, 0);
+      const base = regular.some((d) => d.getTime() === time) ? expense.amount : 0;
+      return { dueDate: new Date(time), amount: base + deferredIn, deferredIn };
+    })
+    .filter((charge) => charge.amount > 0);
+}
+
+/**
+ * Para onde vai uma ocorrência adiada.
+ *
+ * - "nextMonth": o vencimento do mês seguinte, somado à ocorrência dele.
+ * - "end": o mês seguinte à última parcela, contando as que já foram para lá —
+ *   adiar duas vezes para o fim enfileira duas cobranças extras, uma depois da
+ *   outra. Só existe para despesa com número de parcelas.
+ */
+export function deferralTargetDate(
+  expense: FixedExpenseInput,
+  dueDate: Date,
+  mode: DeferralMode,
+): Date {
+  if (expense.dueDay == null) throw new Error("Só uma despesa com vencimento pode ser adiada");
+  const due = storedDay(dueDate);
+
+  if (mode === "nextMonth") {
+    const next = addMonths(due.getFullYear(), due.getMonth(), 1);
+    return dateForDayInMonth(next.year, next.month, expense.dueDay);
+  }
+
+  const first = firstDueDate(expense);
+  if (expense.installmentCount == null || !first) {
+    throw new Error("Só uma despesa com número de parcelas pode ir para depois da última");
+  }
+  const queued = (expense.deferrals ?? []).filter((d) => d.mode === "end").length;
+  const target = addMonths(first.getFullYear(), first.getMonth(), expense.installmentCount + queued);
+  return dateForDayInMonth(target.year, target.month, expense.dueDay);
 }
 
 /**
@@ -854,6 +972,7 @@ function obligationsInRange(
     expenseId: string;
     dueDate: Date;
     estimate: number;
+    deferredIn: number;
     payment: ExpensePaymentInput | undefined;
   }[];
   cardBills: (CardBillReminder & { payment: ExpensePaymentInput | undefined })[];
@@ -881,17 +1000,15 @@ function obligationsInRange(
 
   const fixedExpenseOccurrences = fixedExpenses
     .filter((exp) => !exp.cardId)
-    .flatMap((exp) => {
-      if (exp.dueDay == null) return [];
-      return occurrencesInRange(exp.dueDay, start, end)
-        .filter((occ) => isExpenseOccurrenceValid(occ, exp))
-        .map((dueDate) => ({
-          expenseId: exp.id,
-          dueDate,
-          estimate: exp.amount,
-          payment: findExpensePayment(expensePayments, { fixedExpenseId: exp.id }, dueDate),
-        }));
-    });
+    .flatMap((exp) =>
+      expenseCharges(exp, start, end).map((charge) => ({
+        expenseId: exp.id,
+        dueDate: charge.dueDate,
+        estimate: charge.amount,
+        deferredIn: charge.deferredIn,
+        payment: findExpensePayment(expensePayments, { fixedExpenseId: exp.id }, charge.dueDate),
+      })),
+    );
 
   const cardBills = getCardBillsInPeriod(
     creditCards,
@@ -1024,10 +1141,16 @@ export function budgetForBounds(
         dueDate: occ.dueDate,
         amount: occ.estimate,
         overdue: true,
+        ...(occ.deferredIn > 0 ? { deferredIn: occ.deferredIn } : {}),
       })),
     ...fixedExpenseOccurrences
       .filter((occ) => !occ.payment)
-      .map((occ) => ({ expenseId: occ.expenseId, dueDate: occ.dueDate, amount: occ.estimate })),
+      .map((occ) => ({
+        expenseId: occ.expenseId,
+        dueDate: occ.dueDate,
+        amount: occ.estimate,
+        ...(occ.deferredIn > 0 ? { deferredIn: occ.deferredIn } : {}),
+      })),
   ];
 
   const cardBillReminders: CardBillReminder[] = [

@@ -84,6 +84,7 @@ function EntryRow({ entry, incoming }: { entry: ForecastEntry; incoming: boolean
               entry.kind !== "jar" &&
               " · confirmado"}
             {entry.partial && " · fatura ainda aberta"}
+            {entry.deferredIn && ` · inclui ${formatCurrency(entry.deferredIn)} adiados`}
             {/* Mostrado mas fora da conta, como na Início: um salário que
                 ninguém disse ter chegado não pode virar saldo. */}
             {entry.awaiting && " · aguardando confirmação, fora da conta"}

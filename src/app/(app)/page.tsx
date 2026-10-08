@@ -2,7 +2,7 @@ import { differenceInCalendarDays } from "date-fns";
 import { AlertTriangle, ArrowDownLeft, Receipt } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/auth-helpers";
-import { fallsOnDay, type OpeningSource } from "@/lib/period";
+import { deferralTargetDate, fallsOnDay, type OpeningSource } from "@/lib/period";
 import { forecastPeriods } from "@/lib/forecast";
 import { calculateCurrentBudget } from "@/lib/carry-over";
 import { accountBalanceOf, loadBudgetInputs, registeredMovementOf } from "@/lib/budget-inputs";
@@ -18,6 +18,8 @@ import { toMovementValues } from "@/lib/history-item";
 import { MarkIncomeReceivedDialog } from "@/components/mark-income-received-dialog";
 import { ConfirmPaymentDialog } from "@/components/confirm-payment-dialog";
 import { markCardBillPaid, markFixedExpensePaid } from "@/lib/actions/expense-payment";
+import { deferFixedExpense } from "@/lib/actions/expense";
+import { DeferExpenseDialog } from "@/components/defer-expense-dialog";
 import { PeriodCloseCheck } from "@/components/period-close-check";
 import { AccountBalanceCard } from "@/components/account-balance-card";
 import { PurchaseSimulationDialog } from "@/components/forms/purchase-simulation-dialog";
@@ -97,6 +99,20 @@ export default async function DashboardPage() {
   const incomeLabelById = new Map(inputs.incomes.map((i) => [i.id, i.label]));
   const caption = openingCaption(budget.openingBalance, budget.openingSource);
 
+  const expenseById = new Map(inputs.fixedExpenses.map((e) => [e.id, e]));
+  // Os destinos possíveis do "Adiar", calculados pela mesma função que a
+  // action usa para gravar — o diálogo mostra a data exata.
+  const deferOptions = (expenseId: string, dueDate: Date) => {
+    const expense = expenseById.get(expenseId);
+    if (!expense || expense.dueDay == null) return null;
+    return {
+      action: deferFixedExpense.bind(null, expenseId),
+      nextMonthTarget: deferralTargetDate(expense, dueDate, "nextMonth"),
+      endTarget:
+        expense.installmentCount != null ? deferralTargetDate(expense, dueDate, "end") : null,
+    };
+  };
+
   const reminders = [
     ...budget.cardBillReminders.map((bill) => ({
       kind: "due" as const,
@@ -107,6 +123,8 @@ export default async function DashboardPage() {
       overdue: bill.overdue ?? false,
       payAction: markCardBillPaid.bind(null, bill.cardId),
       cards: undefined,
+      defer: null,
+      deferredIn: 0,
     })),
     ...budget.fixedExpenseReminders.map((exp) => ({
       kind: "due" as const,
@@ -117,6 +135,8 @@ export default async function DashboardPage() {
       overdue: exp.overdue ?? false,
       payAction: markFixedExpensePaid.bind(null, exp.expenseId),
       cards: cardOptions,
+      defer: deferOptions(exp.expenseId, exp.dueDate),
+      deferredIn: exp.deferredIn ?? 0,
     })),
     ...budget.incomeReminders.map((inc) => ({
       kind: "income" as const,
@@ -266,10 +286,23 @@ export default async function DashboardPage() {
                             {formatCurrency(reminder.amount)} ·{" "}
                             {isIncome ? "previsto em" : reminder.overdue ? "venceu em" : "vence em"}{" "}
                             {formatDate(reminder.dueDate)}
+                            {reminder.kind === "due" &&
+                              reminder.deferredIn > 0 &&
+                              ` · inclui ${formatCurrency(reminder.deferredIn)} adiados`}
                           </p>
                         </div>
                       </div>
-                      <div className="shrink-0 [&>button]:w-full sm:[&>button]:w-auto">
+                      <div className="flex shrink-0 gap-2 [&>button]:flex-1 sm:[&>button]:flex-none">
+                        {reminder.kind === "due" && reminder.defer && (
+                          <DeferExpenseDialog
+                            action={reminder.defer.action}
+                            label={reminder.label}
+                            dueDate={reminder.dueDate}
+                            amount={reminder.amount}
+                            nextMonthTarget={reminder.defer.nextMonthTarget}
+                            endTarget={reminder.defer.endTarget}
+                          />
+                        )}
                         {reminder.kind === "income" ? (
                           <MarkIncomeReceivedDialog
                             incomeId={reminder.incomeId}

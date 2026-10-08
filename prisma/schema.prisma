@@ -28,6 +28,7 @@ model User {
   cardBillEstimates  CardBillEstimate[]
   balanceAdjustments BalanceAdjustment[]
   fixedExpensePauses FixedExpensePause[]
+  expenseDeferrals   ExpenseDeferral[]
   createdAt          DateTime            @default(now())
 
   /// Quanto da renda o usuário aceita ver comprometido com despesa fixa e fatura
@@ -95,6 +96,11 @@ model FixedExpense {
   label      String
   amount     Decimal
   dueDay     Int?
+  /// Quantas cobranças faltam, contadas a partir do primeiro vencimento depois
+  /// do cadastro. Nulo = não termina (aluguel, assinatura). É o que dá sentido
+  /// a adiar uma parcela "para depois da última". Só para despesa avulsa: no
+  /// cartão, o parcelamento é da compra.
+  installmentCount Int?
   active     Boolean          @default(true)
   /// Quando a despesa deixou de ser cobrada — ao ser pausada ou apagada. É por
   /// esta data que se sabe onde cortar: os ciclos que fecharam antes dela
@@ -114,6 +120,7 @@ model FixedExpense {
   category   Category?        @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   payments   ExpensePayment[]
   pauses     FixedExpensePause[]
+  deferrals  ExpenseDeferral[]
 
   @@index([userId])
   @@index([cardId])
@@ -139,6 +146,32 @@ model FixedExpensePause {
   user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([fixedExpenseId])
+  @@index([userId])
+}
+
+/// Uma ocorrência de despesa fixa que foi adiada em vez de paga.
+///
+/// A ocorrência de `dueDate` deixa de ser cobrada, e `amount` — o valor
+/// adiado, que pode ter juros ou multa — passa a pesar em `targetDueDate`:
+/// somado à ocorrência do mês seguinte ("nextMonth"), ou como uma cobrança
+/// extra depois da última parcela ("end"). O alvo é calculado e gravado na
+/// hora de adiar, para não mudar de lugar se a despesa for editada depois.
+/// Ver expenseCharges em src/lib/period.ts.
+model ExpenseDeferral {
+  id             String       @id @default(cuid())
+  userId         String
+  fixedExpenseId String
+  /// A ocorrência adiada. Mesma convenção de ExpensePayment.dueDate.
+  dueDate        DateTime
+  targetDueDate  DateTime
+  amount         Decimal
+  /// "nextMonth" | "end"
+  mode           String
+  createdAt      DateTime     @default(now())
+  fixedExpense   FixedExpense @relation(fields: [fixedExpenseId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([fixedExpenseId, dueDate])
   @@index([userId])
 }
 
