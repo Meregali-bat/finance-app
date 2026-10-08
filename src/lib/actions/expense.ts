@@ -4,6 +4,8 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/auth-helpers";
+import { toFixedExpenseInput } from "@/lib/budget-inputs";
+import { deferralTargetDate } from "@/lib/period";
 
 const expenseSchema = z
   .object({
@@ -15,6 +17,10 @@ const expenseSchema = z
     ),
     cardId: z.string().trim().optional().nullable(),
     categoryId: z.string().trim().optional().nullable(),
+    installmentCount: z.preprocess(
+      (v) => (v === "" || v == null ? undefined : v),
+      z.coerce.number().int().min(1, "Pelo menos uma parcela").max(600).optional(),
+    ),
   })
   .superRefine((data, ctx) => {
     if (!data.cardId && data.dueDay == null) {
@@ -24,18 +30,21 @@ const expenseSchema = z
 
 export async function createFixedExpense(formData: FormData) {
   const userId = await requireUserId();
-  const { cardId, dueDay, categoryId, ...data } = expenseSchema.parse({
+  const { cardId, dueDay, categoryId, installmentCount, ...data } = expenseSchema.parse({
     label: formData.get("label"),
     amount: formData.get("amount"),
     dueDay: formData.get("dueDay"),
     cardId: formData.get("cardId"),
     categoryId: formData.get("categoryId"),
+    installmentCount: formData.get("installmentCount"),
   });
 
   await prisma.fixedExpense.create({
     data: {
       ...data,
       dueDay: cardId ? null : (dueDay ?? null),
+      // No cartão o parcelamento é da compra, não da despesa.
+      installmentCount: cardId ? null : (installmentCount ?? null),
       cardId: cardId || null,
       categoryId: categoryId || null,
       userId,
@@ -48,12 +57,13 @@ export async function createFixedExpense(formData: FormData) {
 
 export async function updateFixedExpense(id: string, formData: FormData) {
   const userId = await requireUserId();
-  const { cardId, dueDay, categoryId, ...data } = expenseSchema.parse({
+  const { cardId, dueDay, categoryId, installmentCount, ...data } = expenseSchema.parse({
     label: formData.get("label"),
     amount: formData.get("amount"),
     dueDay: formData.get("dueDay"),
     cardId: formData.get("cardId"),
     categoryId: formData.get("categoryId"),
+    installmentCount: formData.get("installmentCount"),
   });
 
   await prisma.fixedExpense.update({
@@ -61,6 +71,8 @@ export async function updateFixedExpense(id: string, formData: FormData) {
     data: {
       ...data,
       dueDay: cardId ? null : (dueDay ?? null),
+      // No cartão o parcelamento é da compra, não da despesa.
+      installmentCount: cardId ? null : (installmentCount ?? null),
       cardId: cardId || null,
       categoryId: categoryId || null,
     },
@@ -130,5 +142,67 @@ export async function toggleFixedExpenseActive(id: string, active: boolean) {
   revalidatePath("/rendas");
   revalidatePath("/");
   revalidatePath("/historico");
+  revalidatePath("/previsao");
+}
+
+const deferralSchema = z.object({
+  dueDate: z.coerce.date(),
+  amount: z.coerce.number().positive("Valor deve ser maior que zero"),
+  mode: z.enum(["nextMonth", "end"]),
+});
+
+/** Mesma normalização de markFixedExpensePaid: a ocorrência é um dia. */
+function startOfDay(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+/**
+ * Adia uma ocorrência em vez de pagá-la. Ela sai dos lembretes e do orçamento
+ * do mês, e o valor informado — que pode ter juros ou multa — vai para o mês
+ * seguinte, somado à próxima, ou para depois da última parcela.
+ *
+ * O alvo é calculado aqui e gravado, para não mudar de lugar se a despesa for
+ * editada depois.
+ */
+export async function deferFixedExpense(expenseId: string, formData: FormData) {
+  const userId = await requireUserId();
+  const data = deferralSchema.parse({
+    dueDate: formData.get("dueDate"),
+    amount: formData.get("amount"),
+    mode: formData.get("mode"),
+  });
+  const dueDate = startOfDay(data.dueDate);
+
+  const expense = await prisma.fixedExpense.findUnique({
+    where: { id: expenseId, userId },
+    include: { pauses: true, deferrals: true, payments: { where: { dueDate } } },
+  });
+  if (!expense) throw new Error("Despesa não encontrada");
+  if (expense.cardId) throw new Error("Uma despesa cobrada no cartão não se adia por aqui");
+  if (expense.payments.length > 0) throw new Error("Esta ocorrência já foi paga");
+
+  const targetDueDate = deferralTargetDate(toFixedExpenseInput(expense), dueDate, data.mode);
+
+  await prisma.expenseDeferral.create({
+    data: {
+      userId,
+      fixedExpenseId: expenseId,
+      dueDate,
+      targetDueDate,
+      amount: data.amount,
+      mode: data.mode,
+    },
+  });
+  revalidatePath("/");
+  revalidatePath("/rendas");
+  revalidatePath("/previsao");
+}
+
+/** Desfaz um adiamento: a ocorrência volta a ser cobrada e o alvo perde o valor. */
+export async function undoExpenseDeferral(id: string) {
+  const userId = await requireUserId();
+  await prisma.expenseDeferral.deleteMany({ where: { id, userId } });
+  revalidatePath("/");
+  revalidatePath("/rendas");
   revalidatePath("/previsao");
 }

@@ -32,6 +32,7 @@ type ExpenseValues = {
   dueDay: number | null;
   cardId?: string | null;
   categoryId?: string | null;
+  installmentCount?: number | null;
 };
 
 export function ExpenseFormDialog({
@@ -145,10 +146,29 @@ export function ExpenseFormDialog({
               </div>
             )}
           </div>
-          {hasCard && (
+          {hasCard ? (
             <p className="text-sm text-muted-foreground">
               O vencimento segue a fatura do cartão selecionado.
             </p>
+          ) : (
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="installmentCount">Parcelas restantes (opcional)</Label>
+              <Input
+                id="installmentCount"
+                name="installmentCount"
+                type="number"
+                inputMode="numeric"
+                min="1"
+                placeholder="Sem fim"
+                defaultValue={expense?.installmentCount ?? undefined}
+              />
+              {/* Contadas a partir do próximo vencimento, que é o que quem
+                  está no meio de um financiamento sabe dizer. */}
+              <p className="text-xs text-muted-foreground">
+                Para financiamentos e carnês, a partir do próximo vencimento. Permite adiar uma
+                parcela para depois da última.
+              </p>
+            </div>
           )}
           {categories.length > 0 && (
             <div className="flex flex-col gap-2">

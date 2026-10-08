@@ -88,3 +88,12 @@ Isso revoga o "lançamento esquecido entra" do spec do saldo em conta (2026-09-1
 - **Troca de renda:** a corrente começa na renda mais antiga, inclusive desligada ou apagada.
 
 Fica como está, de propósito: os depósitos antigos do fechamento (`fromPeriodClose`) seguem fora do saldo em conta. As leituras de saldo que o usuário fez depois deles já os contaram assim, e mudar a regra agora falsificaria essas leituras.
+
+## Adiar despesa fixa (08/10)
+
+Ao lado de "Marcar como paga", o lembrete de despesa fixa avulsa tem **Adiar**: a ocorrência sai dos lembretes e do orçamento do mês, e o valor informado (que pode ter juros ou multa) vai para:
+
+- **o mês seguinte**, somado à próxima ocorrência num lembrete só ("inclui R$ X adiados"); ou
+- **depois da última parcela**, como uma cobrança extra — como pular uma parcela de financiamento. Só para despesas com **Parcelas restantes** (campo novo, opcional; vazio = não termina). Adiar duas vezes para o fim enfileira duas cobranças.
+
+Cada adiamento é uma linha em `ExpenseDeferral`, com o alvo calculado e gravado na hora (`deferralTargetDate`). A regra de "quanto vence nesta data" mora em `expenseCharges`, usada pelo orçamento e pela previsão. Adiar de novo uma ocorrência que já acumulava leva tudo junto. Os adiamentos aparecem em Fixos, onde se desfazem. As parcelas contam meses de calendário a partir do primeiro vencimento depois do cadastro; uma pausa não estende o fim.

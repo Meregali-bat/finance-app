@@ -79,7 +79,10 @@ export async function loadBudgetInputs(userId: string): Promise<BudgetInputs> {
   ] = await Promise.all([
     prisma.income.findMany({ where: { userId } }),
     prisma.incomeReceipt.findMany({ where: { userId } }),
-    prisma.fixedExpense.findMany({ where: { userId }, include: { pauses: true } }),
+    prisma.fixedExpense.findMany({
+      where: { userId },
+      include: { pauses: true, deferrals: true },
+    }),
     prisma.creditCard.findMany({ where: { userId }, include: { purchases: true } }),
     prisma.transaction.findMany({ where: { userId }, orderBy: { date: "desc" } }),
     prisma.expensePayment.findMany({ where: { userId } }),
@@ -199,7 +202,10 @@ export function toFixedExpenseInput(e: {
   createdAt: Date;
   endedAt: Date | null;
   cardId: string | null;
+  installmentCount?: number | null;
   pauses: { startedAt: Date; endedAt: Date | null }[];
+  /** Ausente nas telas que só olham assinaturas de cartão, que não se adiam. */
+  deferrals?: { dueDate: Date; targetDueDate: Date; amount: unknown; mode: string }[];
 }): FixedExpenseInput {
   return {
     id: e.id,
@@ -208,6 +214,13 @@ export function toFixedExpenseInput(e: {
     createdAt: e.createdAt,
     endedAt: e.endedAt ?? undefined,
     pauses: e.pauses.map((p) => ({ start: p.startedAt, end: p.endedAt ?? undefined })),
+    installmentCount: e.installmentCount ?? undefined,
+    deferrals: (e.deferrals ?? []).map((d) => ({
+      dueDate: d.dueDate,
+      targetDueDate: d.targetDueDate,
+      amount: Number(d.amount),
+      mode: d.mode === "end" ? "end" : "nextMonth",
+    })),
     cardId: e.cardId ?? undefined,
   };
 }

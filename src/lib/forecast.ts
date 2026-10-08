@@ -20,10 +20,10 @@
 import {
   boundingIncomes,
   buildCardBills,
+  expenseCharges,
   findExpensePayment,
   getNextPeriodBounds,
   getPeriodBounds,
-  isExpenseOccurrenceValid,
   isOccurrenceValid,
   occurrencesInRange,
   storedDay,
@@ -68,6 +68,8 @@ export interface ForecastEntry {
    * orçamento da Início, que não conta salário que ninguém disse ter chegado.
    */
   awaiting?: boolean;
+  /** Só em `fixedExpense`: quanto do valor veio de ocorrências adiadas. */
+  deferredIn?: number;
 }
 
 export interface PeriodForecast {
@@ -259,22 +261,26 @@ function forecastOnePeriod(
   const standaloneExpenses = fixedExpenses.filter((expense) => !expense.cardId);
   const cardExpenses = fixedExpenses.filter((expense) => expense.cardId);
 
-  const fixedExpenseEntries: ForecastEntry[] = standaloneExpenses.flatMap((expense) => {
-    if (expense.dueDay == null) return [];
-    return occurrencesInRange(expense.dueDay, periodStart, periodEnd)
-      .filter((occurrence) => isExpenseOccurrenceValid(occurrence, expense))
-      .map((dueDate) => {
-        const payment = findExpensePayment(expensePayments, { fixedExpenseId: expense.id }, dueDate);
-        return {
-          kind: "fixedExpense" as const,
-          sourceId: expense.id,
-          label: expense.label,
-          date: dueDate,
-          amount: payment ? payment.amount : expense.amount,
-          confirmed: payment !== undefined,
-        };
-      });
-  });
+  // A mesma regra de "quanto vence nesta data" do orçamento, com parcelas e
+  // adiamentos: uma ocorrência adiada some daqui e reaparece no alvo dela.
+  const fixedExpenseEntries: ForecastEntry[] = standaloneExpenses.flatMap((expense) =>
+    expenseCharges(expense, periodStart, periodEnd).map((charge) => {
+      const payment = findExpensePayment(
+        expensePayments,
+        { fixedExpenseId: expense.id },
+        charge.dueDate,
+      );
+      return {
+        kind: "fixedExpense" as const,
+        sourceId: expense.id,
+        label: expense.label,
+        date: charge.dueDate,
+        amount: payment ? payment.amount : charge.amount,
+        confirmed: payment !== undefined,
+        ...(charge.deferredIn > 0 ? { deferredIn: charge.deferredIn } : {}),
+      };
+    }),
+  );
 
   /**
    * A fatura vem inteira de `buildCardBills`, a fonte única do "quanto é a
