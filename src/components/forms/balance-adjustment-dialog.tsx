@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Wallet } from "lucide-react";
+import { Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -16,6 +16,7 @@ import { CurrencyInput } from "@/components/currency-input";
 import { setAccountBalance } from "@/lib/actions/account-balance";
 import { formatCurrency } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { iconButton } from "@/components/ui/icon-button";
 
 /**
  * O campo abre preenchido com o valor que o app calculou, exceto quando esse
@@ -66,8 +67,17 @@ export function BalanceAdjustmentDialog({
         }
       }}
     >
-      <DialogTrigger render={<Button variant="secondary" size="sm" className="gap-2" />}>
-        <Wallet className="size-4" /> {hasBalance ? "Corrigir" : "Informar saldo"}
+      <DialogTrigger
+        render={
+          <button
+            type="button"
+            className={iconButton()}
+            aria-label={hasBalance ? "Corrigir saldo" : "Informar saldo"}
+            title={hasBalance ? "Corrigir saldo" : "Informar saldo"}
+          />
+        }
+      >
+        <Pencil aria-hidden="true" />
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>

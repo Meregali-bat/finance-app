@@ -1,5 +1,5 @@
 import { differenceInCalendarDays } from "date-fns";
-import { AlertTriangle, ArrowDownLeft, Receipt } from "lucide-react";
+import { ChevronRight, Receipt } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/auth-helpers";
 import { deferralTargetDate, fallsOnDay, type OpeningSource } from "@/lib/period";
@@ -8,23 +8,21 @@ import { AreaTrend } from "@/components/charts/area-trend";
 import { forecastPeriods } from "@/lib/forecast";
 import { calculateCurrentBudget } from "@/lib/carry-over";
 import { accountBalanceOf, loadBudgetInputs, registeredMovementOf } from "@/lib/budget-inputs";
-import { formatCurrency, formatDate, formatDateLong } from "@/lib/format";
-import { Card, CardContent } from "@/components/ui/card";
+import { formatCurrency, formatDate } from "@/lib/format";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SectionLabel } from "@/components/page-header";
-import { AnimatedCurrency } from "@/components/ui/animated-number";
-import { Progress } from "@/components/ui/progress";
+import { CountUpCurrency } from "@/components/ui/animated-number";
+import { DayRuler } from "@/components/day-ruler";
+import { Logo } from "@/components/logo";
 import { MovementFormDialog } from "@/components/forms/movement-form-dialog";
-import { MovementRow } from "@/components/movement-row";
 import { toMovementValues } from "@/lib/history-item";
-import { MarkIncomeReceivedDialog } from "@/components/mark-income-received-dialog";
-import { ConfirmPaymentDialog } from "@/components/confirm-payment-dialog";
 import { markCardBillPaid, markFixedExpensePaid } from "@/lib/actions/expense-payment";
 import { deferFixedExpense } from "@/lib/actions/expense";
-import { DeferExpenseDialog } from "@/components/defer-expense-dialog";
 import { PeriodCloseCheck } from "@/components/period-close-check";
 import { AccountBalanceCard } from "@/components/account-balance-card";
 import { PurchaseSimulationDialog } from "@/components/forms/purchase-simulation-dialog";
+import { HomeReminders, type HomeReminder } from "@/components/home-reminders";
+import { homeCard } from "@/components/home-card";
 
 /**
  * O que o período herdou, dito do jeito que a pessoa leria.
@@ -42,13 +40,49 @@ function openingCaption(opening: number, source: OpeningSource) {
     : `desconta ${formatCurrency(Math.abs(opening))} que faltaram antes`;
 }
 
+/** "Quinta-feira" e "16 de outubro": o cabeçalho do desktop. */
+function longHeading(date: Date) {
+  const weekday = new Intl.DateTimeFormat("pt-BR", { weekday: "long" }).format(date);
+  const day = new Intl.DateTimeFormat("pt-BR", {
+    day: "numeric",
+    month: "long",
+  }).format(date);
+  return { weekday: weekday.charAt(0).toUpperCase() + weekday.slice(1), day };
+}
+
+/** "Qui, 16 de out.": o topo do celular, ao lado do logo. */
+function shortHeading(date: Date) {
+  const weekday = new Intl.DateTimeFormat("pt-BR", { weekday: "short" })
+    .format(date)
+    .replace(".", "");
+  const day = new Intl.DateTimeFormat("pt-BR", {
+    day: "numeric",
+    month: "short",
+  }).format(date);
+  return `${weekday.charAt(0).toUpperCase() + weekday.slice(1)}, ${day}`;
+}
+
+/** O atraso de entrada de cada seção, lido pelo `.rise-in` do globals.css. */
+function rise(ms: number) {
+  return { "--rise-delay": `${ms}ms` } as React.CSSProperties;
+}
+
+/** "19:05": a hora do cadastro, no fuso do servidor (o do app). */
+const clock = new Intl.DateTimeFormat("pt-BR", {
+  hour: "2-digit",
+  minute: "2-digit",
+});
+
 export default async function DashboardPage() {
   const userId = await requireUserId();
   const today = new Date();
 
   const [inputs, categories] = await Promise.all([
     loadBudgetInputs(userId),
-    prisma.category.findMany({ where: { userId, active: true }, orderBy: { name: "asc" } }),
+    prisma.category.findMany({
+      where: { userId, active: true },
+      orderBy: { name: "asc" },
+    }),
   ]);
 
   const accountBalance = accountBalanceOf(inputs, today);
@@ -73,7 +107,6 @@ export default async function DashboardPage() {
 
   const totalDays = differenceInCalendarDays(budget.periodEnd, budget.periodStart);
   const elapsedDays = totalDays - budget.daysRemaining + 1;
-  const progressPercent = totalDays > 0 ? Math.min(100, Math.round((elapsedDays / totalDays) * 100)) : 0;
 
   const spendingTrend = cumulativeDailySpending({
     start: budget.periodStart,
@@ -126,7 +159,10 @@ export default async function DashboardPage() {
     };
   };
 
-  const reminders = [
+  const categoryNameById = new Map(categories.map((c) => [c.id, c.name]));
+  const heading = longHeading(today);
+
+  const reminders: HomeReminder[] = [
     ...budget.cardBillReminders.map((bill) => ({
       kind: "due" as const,
       key: `card-${bill.cardId}-${bill.dueDate.toISOString()}`,
@@ -160,221 +196,233 @@ export default async function DashboardPage() {
       overdue: false,
       incomeId: inc.incomeId,
     })),
-  ].sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime());
+  ]
+    .map((r) => ({
+      ...r,
+      detail: [
+        formatCurrency(r.amount),
+        `${r.kind === "income" ? "previsto em" : r.overdue ? "venceu em" : "vence em"} ${formatDate(r.dueDate)}`,
+        r.kind === "due" && r.deferredIn > 0
+          ? `inclui ${formatCurrency(r.deferredIn)} adiados`
+          : null,
+      ]
+        .filter(Boolean)
+        .join(" · "),
+    }))
+    .sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime());
+
+  const movementRows = (list: typeof transactions, baseDelay: number) =>
+    list.map((t, i) => (
+      <li key={t.id} className="rise-in" style={rise(baseDelay + i * 90)}>
+        <MovementFormDialog
+          movement={toMovementValues({
+            id: t.id,
+            kind: "transaction",
+            description: t.description,
+            amount: t.amount,
+            date: t.date,
+            categoryId: t.categoryId,
+          })}
+          cards={cardOptions}
+          categories={categoryOptions}
+        >
+          <div
+            className={homeCard(
+              "group/row flex cursor-pointer items-center gap-3 py-3 pr-3.5 pl-3 transition-[transform,background-color,box-shadow] duration-150 ease-out-quint hover:-translate-y-0.5 hover:bg-card-hover hover:shadow-(--shadow-card-hover) active:scale-[0.99] lg:py-3 lg:pr-3.5 lg:pl-3",
+            )}
+          >
+            <div className="flex size-[38px] shrink-0 items-center justify-center rounded-xl bg-muted text-primary">
+              <Receipt className="size-[18px]" aria-hidden="true" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-[15px] font-semibold">{t.description}</p>
+              <p className="truncate text-[13px] text-muted-foreground">
+                {[
+                  t.createdAt && clock.format(t.createdAt),
+                  (t.categoryId && categoryNameById.get(t.categoryId)) || "Sem categoria",
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </p>
+            </div>
+            <span className="shrink-0 text-[15px] font-semibold tabular-nums">
+              {formatCurrency(t.amount)}
+            </span>
+            <ChevronRight
+              className="size-4 shrink-0 text-muted-foreground/60 transition-transform duration-150 group-hover/row:translate-x-0.5"
+              aria-hidden="true"
+            />
+          </div>
+        </MovementFormDialog>
+      </li>
+    ));
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="relative flex flex-col gap-5 lg:gap-6">
       <PeriodCloseCheck />
 
-      <div className="flex items-center justify-between gap-4">
-        <p className="text-sm text-muted-foreground first-letter:uppercase">
-          {formatDateLong(today)}
-        </p>
-        {/* Fora de `lg` o botão é fixo no canto da viewport, então a posição
-            dele aqui no DOM não importa; em `lg` ele volta ao fluxo e fica
-            como ação do cabeçalho. */}
-        <div className="fixed bottom-20 right-4 z-10 lg:static lg:z-auto">
-          <MovementFormDialog cards={cardOptions} categories={categoryOptions} />
+      {/* Celular: o logo no topo, já que a barra lateral não existe ali. */}
+      <header className="rise-in flex items-center justify-between gap-4 lg:hidden" style={rise(0)}>
+        <Logo size="sm" />
+        <p className="text-[13px] font-medium text-muted-foreground">{shortHeading(today)}</p>
+      </header>
+      <header className="rise-in hidden items-end justify-between gap-4 lg:flex" style={rise(0)}>
+        <div className="flex flex-col gap-1.5">
+          <p className="text-[13px] font-medium text-muted-foreground">{heading.weekday}</p>
+          <h1 className="font-heading text-[34px] leading-none font-bold tracking-[-0.035em]">
+            {heading.day}
+          </h1>
         </div>
+      </header>
+
+      {/* Fora de `lg` o botão é fixo no canto da viewport, logo acima da
+          barra inferior; em `lg` ele sobe para o cabeçalho, alinhado ao
+          título. */}
+      <div className="fixed right-4 bottom-[calc(env(safe-area-inset-bottom)+74px)] z-20 lg:absolute lg:top-1.5 lg:right-0 lg:bottom-auto lg:z-auto">
+        <MovementFormDialog cards={cardOptions} categories={categoryOptions} />
       </div>
 
-      {/* O card de destaque: degradê garnet, o número do dia em branco e o
-          ritmo de gasto do período logo abaixo. */}
+      {/* O card de destaque. As duas colunas usam `auto-fit`: lado a lado
+          quando cabem, empilhadas quando não. O divisor é uma sombra de 1px no
+          canto superior esquerdo da segunda coluna, então vira vertical ou
+          horizontal sozinho — o `overflow-hidden` corta a metade que sobra. */}
       <section
         aria-label="Orçamento de hoje"
-        className="hero-surface relative overflow-hidden rounded-[1.75rem] text-white shadow-float ring-1 ring-white/10"
+        className="hero-surface rise-in relative overflow-hidden rounded-[26px] text-white lg:rounded-[28px]"
+        style={rise(80)}
       >
-        <div className="relative z-10 flex flex-col gap-6 p-6 lg:p-8 xl:grid xl:grid-cols-[1fr_1fr] xl:gap-10">
-          <div className="flex flex-col gap-5">
-            <div className="flex flex-col gap-1">
-              <p className="text-sm text-white/70">
-                {isOverBudget ? "Você já estourou o orçamento de hoje" : "Você pode gastar hoje"}
-              </p>
-              <AnimatedCurrency
-                value={dailyAvailable}
-                className={`font-heading text-[3rem] leading-[1] font-bold tracking-[-0.04em] lg:text-[3.75rem] ${
-                  isOverBudget ? "text-negative" : "text-white"
-                }`}
-              />
+        <div className="relative z-10 p-1 lg:px-4 lg:py-3">
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(min(300px,100%),1fr))] overflow-hidden">
+            <div className="flex flex-col gap-5 p-[18px] lg:p-5">
+              <div className="flex flex-col gap-2">
+                <p className="text-sm font-medium text-white/72">
+                  {isOverBudget ? "Você já estourou o orçamento de hoje" : "Você pode gastar hoje"}
+                </p>
+                <CountUpCurrency
+                  value={dailyAvailable}
+                  split
+                  duration={1.3}
+                  delay={0.25}
+                  className={`flex items-baseline font-heading text-[64px] leading-[0.9] font-bold tracking-[-0.045em] tabular-nums lg:text-[80px] ${
+                    isOverBudget ? "text-negative" : "text-white"
+                  }`}
+                  symbolClassName="mr-1.5 text-[24px] tracking-[-0.02em] opacity-70 lg:mr-2 lg:text-[30px]"
+                  centsClassName="text-[30px] tracking-[-0.03em] opacity-70 lg:text-[36px]"
+                />
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <DayRuler totalDays={totalDays} elapsedDays={elapsedDays} />
+                <div className="flex justify-between text-xs font-medium text-white/72 tabular-nums">
+                  <span>
+                    Dia {Math.max(1, elapsedDays)} de {Math.max(1, totalDays)}
+                  </span>
+                  <span>
+                    {budget.daysRemaining}{" "}
+                    {budget.daysRemaining === 1 ? "dia até receber" : "dias até receber"}
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+                {[
+                  {
+                    label: "Saldo do período",
+                    value: formatCurrency(budget.periodBalance),
+                  },
+                  { label: "Recebe em", value: formatDate(budget.periodEnd) },
+                ].map((chip) => (
+                  <div
+                    key={chip.label}
+                    className="flex min-w-0 flex-col gap-0.5 rounded-[14px] bg-black/22 px-3.5 py-2.5 ring-1 ring-white/10 sm:rounded-2xl sm:px-4"
+                  >
+                    <span className="truncate text-[11px] font-semibold tracking-[0.08em] text-white/60 uppercase">
+                      {chip.label}
+                    </span>
+                    <span className="truncate text-[15px] font-semibold tabular-nums">
+                      {chip.value}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              {(caption || reservedForLater > 0.005) && (
+                <div className="flex flex-col gap-0.5 text-xs text-white/72">
+                  {caption && <p>{caption}</p>}
+                  {reservedForLater > 0.005 && (
+                    <p>
+                      já contando {formatCurrency(reservedForLater)} que vão faltar mais à frente
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
 
-            <div className="flex flex-col gap-2">
-              <Progress
-                value={progressPercent}
-                className="[&_[data-slot=progress-track]]:bg-white/15"
-                indicatorClassName={isOverBudget ? "bg-negative" : "bg-white"}
-              />
-              <div className="flex justify-between text-xs text-white/70 tabular-nums">
-                <span>
-                  Dia {Math.max(1, elapsedDays)} de {Math.max(1, totalDays)}
-                </span>
-                <span>
-                  {budget.daysRemaining}{" "}
-                  {budget.daysRemaining === 1 ? "dia restante" : "dias restantes"}
-                </span>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              <div className="flex flex-col rounded-2xl bg-black/20 px-4 py-2.5 ring-1 ring-white/10">
-                <span className="text-[0.6875rem] font-semibold tracking-[0.08em] text-white/60 uppercase">
-                  Saldo do período
-                </span>
-                <span className="font-medium tabular-nums">
-                  {formatCurrency(budget.periodBalance)}
-                </span>
-              </div>
-              <div className="flex flex-col rounded-2xl bg-black/20 px-4 py-2.5 ring-1 ring-white/10">
-                <span className="text-[0.6875rem] font-semibold tracking-[0.08em] text-white/60 uppercase">
-                  Recebe em
-                </span>
-                <span className="font-medium">{formatDate(budget.periodEnd)}</span>
-              </div>
-            </div>
-            {(caption || reservedForLater > 0.005) && (
-              <div className="flex flex-col gap-0.5 text-xs text-white/70">
-                {caption && <p>{caption}</p>}
-                {reservedForLater > 0.005 && (
-                  <p>já contando {formatCurrency(reservedForLater)} que vão faltar mais à frente</p>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* O ritmo do período: quanto do dia a dia (lançamentos e compras no
+            {/* O ritmo do período: quanto do dia a dia (lançamentos e compras no
               cartão) já saiu, dia a dia. Uma série só, então sem legenda — o
               título diz o que é. */}
-          <div className="flex flex-col justify-end gap-2 border-t border-white/10 pt-5 xl:border-t-0 xl:border-l xl:pt-0 xl:pl-10">
-            <div className="flex items-baseline justify-between gap-3">
-              <p className="text-sm text-white/70">Gasto no período</p>
-              <p className="font-heading text-lg font-semibold tracking-[-0.02em]">
-                {formatCurrency(spendingTrend.at(-1)?.value ?? 0)}
-              </p>
-            </div>
-            <AreaTrend
-              points={spendingTrend}
-              stroke="#ffd2cb"
-              title="Gasto acumulado no período"
-            />
-            <div className="flex justify-between text-[0.6875rem] text-white/60 tabular-nums">
-              <span>{spendingTrend[0]?.label}</span>
-              <span>hoje</span>
+            <div className="flex flex-col justify-end gap-3 p-[18px] shadow-[-1px_-1px_0_0_rgb(255_255_255/0.12)] lg:p-5">
+              <div className="flex items-baseline justify-between gap-3">
+                <p className="text-sm text-white/72">Gasto no período</p>
+                <CountUpCurrency
+                  value={spendingTrend.at(-1)?.value ?? 0}
+                  duration={1.5}
+                  delay={0.5}
+                  className="font-heading text-[22px] leading-none font-bold tracking-[-0.035em] tabular-nums"
+                />
+              </div>
+              <AreaTrend
+                points={spendingTrend}
+                height={96}
+                className="h-16 lg:h-24"
+                stroke="#ffd2cb"
+                ring="#4a0a09"
+                reveal
+                title="Gasto acumulado no período"
+              />
+              <div className="hidden justify-between text-[11px] text-white/60 tabular-nums lg:flex">
+                <span>{spendingTrend[0]?.label}</span>
+                <span>hoje</span>
+              </div>
             </div>
           </div>
         </div>
       </section>
 
-      <AccountBalanceCard
-        balance={accountBalance}
-        adjustedAt={inputs.account.adjustment?.createdAt ?? null}
-        registeredMovement={registeredMovement}
-      />
+      <div
+        className="rise-in grid grid-cols-[repeat(auto-fit,minmax(min(320px,100%),1fr))] gap-2.5 lg:gap-4"
+        style={rise(200)}
+      >
+        <AccountBalanceCard
+          balance={accountBalance}
+          adjustedAt={inputs.account.adjustment?.createdAt ?? null}
+          registeredMovement={registeredMovement}
+        />
 
-      {/* Sem cartão não há o que simular: a compra parcelada entra como uma
-          compra de cartão para usar o fechamento e o vencimento de verdade, e
-          um botão cuja única resposta possível é "cadastre um cartão" é ruído. */}
-      {cardOptions.length > 0 && (
-        <Card>
-          <CardContent className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex min-w-0 flex-col gap-1">
+        {/* Sem cartão não há o que simular: a compra parcelada entra como uma
+            compra de cartão para usar o fechamento e o vencimento de verdade,
+            e um botão cuja única resposta possível é "cadastre um cartão" é
+            ruído. */}
+        {cardOptions.length > 0 && (
+          <div className={homeCard("flex items-center justify-between gap-4")}>
+            <div className="flex min-w-0 flex-col gap-1.5">
               <SectionLabel>Posso comprar isso?</SectionLabel>
               <p className="text-sm text-muted-foreground">
                 Simule uma compra no cartão e veja se ela cabe nos próximos ciclos.
               </p>
             </div>
-            <div className="shrink-0 [&>button]:w-full sm:[&>button]:w-auto">
-              <PurchaseSimulationDialog cards={cardOptions} categories={categoryOptions} />
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* As duas listas ficam lado a lado a partir de `xl`. Em `lg` sobrariam
-          ~340px por coluna, o que trunca o valor dos lembretes. `items-start`
-          impede que a coluna mais curta esticasse até a altura da outra. */}
-      <div className="flex flex-col gap-6 xl:grid xl:grid-cols-2 xl:items-start">
-        {reminders.length > 0 && (
-          <div className="flex flex-col gap-3">
-            <SectionLabel>Lembretes</SectionLabel>
-            <div className="flex flex-col gap-2">
-              {reminders.map((reminder) => {
-                const isIncome = reminder.kind === "income";
-                return (
-                  <Card
-                    key={reminder.key}
-                    // Faixa lateral em vez de só um ícone: a cor identifica o
-                    // tipo do lembrete de relance, antes de ler o texto.
-                    className={`pl-1 before:absolute before:inset-y-0 before:left-0 before:w-1 ${
-                      isIncome ? "before:bg-positive" : "before:bg-negative"
-                    }`}
-                  >
-                    {/* A ação fica numa linha própria no celular: espremida ao
-                        lado do texto, ela quebrava o valor em duas linhas. */}
-                    <CardContent className="flex flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="flex min-w-0 items-center gap-3">
-                        {isIncome ? (
-                          <ArrowDownLeft
-                            className="size-4 shrink-0 text-positive"
-                            aria-hidden="true"
-                          />
-                        ) : (
-                          <AlertTriangle
-                            className="size-4 shrink-0 text-negative"
-                            aria-hidden="true"
-                          />
-                        )}
-                        <div className="min-w-0">
-                          <p className="truncate font-medium">{reminder.label}</p>
-                          {/* Sem `truncate`: quando o texto não cabe ao lado do
-                              botão, quebrar numa segunda linha preserva a data
-                              do lembrete, que era o que o "…" comia. */}
-                          <p className="text-sm text-muted-foreground tabular-nums">
-                            {formatCurrency(reminder.amount)} ·{" "}
-                            {isIncome ? "previsto em" : reminder.overdue ? "venceu em" : "vence em"}{" "}
-                            {formatDate(reminder.dueDate)}
-                            {reminder.kind === "due" &&
-                              reminder.deferredIn > 0 &&
-                              ` · inclui ${formatCurrency(reminder.deferredIn)} adiados`}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex shrink-0 gap-2 [&>button]:flex-1 sm:[&>button]:flex-none">
-                        {reminder.kind === "due" && reminder.defer && (
-                          <DeferExpenseDialog
-                            action={reminder.defer.action}
-                            label={reminder.label}
-                            dueDate={reminder.dueDate}
-                            amount={reminder.amount}
-                            nextMonthTarget={reminder.defer.nextMonthTarget}
-                            endTarget={reminder.defer.endTarget}
-                          />
-                        )}
-                        {reminder.kind === "income" ? (
-                          <MarkIncomeReceivedDialog
-                            incomeId={reminder.incomeId}
-                            label={reminder.label}
-                            dueDate={reminder.dueDate}
-                            amount={reminder.amount}
-                          />
-                        ) : (
-                          <ConfirmPaymentDialog
-                            action={reminder.payAction}
-                            cards={reminder.cards}
-                            label={reminder.label}
-                            dueDate={reminder.dueDate}
-                            amount={reminder.amount}
-                          />
-                        )}
-                      </div>
-                    </CardContent>
-                  </Card>
-                );
-              })}
-            </div>
+            <PurchaseSimulationDialog cards={cardOptions} categories={categoryOptions} />
           </div>
         )}
+      </div>
 
-        <div className="flex flex-col gap-6">
+      {/* As duas listas lado a lado quando cabem 340px cada; `items-start`
+          impede que a coluna mais curta estique até a altura da outra. */}
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(340px,100%),1fr))] items-start gap-6">
+        <div className="rise-in" style={rise(300)}>
+          <HomeReminders reminders={reminders} />
+        </div>
+
+        <div className="rise-in flex flex-col gap-6" style={rise(380)}>
           <div className="flex flex-col gap-3">
             <SectionLabel>Movimentações de hoje</SectionLabel>
             {todaysTransactions.length === 0 ? (
@@ -384,46 +432,16 @@ export default async function DashboardPage() {
                 hint="Toque no + para lançar a primeira."
               />
             ) : (
-              <div className="flex flex-col gap-2">
-                {todaysTransactions.map((t) => (
-                  <MovementRow
-                    key={t.id}
-                    movement={toMovementValues({
-                      id: t.id,
-                      kind: "transaction",
-                      description: t.description,
-                      amount: t.amount,
-                      date: t.date,
-                      categoryId: t.categoryId,
-                    })}
-                    cards={cardOptions}
-                    categories={categoryOptions}
-                  />
-                ))}
-              </div>
+              <ul className="flex flex-col gap-2.5">{movementRows(todaysTransactions, 520)}</ul>
             )}
           </div>
 
           {tomorrowsTransactions.length > 0 && (
             <div className="flex flex-col gap-3">
               <SectionLabel>Amanhã</SectionLabel>
-              <div className="flex flex-col gap-2">
-                {tomorrowsTransactions.map((t) => (
-                  <MovementRow
-                    key={t.id}
-                    movement={toMovementValues({
-                      id: t.id,
-                      kind: "transaction",
-                      description: t.description,
-                      amount: t.amount,
-                      date: t.date,
-                      categoryId: t.categoryId,
-                    })}
-                    cards={cardOptions}
-                    categories={categoryOptions}
-                  />
-                ))}
-              </div>
+              <ul className="flex flex-col gap-2.5">
+                {movementRows(tomorrowsTransactions, 520 + todaysTransactions.length * 90)}
+              </ul>
             </div>
           )}
         </div>

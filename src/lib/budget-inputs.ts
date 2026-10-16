@@ -34,6 +34,8 @@ export type NamedTransactionInput = TransactionInput & {
   id: string;
   description: string;
   categoryId: string | null;
+  /** O instante do cadastro, a hora que a Início mostra. Nulo nos antigos. */
+  createdAt: Date | null;
 };
 
 export interface BudgetInputs {
@@ -144,6 +146,7 @@ export async function loadBudgetInputs(userId: string): Promise<BudgetInputs> {
       amount: Number(t.amount),
       date: t.date,
       categoryId: t.categoryId,
+      createdAt: t.createdAt,
       fromPeriodClose: t.fromPeriodClose,
     })),
     jarDeposits: jarDeposits.map((d) => ({ amount: Number(d.amount), date: d.createdAt })),

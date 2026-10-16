@@ -1,5 +1,6 @@
 import { AuthError } from "next-auth";
 import { Check } from "lucide-react";
+import { Logo } from "@/components/logo";
 import { redirect } from "next/navigation";
 import { signIn } from "@/auth";
 import { Button } from "@/components/ui/button";
@@ -35,10 +36,7 @@ export default async function LoginPage({
       <div aria-hidden="true" className="app-backdrop" />
       <div className="flex w-full max-w-5xl flex-col gap-10 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex max-w-md flex-col gap-6">
-          <span className="flex items-center gap-2.5">
-            <span aria-hidden="true" className="size-2.5 rounded-full bg-primary" />
-            <span className="font-heading font-semibold tracking-[-0.01em]">Finanças</span>
-          </span>
+          <Logo />
           <h1 className="font-heading text-[2.5rem] leading-[1.05] font-semibold tracking-[-0.04em] lg:text-[3.5rem]">
             Saiba quanto você pode gastar <span className="text-primary">hoje.</span>
           </h1>

@@ -16,12 +16,12 @@ export function BottomNav() {
           duro: a chrome flutua sobre a página, não corta uma faixa dela. */}
       <div
         aria-hidden="true"
-        className="pointer-events-none fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+3.5rem)] z-20 h-8 bg-linear-to-t from-background to-transparent lg:hidden"
+        className="pointer-events-none fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+3.625rem)] z-20 h-8 bg-linear-to-t from-background to-transparent lg:hidden"
       />
       <nav
         aria-label="Navegação principal"
         data-slot="bottom-nav"
-        className="fixed inset-x-0 bottom-0 z-20 border-t border-white/8 bg-card/70 shadow-nav backdrop-blur-xl backdrop-saturate-150 pb-[env(safe-area-inset-bottom)] lg:hidden"
+        className="fixed inset-x-0 bottom-0 z-20 border-t border-white/[0.07] bg-[rgb(27_17_16/0.75)] shadow-nav backdrop-blur-[24px] backdrop-saturate-150 pb-[env(safe-area-inset-bottom)] lg:hidden"
       >
         <ul className="mx-auto flex max-w-lg items-stretch justify-between px-2">
           {navItems.map(({ href, label, icon: Icon }) => {
@@ -32,7 +32,7 @@ export function BottomNav() {
                   href={href}
                   aria-current={isActive ? "page" : undefined}
                   className={cn(
-                    "relative flex min-h-[3.5rem] flex-col items-center justify-center gap-1 py-2 text-[0.6875rem] font-medium transition-colors",
+                    "relative flex min-h-[58px] flex-col items-center justify-center gap-1 py-2 text-[10.5px] font-semibold transition-colors",
                     isActive ? "text-primary" : "text-muted-foreground hover:text-foreground",
                   )}
                 >
@@ -41,11 +41,11 @@ export function BottomNav() {
                       layoutId="nav-pill"
                       aria-hidden="true"
                       transition={springDefault}
-                      className="absolute inset-x-1 inset-y-1 -z-10 rounded-xl bg-primary/10"
+                      className="absolute inset-x-1 inset-y-1 -z-10 rounded-[14px] bg-primary/10 shadow-[inset_0_0_0_1px_rgb(242_169_159/0.14)]"
                     />
                   )}
                   <Icon
-                    className={cn("size-5 transition-transform", isActive && "scale-110")}
+                    className={cn("size-[21px] transition-transform", isActive && "scale-110")}
                     aria-hidden="true"
                   />
                   {label}

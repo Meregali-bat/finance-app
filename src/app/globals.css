@@ -41,6 +41,10 @@
   --color-card: var(--card);
   --color-card-elevated: var(--card-elevated);
   --color-brand: var(--brand);
+  --color-brand-light: var(--brand-light);
+  --color-card-hover: var(--card-hover);
+  --color-toast: var(--toast);
+  --color-chart-line: var(--chart-line);
   --color-brand-foreground: var(--brand-foreground);
   --color-positive: var(--positive);
   --color-positive-foreground: var(--positive-foreground);
@@ -75,7 +79,8 @@
  * paleta, cada um com um papel só:
  *
  * - rosé (matiz do garnet clareado): destaque da marca, link, item ativo;
- * - turquesa (matiz do ink-black, o único frio da paleta): valor positivo;
+ * - turquesa (o único tom frio, nascido do antigo ink-black esverdeado):
+ *   valor positivo — frio para nunca se confundir com o vermelho da marca;
  * - coral (garnet com mais luz): valor negativo.
  *
  * Contraste conferido com o validador da skill de dataviz: todos os tons de
@@ -85,7 +90,8 @@
  * gráfico — positivo/negativo usam turquesa e coral.
  */
 :root {
-  --ink-black: #001514;
+  /* Era #001514, um preto esverdeado; o handoff de 16/10 o esquenta. */
+  --ink-black: #0c0706;
   --coffee-bean: #1b1110;
   --rich-mahogany: #290f0e;
   --rich-mahogany-2: #360d0c;
@@ -128,6 +134,19 @@
   --chart-4: #8f7370;
   --chart-5: var(--rich-mahogany-3);
   --radius: 0.875rem;
+  /* Tons do handoff que não estão na paleta original. */
+  --brand-light: #7a0907;
+  --card-hover: #211514;
+  --toast: #2a1a18;
+  --chart-line: #ffd2cb;
+  --dot-ring: #4a0a09;
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.4), inset 0 0 0 1px rgb(247 236 233 / 0.08),
+    inset 0 1px 0 rgb(255 255 255 / 0.04);
+  --shadow-card-hover: 0 12px 28px -14px rgb(0 0 0 / 0.8), inset 0 0 0 1px rgb(247 236 233 / 0.16);
+  --shadow-hero: 0 2px 4px rgb(0 0 0 / 0.5), 0 24px 60px -20px rgb(0 0 0 / 0.9),
+    0 0 0 1px rgb(255 255 255 / 0.1), inset 0 1px 0 rgb(255 255 255 / 0.12);
+  --shadow-cta: inset 0 1px 0 rgb(255 255 255 / 0.18), 0 0 0 1px rgb(242 169 159 / 0.3),
+    0 16px 40px -12px rgb(0 0 0 / 0.8);
   --sidebar: var(--coffee-bean);
   --sidebar-foreground: #f7ece9;
   --sidebar-primary: #f2a99f;
@@ -187,27 +206,68 @@
   }
 }
 /*
- * O fundo da tela: um brilho de garnet saindo do canto e uma trama de pontos
- * que some nas bordas — a "nuvem de partículas" da referência, só com CSS.
- * Fica atrás de tudo e não recebe clique.
+ * O fundo da tela: um brilho de garnet no canto, que flutua devagar, outro
+ * fraco no canto oposto e uma trama de pontos que some nas bordas. Fica atrás
+ * de tudo e não recebe clique.
  */
 .app-backdrop {
   position: fixed;
   inset: 0;
   z-index: -1;
+  overflow: hidden;
   pointer-events: none;
   background:
-    radial-gradient(60rem 40rem at 85% -10%, rgb(107 5 4 / 0.55), transparent 60%),
-    radial-gradient(40rem 30rem at -10% 110%, rgb(75 10 9 / 0.45), transparent 60%),
+    radial-gradient(40rem 30rem at -10% 110%, rgb(75 10 9 / 0.4), transparent 60%),
     var(--ink-black);
+}
+.app-backdrop::before {
+  content: "";
+  position: absolute;
+  right: -12rem;
+  top: -14rem;
+  width: 64rem;
+  height: 44rem;
+  background: radial-gradient(closest-side, rgb(107 5 4 / 0.6), transparent);
+  animation: floatGlow 18s ease-in-out infinite;
 }
 .app-backdrop::after {
   content: "";
   position: absolute;
   inset: 0;
-  background-image: radial-gradient(rgb(242 169 159 / 0.22) 1px, transparent 1.5px);
-  background-size: 18px 18px;
+  background-image: radial-gradient(rgb(242 169 159 / 0.18) 1px, transparent 1.5px);
+  background-size: 20px 20px;
   mask-image: radial-gradient(50rem 30rem at 80% 0%, #000 0%, transparent 70%);
+}
+
+@keyframes floatGlow {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  50% {
+    transform: translate(-40px, 24px);
+  }
+}
+
+/* O anel que sai do ponto do fim do gráfico, sem parar. */
+@keyframes ping {
+  0% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 0.7;
+  }
+  80%,
+  100% {
+    transform: translate(-50%, -50%) scale(3.2);
+    opacity: 0;
+  }
+}
+
+/* Movimento reduzido: sem brilho flutuando nem anel pulsando. */
+@media (prefers-reduced-motion: reduce) {
+  .app-backdrop::before,
+  [data-ping] {
+    animation: none !important;
+  }
 }
 
 /*
@@ -216,8 +276,9 @@
  * canto.
  */
 .hero-surface {
+  box-shadow: var(--shadow-hero);
   background:
-    radial-gradient(28rem 18rem at 100% 0%, rgb(107 5 4 / 0.95), transparent 70%),
+    radial-gradient(28rem 18rem at 100% 0%, rgb(140 12 9 / 0.9), transparent 70%),
     linear-gradient(145deg, var(--black-cherry-2) 0%, var(--rich-mahogany-3) 45%, var(--rich-mahogany) 100%);
 }
 .hero-surface::after {
@@ -228,4 +289,85 @@
   background-image: radial-gradient(rgb(255 255 255 / 0.18) 1px, transparent 1.5px);
   background-size: 14px 14px;
   mask-image: radial-gradient(24rem 16rem at 100% 0%, #000 0%, transparent 75%);
+}
+
+/*
+ * O botão principal (nova movimentação): garnet um degrau mais claro em cima,
+ * com brilho no topo e um anel rosé que acende no hover.
+ */
+.cta-surface {
+  background: linear-gradient(180deg, var(--brand-light), var(--brand));
+  box-shadow: var(--shadow-cta);
+}
+.cta-surface:hover {
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.18),
+    0 0 0 1px rgb(242 169 159 / 0.55),
+    0 16px 40px -12px rgb(0 0 0 / 0.8);
+}
+
+/* O botão flutuante entra crescendo, com overshoot, depois do resto da tela. */
+@keyframes fabIn {
+  from {
+    transform: scale(0);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+@media (max-width: 1023.98px) {
+  .fab-in {
+    animation: fabIn 600ms cubic-bezier(0.34, 1.56, 0.64, 1) 700ms both;
+  }
+}
+
+/* O gráfico do hero se revela da esquerda para a direita. */
+@keyframes trendReveal {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+.trend-reveal {
+  animation: trendReveal 1400ms cubic-bezier(0.65, 0, 0.35, 1) 450ms both;
+}
+@keyframes trendDot {
+  from {
+    transform: translate(-50%, -50%) scale(0);
+  }
+  to {
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+.trend-dot {
+  animation: trendDot 500ms cubic-bezier(0.34, 1.56, 0.64, 1) 1800ms both;
+}
+.trend-ping {
+  transform: translate(-50%, -50%);
+  animation: ping 2.4s cubic-bezier(0, 0, 0.2, 1) 2300ms infinite both;
+}
+
+/*
+ * A entrada das seções da Início: sobem 16px e aparecem, uma depois da outra.
+ * O atraso vem de `--rise-delay`, no próprio elemento.
+ */
+@keyframes riseIn {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.rise-in {
+  animation: riseIn 750ms cubic-bezier(0.22, 1, 0.36, 1) var(--rise-delay, 0ms) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .rise-in {
+    animation: none;
+  }
 }
