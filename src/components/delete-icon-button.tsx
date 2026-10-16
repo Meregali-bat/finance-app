@@ -2,15 +2,17 @@
 
 import { useState, useTransition } from "react";
 import { Trash2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { iconButton } from "@/components/ui/icon-button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 export function DeleteIconButton({
   action,
   confirmMessage,
+  className,
 }: {
   action: () => Promise<void>;
   confirmMessage: string;
+  className?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -20,16 +22,16 @@ export function DeleteIconButton({
 
   return (
     <>
-      <Button
+      <button
         type="button"
-        variant="ghost"
-        size="icon"
         aria-label="Excluir"
+        title="Excluir"
         disabled={isPending}
         onClick={() => setOpen(true)}
+        className={iconButton({ tone: "ghost", size: "sm", className })}
       >
-        <Trash2 className="size-4" />
-      </Button>
+        <Trash2 aria-hidden="true" />
+      </button>
       <ConfirmDialog
         open={open}
         onOpenChange={(next) => {

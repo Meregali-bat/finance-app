@@ -3,7 +3,8 @@ import { requireUserId } from "@/lib/auth-helpers";
 import { resolveRange, type RangeParams } from "@/lib/date-range";
 import { calculateReportTotals, countsAsSpending, spendingBuckets } from "@/lib/report-totals";
 import { ColumnChart } from "@/components/charts/column-chart";
-import { Card, CardContent } from "@/components/ui/card";
+import { homeCard } from "@/components/home-card";
+import { stagger } from "@/components/list-row";
 import { SectionLabel } from "@/components/page-header";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { PeriodPicker } from "@/components/period-picker";
@@ -248,7 +249,8 @@ export default async function HistoryPage({
   const categoryGroups: CategoryGroup[] = Array.from(byCategory.entries())
     .map(([key, group]) => ({
       key,
-      name: key === UNCATEGORIZED ? "Sem categoria" : (categoryNameById.get(key) ?? "Sem categoria"),
+      name:
+        key === UNCATEGORIZED ? "Sem categoria" : (categoryNameById.get(key) ?? "Sem categoria"),
       amount: group.amount,
       items: group.items,
       percent:
@@ -257,9 +259,7 @@ export default async function HistoryPage({
     .sort((a, b) => b.amount - a.amount);
 
   const categoryOptions = categories.map((c) => ({ id: c.id, name: c.name }));
-  const cardOptions = creditCards
-    .filter((c) => c.active)
-    .map((c) => ({ id: c.id, name: c.name }));
+  const cardOptions = creditCards.filter((c) => c.active).map((c) => ({ id: c.id, name: c.name }));
 
   return (
     <div className="flex flex-col gap-6">
@@ -274,42 +274,50 @@ export default async function HistoryPage({
       {/* O gasto do período no tempo: uma série só, em rosé, sem legenda — o
           título diz o que é. As colunas somam o "Gasto" do resumo. */}
       {buckets.length > 1 && (
-        <Card>
-          <CardContent className="flex flex-col gap-4 py-5">
-            <SectionLabel>
-              {buckets[0].unit === "month" ? "Gasto por mês" : "Gasto por dia"}
-            </SectionLabel>
-            <ColumnChart
-              title={buckets[0].unit === "month" ? "Gasto por mês" : "Gasto por dia"}
-              height={140}
-              columns={buckets.map((bucket, index) => ({
-                key: bucket.start.toISOString(),
-                // Rótulo a cada poucos dias, para o eixo não virar uma sopa.
-                label:
-                  bucket.unit === "month"
-                    ? new Intl.DateTimeFormat("pt-BR", { month: "short" })
-                        .format(bucket.start)
-                        .replace(".", "")
-                    : index % Math.ceil(buckets.length / 8) === 0
-                      ? String(bucket.start.getDate())
-                      : "",
-                value: bucket.total,
-                valueLabel: formatCurrency(bucket.total),
-                tone: "accent" as const,
-                detail:
-                  bucket.unit === "month"
-                    ? new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric" }).format(
-                        bucket.start,
-                      )
-                    : formatDate(bucket.start),
-                selected: bucket.total === Math.max(...buckets.map((b) => b.total)) && bucket.total > 0,
-              }))}
-            />
-          </CardContent>
-        </Card>
+        <div
+          className={homeCard("rise-in flex flex-col gap-4")}
+          style={{ "--rise-delay": "140ms" } as React.CSSProperties}
+        >
+          <SectionLabel>
+            {buckets[0].unit === "month" ? "Gasto por mês" : "Gasto por dia"}
+          </SectionLabel>
+          <ColumnChart
+            title={buckets[0].unit === "month" ? "Gasto por mês" : "Gasto por dia"}
+            height={140}
+            maxWidth={14}
+            growStep={35}
+            columns={buckets.map((bucket, index) => ({
+              key: bucket.start.toISOString(),
+              // Rótulo a cada poucos dias, para o eixo não virar uma sopa.
+              label:
+                bucket.unit === "month"
+                  ? new Intl.DateTimeFormat("pt-BR", { month: "short" })
+                      .format(bucket.start)
+                      .replace(".", "")
+                  : index % Math.max(2, Math.ceil(buckets.length / 10)) === 0
+                    ? String(bucket.start.getDate())
+                    : "",
+              value: bucket.total,
+              valueLabel: formatCurrency(bucket.total),
+              tone: "accent" as const,
+              detail:
+                bucket.unit === "month"
+                  ? new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric" }).format(
+                      bucket.start,
+                    )
+                  : formatDate(bucket.start),
+              selected:
+                bucket.total === Math.max(...buckets.map((b) => b.total)) && bucket.total > 0,
+            }))}
+          />
+        </div>
       )}
 
-      <Tabs defaultValue="lancamentos">
+      <Tabs
+        defaultValue="lancamentos"
+        className="rise-in"
+        style={{ "--rise-delay": "180ms" } as React.CSSProperties}
+      >
         <TabsList className="w-full lg:w-fit">
           <TabsTrigger value="lancamentos" className="flex-1 lg:flex-none">
             Lançamentos
@@ -323,13 +331,16 @@ export default async function HistoryPage({
           {items.length === 0 ? (
             <EmptyState text="Nenhum lançamento neste período." />
           ) : (
-            items.map((item) => (
-              <HistoryRow
+            items.map((item, index) => (
+              // Escalonado só no começo da lista: num mês cheio, a centésima
+              // linha não pode esperar quatro segundos para aparecer.
+              <div
                 key={historyItemKey(item)}
-                item={item}
-                cards={cardOptions}
-                categories={categoryOptions}
-              />
+                className="rise-in"
+                style={stagger(Math.min(index, 12), 200, 45)}
+              >
+                <HistoryRow item={item} cards={cardOptions} categories={categoryOptions} />
+              </div>
             ))
           )}
         </TabsContent>

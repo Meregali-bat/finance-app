@@ -15,20 +15,26 @@ export function iconButton({
   size = "md",
   className,
 }: {
-  tone?: "solid" | "outline" | "ghost";
-  /** md: 44px no celular, 42px no desktop. sm: 44px no celular, 38px no desktop. */
-  size?: "md" | "sm";
+  tone?: "solid" | "outline" | "ghost" | "cta";
+  /**
+   * md: 44px no celular, 42px no desktop. sm: 44px no celular, 38px no
+   * desktop. lg: 44px sempre (a ação principal de uma tela). xl: 48px,
+   * quadrado arredondado, ao lado de um botão principal da mesma altura.
+   */
+  size?: "md" | "sm" | "lg" | "xl";
   className?: string;
 } = {}) {
   return cn(
     "flex shrink-0 items-center justify-center rounded-full transition-[background-color,border-color,color,transform] duration-150 ease-out-quint outline-none select-none focus-visible:ring-3 focus-visible:ring-ring/50 active:scale-[0.92] disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0",
-    size === "md"
-      ? "size-11 lg:size-[42px] [&_svg]:size-[18px]"
-      : "size-11 lg:size-[38px] [&_svg]:size-[18px]",
+    size === "md" && "size-11 lg:size-[42px] [&_svg]:size-[18px]",
+    size === "sm" && "size-11 lg:size-[38px] [&_svg]:size-[18px]",
+    size === "lg" && "size-11 [&_svg]:size-5",
+    size === "xl" && "size-12 rounded-2xl [&_svg]:size-5",
     tone === "solid" && "bg-secondary text-foreground hover:bg-(--rich-mahogany-3)",
     tone === "outline" &&
       "border border-[rgb(255_236_233/0.14)] bg-[rgb(255_236_233/0.04)] text-foreground hover:border-[rgb(242_169_159/0.4)]",
     tone === "ghost" && "text-muted-foreground hover:bg-muted hover:text-foreground",
+    tone === "cta" && "cta-surface text-white hover:-translate-y-px",
     className,
   );
 }

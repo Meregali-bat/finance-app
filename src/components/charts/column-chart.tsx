@@ -46,9 +46,18 @@ export function ColumnChart({
   columns,
   height = 160,
   title,
+  dimOpacity = 0.7,
+  growStep = 50,
+  maxWidth = 24,
 }: {
   columns: Column[];
   height?: number;
+  /** A opacidade das colunas fora da seleção. */
+  dimOpacity?: number;
+  /** O escalonamento da entrada: cada coluna cresce da base este tanto depois da anterior. */
+  growStep?: number;
+  /** A largura máxima da marca, em px. */
+  maxWidth?: number;
   /** O que o gráfico mostra — vira o nome da tabela acessível. */
   title: string;
 }) {
@@ -71,7 +80,7 @@ export function ColumnChart({
           style={{ bottom: 10 + baseline * plot }}
         />
         <div className="absolute inset-0 flex items-stretch gap-1">
-          {columns.map((column) => {
+          {columns.map((column, index) => {
             const size = (Math.abs(column.value) / span) * plot;
             const up = column.value >= 0;
             const visible = column.value === 0 ? 0 : Math.max(2, size);
@@ -80,21 +89,34 @@ export function ColumnChart({
 
             const bar = (
               <>
+                {/* A marca fica num invólucro: o invólucro centraliza com
+                    `translate`, e a marca cresce da base com `transform` — os
+                    dois na mesma peça se sobrescreveriam. */}
                 <span
                   aria-hidden="true"
-                  className={cn(
-                    "absolute left-1/2 w-[min(24px,60%)] -translate-x-1/2 transition-[opacity,filter] duration-150",
-                    TONE_FILL[column.tone],
-                    up ? "rounded-t-[4px]" : "rounded-b-[4px]",
-                    dim && "opacity-70",
-                    isActive && "brightness-125",
-                  )}
-                  style={
-                    up
+                  className="absolute left-1/2 -translate-x-1/2"
+                  style={{
+                    width: `min(${maxWidth}px, 60%)`,
+                    ...(up
                       ? { bottom: 10 + baseline * plot, height: visible }
-                      : { top: height - 10 - baseline * plot, height: visible }
-                  }
-                />
+                      : { top: height - 10 - baseline * plot, height: visible }),
+                  }}
+                >
+                  <span
+                    className={cn(
+                      "block size-full transition-[opacity,filter] duration-150",
+                      TONE_FILL[column.tone],
+                      up ? "grow-up rounded-t-[5px]" : "grow-down rounded-b-[5px]",
+                      isActive && "brightness-125",
+                    )}
+                    style={
+                      {
+                        opacity: dim ? dimOpacity : 1,
+                        "--grow-delay": `${150 + index * growStep}ms`,
+                      } as React.CSSProperties
+                    }
+                  />
+                </span>
                 {column.selected && (
                   <span
                     aria-hidden="true"
@@ -123,8 +145,12 @@ export function ColumnChart({
             );
 
             const common = {
-              className:
-                "relative min-w-0 flex-1 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              className: cn(
+                "relative min-w-0 flex-1 rounded-lg outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
+                // A faixa da coluna selecionada, quando ela é navegável: diz
+                // "você está aqui" sem depender só da opacidade.
+                column.selected && column.href && "bg-foreground/5",
+              ),
               onPointerEnter: () => setActive(column.key),
               onPointerLeave: () => setActive(null),
               onFocus: () => setActive(column.key),

@@ -14,6 +14,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createCategory, updateCategory } from "@/lib/actions/category";
+import { iconButton } from "@/components/ui/icon-button";
 
 type CategoryValues = {
   id: string;
@@ -46,20 +47,19 @@ export function CategoryFormDialog({ category }: { category?: CategoryValues }) 
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger
         render={
-          isEdit ? (
-            <Button variant="ghost" size="icon" aria-label="Editar categoria" />
-          ) : (
-            <Button className="gap-2 lg:w-fit" />
-          )
+          <button
+            type="button"
+            className={
+              isEdit
+                ? iconButton({ tone: "ghost", size: "sm" })
+                : iconButton({ tone: "cta", size: "lg" })
+            }
+            aria-label={isEdit ? "Editar categoria" : "Nova categoria"}
+            title={isEdit ? "Editar categoria" : "Nova categoria"}
+          />
         }
       >
-        {isEdit ? (
-          <Pencil className="size-4" />
-        ) : (
-          <>
-            <Plus className="size-4" /> Nova categoria
-          </>
-        )}
+        {isEdit ? <Pencil aria-hidden="true" /> : <Plus aria-hidden="true" />}
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>

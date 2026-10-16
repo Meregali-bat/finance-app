@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/select";
 import { CurrencyInput } from "@/components/currency-input";
 import { createFixedExpense, updateFixedExpense } from "@/lib/actions/expense";
+import { iconButton } from "@/components/ui/icon-button";
 
 const NONE = "__none__";
 
@@ -72,20 +73,19 @@ export function ExpenseFormDialog({
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger
         render={
-          isEdit ? (
-            <Button variant="ghost" size="icon" aria-label="Editar despesa" />
-          ) : (
-            <Button className="gap-2 lg:w-fit" />
-          )
+          <button
+            type="button"
+            className={
+              isEdit
+                ? iconButton({ tone: "ghost", size: "sm" })
+                : iconButton({ tone: "cta", size: "lg" })
+            }
+            aria-label={isEdit ? "Editar despesa" : "Nova despesa"}
+            title={isEdit ? "Editar despesa" : "Nova despesa"}
+          />
         }
       >
-        {isEdit ? (
-          <Pencil className="size-4" />
-        ) : (
-          <>
-            <Plus className="size-4" /> Nova despesa
-          </>
-        )}
+        {isEdit ? <Pencil aria-hidden="true" /> : <Plus aria-hidden="true" />}
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>

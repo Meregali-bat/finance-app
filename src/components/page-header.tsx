@@ -2,8 +2,9 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 
 /**
- * O cabeçalho de uma tela. Centraliza a escala do `<h1>` — tracking negativo
- * porque texto grande lê com as letras soltas demais no espaçamento normal.
+ * O cabeçalho de uma tela: h1 de 30px (34 no desktop), subtítulo opcional e,
+ * à direita, alinhadas embaixo, as ações da tela em botões-ícone. Tracking
+ * negativo porque texto grande lê com as letras soltas demais.
  */
 export function PageHeader({
   title,
@@ -19,23 +20,30 @@ export function PageHeader({
   action?: React.ReactNode;
 }) {
   return (
-    <div className="flex items-center gap-2">
+    <div
+      className="rise-in flex items-end gap-2"
+      style={{ "--rise-delay": "0ms" } as React.CSSProperties}
+    >
       {backHref && (
         <Link
           href={backHref}
           aria-label={backLabel ?? "Voltar"}
-          className="-ml-2 flex size-10 shrink-0 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          className="-ml-2 flex size-11 shrink-0 items-center justify-center self-center rounded-full text-muted-foreground transition-[background-color,color,transform] duration-150 hover:bg-muted hover:text-foreground active:scale-[0.92]"
         >
           <ArrowLeft className="size-5" aria-hidden="true" />
         </Link>
       )}
       <div className="min-w-0 flex-1">
-        <h1 className="truncate font-heading text-[1.75rem] leading-tight font-semibold tracking-[-0.03em] lg:text-4xl">
+        <h1
+          className={`truncate font-heading leading-[1.05] font-bold tracking-[-0.035em] ${
+            backHref ? "text-[26px] lg:text-[30px]" : "text-[30px] lg:text-[34px]"
+          }`}
+        >
           {title}
         </h1>
-        {subtitle && <p className="mt-0.5 truncate text-sm text-muted-foreground">{subtitle}</p>}
+        {subtitle && <p className="mt-1 truncate text-[13px] text-muted-foreground">{subtitle}</p>}
       </div>
-      {action && <div className="shrink-0">{action}</div>}
+      {action && <div className="flex shrink-0 items-center gap-1">{action}</div>}
     </div>
   );
 }

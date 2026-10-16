@@ -53,8 +53,16 @@ export function CardPurchaseFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={<Button className="gap-2 lg:w-fit" />}>
-        <Plus className="size-4" /> Nova compra
+      {/* A única ação com rótulo da tela, por ser a principal dela. */}
+      <DialogTrigger
+        render={
+          <button
+            type="button"
+            className="cta-surface flex h-12 min-w-0 flex-1 items-center justify-center gap-2 rounded-2xl px-5 text-sm font-semibold text-white transition-transform duration-150 ease-out-quint hover:-translate-y-px active:scale-[0.97]"
+          />
+        }
+      >
+        <Plus className="size-[18px]" aria-hidden="true" /> Nova compra
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
@@ -93,12 +101,18 @@ export function CardPurchaseFormDialog({
           {categories.length > 0 && (
             <div className="flex flex-col gap-2">
               <Label htmlFor="categoryId">Categoria</Label>
-              <input type="hidden" name="categoryId" value={categoryId === NONE ? "" : categoryId} />
+              <input
+                type="hidden"
+                name="categoryId"
+                value={categoryId === NONE ? "" : categoryId}
+              />
               <Select value={categoryId} onValueChange={(v) => setCategoryId(v as string)}>
                 <SelectTrigger id="categoryId" className="w-full">
                   <SelectValue>
                     {(value: string) =>
-                      value === NONE ? "Sem categoria" : categories.find((c) => c.id === value)?.name
+                      value === NONE
+                        ? "Sem categoria"
+                        : categories.find((c) => c.id === value)?.name
                     }
                   </SelectValue>
                 </SelectTrigger>

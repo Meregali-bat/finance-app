@@ -3,10 +3,11 @@ import { Check } from "lucide-react";
 import { Logo } from "@/components/logo";
 import { redirect } from "next/navigation";
 import { signIn } from "@/auth";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { SubmitButton } from "./submit-button";
+
+/** Os campos do login: 46px, raio 14, fundo escuro e anel rosé no foco. */
+const FIELD =
+  "h-[46px] rounded-[14px] border border-[rgb(255_236_233/0.12)] bg-black/25 px-3.5 text-[15px] text-foreground outline-none transition-[border-color,box-shadow] duration-150 placeholder:text-muted-foreground/60 focus:border-primary focus:shadow-[0_0_0_3px_rgb(242_169_159/0.2)]";
 
 export default async function LoginPage({
   searchParams,
@@ -32,23 +33,28 @@ export default async function LoginPage({
   }
 
   return (
-    <div className="relative flex min-h-screen w-full items-center justify-center p-4">
+    <div className="relative flex min-h-screen w-full items-center justify-center overflow-hidden px-5 py-8">
       <div aria-hidden="true" className="app-backdrop" />
-      <div className="flex w-full max-w-5xl flex-col gap-10 lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex max-w-md flex-col gap-6">
-          <Logo />
-          <h1 className="font-heading text-[2.5rem] leading-[1.05] font-semibold tracking-[-0.04em] lg:text-[3.5rem]">
+      {/* Duas colunas que quebram sozinhas quando não cabem. */}
+      <div className="flex w-full max-w-[1000px] flex-wrap items-center justify-between gap-12">
+        <div className="rise-in flex max-w-[480px] flex-[1_1_380px] flex-col gap-7">
+          <Logo size="lg" />
+          <h1 className="font-heading text-[clamp(40px,6vw,60px)] leading-none font-bold tracking-[-0.045em] text-balance">
             Saiba quanto você pode gastar <span className="text-primary">hoje.</span>
           </h1>
-          <ul className="flex flex-col gap-3 text-sm text-muted-foreground">
+          <ul className="flex flex-col gap-3 text-[14.5px] text-muted-foreground">
             {[
               "Cada mês leva em conta o anterior",
               "Previsão dos próximos ciclos, com cartão e parcelas",
               "Contas a pagar, adiadas e vencidas num lugar só",
-            ].map((line) => (
-              <li key={line} className="flex items-center gap-3">
-                <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-brand/60 ring-1 ring-white/10">
-                  <Check className="size-3.5 text-primary" aria-hidden="true" />
+            ].map((line, index) => (
+              <li
+                key={line}
+                className="slide-in flex items-center gap-3"
+                style={{ "--rise-delay": `${500 + index * 120}ms` } as React.CSSProperties}
+              >
+                <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-brand/60 text-primary shadow-[inset_0_0_0_1px_rgb(255_255_255/0.1)]">
+                  <Check className="size-3.5" strokeWidth={2.5} aria-hidden="true" />
                 </span>
                 {line}
               </li>
@@ -56,37 +62,40 @@ export default async function LoginPage({
           </ul>
         </div>
 
-        <Card variant="elevated" className="w-full max-w-sm">
-          <CardHeader>
-            <CardTitle className="text-2xl tracking-[-0.02em]">Entrar</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <form action={authenticate} className="flex flex-col gap-4">
-              <div className="flex flex-col gap-2">
-                <Label htmlFor="email">Email</Label>
-                <Input id="email" name="email" type="email" autoComplete="email" required />
-              </div>
-              <div className="flex flex-col gap-2">
-                <Label htmlFor="password">Senha</Label>
-                <Input
-                  id="password"
-                  name="password"
-                  type="password"
-                  autoComplete="current-password"
-                  required
-                />
-              </div>
-              {error && (
-                <p role="alert" className="text-sm text-negative">
-                  Email ou senha inválidos.
-                </p>
-              )}
-              <Button type="submit" size="lg" className="mt-2 w-full">
-                Entrar
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
+        <form
+          action={authenticate}
+          className="rise-in flex flex-[0_1_380px] flex-col gap-4 rounded-3xl bg-muted p-7 shadow-[0_2px_4px_rgb(0_0_0/0.5),0_24px_60px_-20px_rgb(0_0_0/0.9),inset_0_1px_0_rgb(255_255_255/0.1),inset_0_0_0_1px_rgb(247_236_233/0.06)]"
+          style={{ "--rise-delay": "150ms" } as React.CSSProperties}
+        >
+          <h2 className="font-heading text-[26px] font-bold tracking-[-0.03em]">Entrar</h2>
+          <label className="flex flex-col gap-2 text-[13.5px] font-medium">
+            Email
+            <input
+              name="email"
+              type="email"
+              autoComplete="email"
+              placeholder="voce@email.com"
+              required
+              className={FIELD}
+            />
+          </label>
+          <label className="flex flex-col gap-2 text-[13.5px] font-medium">
+            Senha
+            <input
+              name="password"
+              type="password"
+              autoComplete="current-password"
+              required
+              className={FIELD}
+            />
+          </label>
+          {error && (
+            <p role="alert" className="text-sm text-negative">
+              Email ou senha inválidos.
+            </p>
+          )}
+          <SubmitButton />
+        </form>
       </div>
     </div>
   );

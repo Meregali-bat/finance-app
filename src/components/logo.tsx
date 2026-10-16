@@ -82,18 +82,18 @@ export function Logo({
   size = "md",
   className,
 }: {
-  /** md: barra lateral (30px + 22px). sm: topo do celular (24px + 19px). */
-  size?: "sm" | "md";
+  /** lg: login (36px + 26px). md: barra lateral (30px + 22px). sm: topo do celular (24px + 19px). */
+  size?: "sm" | "md" | "lg";
   className?: string;
 }) {
-  const mark = size === "md" ? 30 : 24;
+  const mark = size === "lg" ? 36 : size === "md" ? 30 : 24;
   return (
     <span className={cn("flex items-center gap-2.5", className)}>
       <LogoMark size={mark} />
       <span
         className={cn(
           "font-heading leading-none font-bold tracking-[-0.035em]",
-          size === "md" ? "text-[22px]" : "text-[19px]",
+          size === "lg" ? "text-[26px]" : size === "md" ? "text-[22px]" : "text-[19px]",
         )}
       >
         finanças

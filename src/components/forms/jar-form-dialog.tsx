@@ -14,6 +14,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createJar } from "@/lib/actions/jar";
+import { iconButton } from "@/components/ui/icon-button";
 
 export function JarFormDialog() {
   const [open, setOpen] = useState(false);
@@ -34,8 +35,17 @@ export function JarFormDialog() {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={<Button className="gap-2 lg:w-fit" />}>
-        <Plus className="size-4" /> Nova caixinha
+      <DialogTrigger
+        render={
+          <button
+            type="button"
+            className={iconButton({ tone: "cta", size: "lg" })}
+            aria-label="Nova caixinha"
+            title="Nova caixinha"
+          />
+        }
+      >
+        <Plus aria-hidden="true" />
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>

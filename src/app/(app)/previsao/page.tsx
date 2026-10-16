@@ -11,10 +11,11 @@ import {
   type PeriodForecast,
 } from "@/lib/forecast";
 import { formatCurrency, formatDate } from "@/lib/format";
-import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader, SectionLabel } from "@/components/page-header";
-import { AnimatedCurrency } from "@/components/ui/animated-number";
+import { CountUpCurrency } from "@/components/ui/animated-number";
+import { IconSquare, ListRow, stagger } from "@/components/list-row";
+import { homeCard } from "@/components/home-card";
 import { ForecastNav } from "@/components/forecast-nav";
 import { ColumnChart } from "@/components/charts/column-chart";
 import { cn } from "@/lib/utils";
@@ -66,47 +67,44 @@ function offsetCaption(offset: number) {
   return `Daqui a ${offset} períodos`;
 }
 
-function EntryRow({ entry, incoming }: { entry: ForecastEntry; incoming: boolean }) {
+function EntryRow({
+  entry,
+  incoming,
+  index,
+}: {
+  entry: ForecastEntry;
+  incoming: boolean;
+  index: number;
+}) {
+  const detail = [
+    formatDate(entry.date),
+    // "Confirmado" só distingue alguma coisa onde existe o contrário: uma
+    // ocorrência recorrente pode estar projetada ou já ter acontecido. Um
+    // lançamento é sempre um registro real.
+    entry.confirmed && entry.kind !== "scheduled" && entry.kind !== "jar" && "confirmado",
+    entry.partial && "fatura ainda aberta",
+    entry.deferredIn && `inclui ${formatCurrency(entry.deferredIn)} adiados`,
+    // Mostrado mas fora da conta, como na Início: um salário que ninguém disse
+    // ter chegado não pode virar saldo.
+    entry.awaiting && "aguardando confirmação, fora da conta",
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
   return (
-    <Card
-      // Faixa lateral em vez de ícone: a cor diz se o dinheiro entra ou sai
-      // antes de o olho chegar no texto, como nos lembretes do Início.
-      className={cn(
-        "pl-1 before:absolute before:inset-y-0 before:left-0 before:w-1",
-        incoming ? "before:bg-positive" : "before:bg-negative",
-      )}
-    >
-      <CardContent className="flex items-center justify-between gap-3 py-3">
-        <div className="min-w-0">
-          <p className="truncate font-medium">{entry.label}</p>
-          <p className="text-sm text-muted-foreground tabular-nums">
-            {formatDate(entry.date)}
-            {/* "Confirmado" só distingue alguma coisa onde existe o contrário:
-                uma ocorrência recorrente pode estar projetada ou já ter
-                acontecido. Um lançamento é sempre um registro real. */}
-            {entry.confirmed &&
-              entry.kind !== "scheduled" &&
-              entry.kind !== "jar" &&
-              " · confirmado"}
-            {entry.partial && " · fatura ainda aberta"}
-            {entry.deferredIn && ` · inclui ${formatCurrency(entry.deferredIn)} adiados`}
-            {/* Mostrado mas fora da conta, como na Início: um salário que
-                ninguém disse ter chegado não pode virar saldo. */}
-            {entry.awaiting && " · aguardando confirmação, fora da conta"}
-          </p>
-        </div>
-        <p
-          className={cn(
-            "shrink-0 font-medium tabular-nums",
-            incoming ? "text-positive" : "text-foreground",
-            entry.awaiting && "text-muted-foreground line-through",
-          )}
-        >
-          {incoming ? "+" : "−"}
-          {formatCurrency(entry.amount)}
-        </p>
-      </CardContent>
-    </Card>
+    <li className="rise-in" style={stagger(index, 80, 45)}>
+      <ListRow
+        icon={incoming ? <ArrowDownLeft /> : <ArrowUpRight />}
+        tone={incoming ? "positive" : "negative"}
+        title={entry.label}
+        subtitle={<span className="tabular-nums">{detail}</span>}
+        value={`${incoming ? "+" : "−"}${formatCurrency(entry.amount)}`}
+        valueClassName={cn(
+          incoming ? "text-positive" : "text-foreground",
+          entry.awaiting && "text-muted-foreground line-through",
+        )}
+      />
+    </li>
   );
 }
 
@@ -191,150 +189,171 @@ export default async function ForecastPage({
 
       <section
         aria-label="Este ciclo"
-        className="hero-surface relative overflow-hidden rounded-[1.75rem] text-white shadow-float ring-1 ring-white/10"
+        className="hero-surface rise-in relative overflow-hidden rounded-[26px] text-white lg:rounded-[28px]"
+        style={{ "--rise-delay": "80ms" } as React.CSSProperties}
       >
-        <div className="relative z-10 flex flex-col gap-6 p-6 lg:p-8 xl:grid xl:grid-cols-[1fr_1fr] xl:gap-10">
-          <div className="flex flex-col gap-4">
-            <div className="flex flex-col gap-1">
-              <p className="text-sm text-white/70">
-                {isNegative ? "Vai faltar ao fim do período" : "Livre para gastar no período"}
+        <div className="relative z-10 p-1 lg:px-4 lg:py-3">
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(min(300px,100%),1fr))] overflow-hidden">
+            <div className="flex flex-col gap-4 p-[18px] lg:p-5">
+              <div className="flex flex-col gap-1.5">
+                <p className="text-sm font-medium text-white/72">
+                  {isNegative ? "Vai faltar ao fim do período" : "Livre para gastar no período"}
+                </p>
+                {/* Mesmo elemento entre um ciclo e outro (trocar a query não
+                    remonta a tela), então o valor conta do anterior até o novo. */}
+                <CountUpCurrency
+                  value={isNegative ? period.endBalance : period.freeToSpend}
+                  duration={0.7}
+                  delay={0.2}
+                  className={cn(
+                    "font-heading text-[44px] leading-none font-bold tracking-[-0.04em] tabular-nums lg:text-[52px]",
+                    isNegative ? "text-negative" : "text-white",
+                  )}
+                />
+              </div>
+              <p className="text-sm text-white/80 tabular-nums">
+                <span className="font-semibold text-white">
+                  {formatCurrency(period.dailyAvailable)}
+                </span>{" "}
+                por dia ·{" "}
+                {period.offset === 0
+                  ? `${period.daysLeft} ${period.daysLeft === 1 ? "dia restante" : "dias restantes"}`
+                  : `${period.totalDays} ${period.totalDays === 1 ? "dia" : "dias"} de ciclo`}
               </p>
-              <AnimatedCurrency
-                value={isNegative ? period.endBalance : period.freeToSpend}
-                className={cn(
-                  "font-heading text-[3rem] leading-[1] font-bold tracking-[-0.04em] lg:text-[3.75rem]",
-                  isNegative ? "text-negative" : "text-white",
-                )}
-              />
-            </div>
-            <p className="text-sm text-white/80 tabular-nums">
-              <span className="font-semibold text-white">
-                {formatCurrency(period.dailyAvailable)}
-              </span>{" "}
-              por dia ·{" "}
-              {period.offset === 0
-                ? `${period.daysLeft} ${period.daysLeft === 1 ? "dia restante" : "dias restantes"}`
-                : `${period.totalDays} ${period.totalDays === 1 ? "dia" : "dias"} de ciclo`}
-            </p>
-            <div className="flex flex-wrap gap-2">
-              <div className="flex items-center gap-2 rounded-2xl bg-black/20 px-4 py-2.5 ring-1 ring-white/10">
-                <ArrowDownLeft className="size-4 shrink-0 text-positive" aria-hidden="true" />
-                <div className="flex flex-col">
-                  <span className="text-[0.6875rem] font-semibold tracking-[0.08em] text-white/60 uppercase">
-                    Entradas
-                  </span>
-                  <span className="font-medium tabular-nums">
-                    {formatCurrency(period.incomeTotal)}
-                  </span>
-                </div>
-              </div>
-              <div className="flex items-center gap-2 rounded-2xl bg-black/20 px-4 py-2.5 ring-1 ring-white/10">
-                <ArrowUpRight className="size-4 shrink-0 text-negative" aria-hidden="true" />
-                <div className="flex flex-col">
-                  <span className="text-[0.6875rem] font-semibold tracking-[0.08em] text-white/60 uppercase">
-                    Saídas
-                  </span>
-                  <span className="font-medium tabular-nums">
-                    {formatCurrency(
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  {
+                    label: "Entradas",
+                    value: period.incomeTotal,
+                    icon: (
+                      <ArrowDownLeft className="size-4 shrink-0 text-positive" aria-hidden="true" />
+                    ),
+                  },
+                  {
+                    label: "Saídas",
+                    value:
                       period.fixedExpenseTotal +
-                        period.cardBillTotal +
-                        period.scheduledTotal +
-                        period.jarTotal,
-                    )}
-                  </span>
-                </div>
+                      period.cardBillTotal +
+                      period.scheduledTotal +
+                      period.jarTotal,
+                    icon: (
+                      <ArrowUpRight className="size-4 shrink-0 text-negative" aria-hidden="true" />
+                    ),
+                  },
+                ].map((chip) => (
+                  <div
+                    key={chip.label}
+                    className="flex min-w-0 items-center gap-2.5 rounded-2xl bg-black/22 px-3.5 py-2.5 ring-1 ring-white/10"
+                  >
+                    {chip.icon}
+                    <div className="flex min-w-0 flex-col gap-0.5">
+                      <span className="truncate text-[11px] font-semibold tracking-[0.08em] text-white/60 uppercase">
+                        {chip.label}
+                      </span>
+                      <span className="truncate text-[15px] font-semibold tabular-nums">
+                        {formatCurrency(chip.value)}
+                      </span>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
-          </div>
 
-          {/* A conta por trás do número grande, como uma fita: o que veio de
-              antes, mais o que este ciclo movimenta, menos o que ele guarda
-              para a frente. Sem ela, um mês com renda maior que as contas
-              aparecer negativo — ou menor do que parece — parece erro. */}
-          <dl className="flex flex-col justify-center gap-3 border-t border-white/10 pt-5 text-sm tabular-nums xl:border-t-0 xl:border-l xl:pt-0 xl:pl-10">
-            <div className="flex items-baseline justify-between gap-3">
-              <dt className="text-white/70">{inheritedLabel}</dt>
-              <dd className="font-medium">{formatCurrency(period.inherited)}</dd>
-            </div>
-            <div className="flex items-baseline justify-between gap-3">
-              <dt className="text-white/70">Resultado do período</dt>
-              <dd className="font-medium">{formatCurrency(period.periodResult)}</dd>
-            </div>
-            {period.reservedForLater > 0.005 && (
+            {/* A conta por trás do número grande, como uma fita: o que veio de
+                antes, mais o que este ciclo movimenta, menos o que ele guarda
+                para a frente. Sem ela, um mês com renda maior que as contas
+                aparecer negativo — ou menor do que parece — parece erro. O
+                divisor é a mesma sombra de 1px do hero da Início. */}
+            <dl className="flex flex-col justify-center gap-2.5 p-[18px] text-[13.5px] tabular-nums shadow-[-1px_-1px_0_0_rgb(255_255_255/0.12)] lg:p-5">
               <div className="flex items-baseline justify-between gap-3">
-                <dt className="text-white/70">Reservado para ciclos à frente</dt>
-                <dd className="font-medium">− {formatCurrency(period.reservedForLater)}</dd>
+                <dt className="text-white/72">{inheritedLabel}</dt>
+                <dd className="font-medium">{formatCurrency(period.inherited)}</dd>
               </div>
-            )}
-            <div className="flex items-baseline justify-between gap-3 border-t border-white/10 pt-3">
-              <dt className="font-medium">
-                {isNegative ? "Falta no fim do ciclo" : "Livre para gastar"}
-              </dt>
-              <dd className="font-heading text-lg font-semibold">
-                {formatCurrency(isNegative ? period.endBalance : period.freeToSpend)}
-              </dd>
-            </div>
-          </dl>
+              <div className="flex items-baseline justify-between gap-3">
+                <dt className="text-white/72">Resultado do período</dt>
+                <dd className="font-medium">{formatCurrency(period.periodResult)}</dd>
+              </div>
+              {period.reservedForLater > 0.005 && (
+                <div className="flex items-baseline justify-between gap-3">
+                  <dt className="text-white/72">Reservado para ciclos à frente</dt>
+                  <dd className="font-medium">− {formatCurrency(period.reservedForLater)}</dd>
+                </div>
+              )}
+              <div className="mt-1 flex items-baseline justify-between gap-3 border-t border-white/12 pt-3">
+                <dt className="font-semibold">
+                  {isNegative ? "Falta no fim do ciclo" : "Livre para gastar"}
+                </dt>
+                <dd className="font-heading text-lg font-bold tracking-[-0.02em]">
+                  {formatCurrency(isNegative ? period.endBalance : period.freeToSpend)}
+                </dd>
+              </div>
+            </dl>
+          </div>
         </div>
       </section>
 
       {shortfall && (
-        <Card className="pl-1 before:absolute before:inset-y-0 before:left-0 before:w-1 before:bg-negative">
-          <CardContent className="flex items-start gap-3 py-3">
-            <AlertTriangle className="mt-0.5 size-4 shrink-0 text-negative" aria-hidden="true" />
-            <p className="text-sm">
-              {shortfall.offset === period.offset
-                ? "Neste ciclo"
-                : `No ciclo de ${periodLabel(shortfall)}`}
-              , o que está comprometido passa do que existe em{" "}
-              <span className="font-medium tabular-nums">
-                {formatCurrency(Math.abs(shortfall.endBalance))}
-              </span>
-              , mesmo sem gastar nada além disso até lá. O que faltar passa para o ciclo
-              seguinte.
-            </p>
-          </CardContent>
-        </Card>
+        <div
+          className="rise-in flex items-start gap-3 rounded-[20px] bg-card p-3.5 shadow-[inset_0_0_0_1px_rgb(255_122_107/0.25)]"
+          style={{ "--rise-delay": "160ms" } as React.CSSProperties}
+        >
+          <IconSquare tone="negative">
+            <AlertTriangle />
+          </IconSquare>
+          <p className="pt-1.5 text-[13.5px] leading-relaxed">
+            {shortfall.offset === period.offset
+              ? "Neste ciclo"
+              : `No ciclo de ${periodLabel(shortfall)}`}
+            , o que está comprometido passa do que existe em{" "}
+            <span className="font-semibold tabular-nums">
+              {formatCurrency(Math.abs(shortfall.endBalance))}
+            </span>
+            , mesmo sem gastar nada além disso até lá. O que faltar passa para o ciclo seguinte.
+          </p>
+        </div>
       )}
 
       {/* Um ciclo por coluna: para cima o que fica livre (turquesa), para
           baixo o que vai faltar (coral) — positivo e negativo em torno do
           zero. A coluna é o link para o ciclo, e a selecionada leva o valor. */}
-      <Card>
-        <CardContent className="flex flex-col gap-4 py-5">
-          <div className="flex items-baseline justify-between gap-3">
-            <SectionLabel>Próximos ciclos</SectionLabel>
-            <div className="flex items-center gap-3 text-xs text-muted-foreground">
-              <span className="flex items-center gap-1.5">
-                <span aria-hidden="true" className="size-2.5 rounded-[3px] bg-chart-2" />
-                Livre
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span aria-hidden="true" className="size-2.5 rounded-[3px] bg-chart-3" />
-                Vai faltar
-              </span>
-            </div>
+      <div
+        className={homeCard("rise-in flex flex-col gap-4")}
+        style={{ "--rise-delay": "220ms" } as React.CSSProperties}
+      >
+        <div className="flex items-baseline justify-between gap-3">
+          <SectionLabel>Próximos ciclos</SectionLabel>
+          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1.5">
+              <span aria-hidden="true" className="size-2.5 rounded-[3px] bg-chart-2" />
+              Livre
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span aria-hidden="true" className="size-2.5 rounded-[3px] bg-chart-3" />
+              Vai faltar
+            </span>
           </div>
-          <ColumnChart
-            title="Livre para gastar ou falta, por ciclo"
-            height={180}
-            columns={timeline.map((item) => {
-              const short = item.endBalance < -0.005;
-              const value = short ? item.endBalance : item.freeToSpend;
-              return {
-                key: String(item.offset),
-                label: item.offset === 0 ? "Atual" : monthLabel(item.periodStart),
-                value,
-                valueLabel: formatCurrency(value),
-                tone: short ? "negative" : "positive",
-                detail: `${periodLabel(item)} · ${short ? "vai faltar" : "livre"}`,
-                href: forecastHref(item.offset),
-                selected: item.offset === offset,
-              };
-            })}
-          />
-        </CardContent>
-      </Card>
+        </div>
+        <ColumnChart
+          title="Livre para gastar ou falta, por ciclo"
+          height={170}
+          dimOpacity={0.55}
+          maxWidth={22}
+          columns={timeline.map((item) => {
+            const short = item.endBalance < -0.005;
+            const value = short ? item.endBalance : item.freeToSpend;
+            return {
+              key: String(item.offset),
+              label: item.offset === 0 ? "Atual" : monthLabel(item.periodStart),
+              value,
+              valueLabel: formatCurrency(value),
+              tone: short ? "negative" : "positive",
+              detail: `${periodLabel(item)} · ${short ? "vai faltar" : "livre"}`,
+              href: forecastHref(item.offset),
+              selected: item.offset === offset,
+            };
+          })}
+        />
+      </div>
 
       {period.entries.length === 0 ? (
         <EmptyState
@@ -352,15 +371,16 @@ export default async function ForecastPage({
             return (
               <div key={kind} className="flex flex-col gap-3">
                 <SectionLabel>{groupLabel(kind, label, period.offset)}</SectionLabel>
-                <div className="flex flex-col gap-2">
-                  {entries.map((entry) => (
+                <ul className="flex flex-col gap-2">
+                  {entries.map((entry, index) => (
                     <EntryRow
                       key={`${entry.kind}-${entry.sourceId}-${entry.date.toISOString()}`}
                       entry={entry}
                       incoming={incoming}
+                      index={index}
                     />
                   ))}
-                </div>
+                </ul>
               </div>
             );
           })}
