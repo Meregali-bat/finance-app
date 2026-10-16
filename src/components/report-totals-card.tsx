@@ -12,11 +12,11 @@ import { cn } from "@/lib/utils";
 export function ReportTotalsCard({ totals }: { totals: ReportTotals }) {
   const figures = [
     { label: "Gasto", value: totals.spent, tone: "" },
-    { label: "Recebido", value: totals.received, tone: "text-primary" },
+    { label: "Recebido", value: totals.received, tone: "text-positive" },
     {
       label: "Saldo",
       value: totals.balance,
-      tone: totals.balance < 0 ? "text-negative" : "text-primary",
+      tone: totals.balance < 0 ? "text-negative" : "text-positive",
     },
     { label: "Média diária", value: totals.dailyAverage, tone: "" },
   ];

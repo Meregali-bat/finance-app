@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calculateReportTotals } from "./report-totals";
+import { spendingBuckets, calculateReportTotals } from "./report-totals";
 import type { HistoryItem } from "./history-item";
 
 function item(overrides: Partial<HistoryItem> & Pick<HistoryItem, "amount">): HistoryItem {
@@ -168,5 +168,34 @@ describe("caixinhas e diferenças de fatura", () => {
 
     expect(totals.spent).toBe(175);
     expect(totals.received).toBe(0);
+  });
+});
+
+describe("spendingBuckets", () => {
+  it("agrupa o gasto por dia e soma o mesmo que o total", () => {
+    const items = [
+      item({ kind: "transaction", amount: 100, date: new Date(Date.UTC(2026, 7, 3)) }),
+      item({ kind: "card", amount: 50, date: new Date(2026, 7, 3) }),
+      item({ kind: "cardBillPayment", amount: 999, date: new Date(2026, 7, 3) }),
+      item({ kind: "incomeReceipt", amount: -5000, date: new Date(2026, 7, 5) }),
+      item({ kind: "fixedExpensePayment", amount: 30, date: new Date(2026, 7, 31, 20) }),
+    ];
+    const buckets = spendingBuckets({ items, ...august });
+
+    expect(buckets).toHaveLength(31);
+    expect(buckets[2].total).toBe(150);
+    expect(buckets[30].total).toBe(30);
+    expect(buckets.reduce((s, b) => s + b.total, 0)).toBe(
+      calculateReportTotals({ items, ...august, today: afterAugust }).spent,
+    );
+  });
+
+  it("agrupa por mês num período longo", () => {
+    const buckets = spendingBuckets({
+      items: [],
+      rangeStart: new Date(2026, 0, 1),
+      rangeEnd: new Date(2026, 6, 1),
+    });
+    expect(buckets.map((b) => b.unit)).toEqual(new Array(6).fill("month"));
   });
 });

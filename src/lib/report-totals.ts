@@ -1,4 +1,5 @@
 import type { HistoryItem } from "./history-item";
+import { storedDay } from "./period";
 
 export type ReportTotals = {
   spent: number;
@@ -86,4 +87,45 @@ export function calculateReportTotals(input: {
     balance: received - spent - saved,
     dailyAverage: days > 0 ? spent / days : 0,
   };
+}
+
+function dayOf(item: HistoryItem): Date {
+  // Lançamento guarda um dia de calendário em meia-noite UTC; o resto
+  // (pagamento, vencimento de fatura) é um instante local.
+  return item.kind === "transaction" ? storedDay(item.date) : startOfDay(item.date);
+}
+
+/**
+ * O gasto do período agrupado para o gráfico do Histórico: por dia, ou por mês
+ * quando o período passa de dois meses — sessenta colunas finas não dizem
+ * nada. Usa o mesmo critério de gasto dos totais, então as colunas somam
+ * exatamente o "Gasto" do resumo.
+ */
+export function spendingBuckets(input: {
+  items: HistoryItem[];
+  rangeStart: Date;
+  rangeEnd: Date;
+}): { start: Date; total: number; unit: "day" | "month" }[] {
+  const { items, rangeStart, rangeEnd } = input;
+  const days = diffCalendarDays(rangeEnd, rangeStart);
+  const unit = days > 62 ? "month" : "day";
+
+  const buckets: { start: Date; total: number; unit: "day" | "month" }[] = [];
+  for (
+    let cursor = startOfDay(rangeStart);
+    cursor.getTime() < rangeEnd.getTime();
+    cursor =
+      unit === "day"
+        ? new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate() + 1)
+        : new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1)
+  ) {
+    buckets.push({ start: cursor, total: 0, unit });
+  }
+
+  for (const item of items.filter(countsAsSpending)) {
+    const day = dayOf(item);
+    const index = buckets.findLastIndex((b) => b.start.getTime() <= day.getTime());
+    if (index >= 0 && day.getTime() < rangeEnd.getTime()) buckets[index].total += item.amount;
+  }
+  return buckets;
 }
