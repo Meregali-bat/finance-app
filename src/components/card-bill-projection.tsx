@@ -1,5 +1,5 @@
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { homeCard } from "@/components/home-card";
+import { ListRow, stagger } from "@/components/list-row";
 import { SectionLabel } from "@/components/page-header";
 import { DeleteIconButton } from "@/components/delete-icon-button";
 import { formatCurrency, formatDate } from "@/lib/format";
@@ -44,66 +44,65 @@ export function CardBillProjection({
           "Vencida" não depende da cor — está no tooltip, na tabela e no selo
           da lista logo abaixo. */}
       {bills.length > 1 && (
-        <Card>
-          <CardContent className="flex flex-col gap-4 py-5">
-            <SectionLabel>Próximas faturas</SectionLabel>
-            <ColumnChart
-              title="Valor das faturas por vencimento"
-              height={140}
-              columns={bills.map((bill) => {
-                const value = bill.paid ? (bill.paidAmount ?? bill.amount) : bill.amount;
-                return {
-                  key: bill.dueDateIso,
-                  label: new Intl.DateTimeFormat("pt-BR", { month: "short" })
-                    .format(bill.dueDate)
-                    .replace(".", ""),
-                  value,
-                  valueLabel: formatCurrency(value),
-                  tone: bill.paid ? ("muted" as const) : ("accent" as const),
-                  detail: `${bill.overdue ? "Venceu" : "Vence"} ${formatDate(bill.dueDate)}${
-                    bill.paid ? " · paga" : bill.overdue ? " · vencida" : ""
-                  }`,
-                  selected: bill === bills.find((b) => !b.paid && b.amount > 0),
-                };
-              })}
-            />
-          </CardContent>
-        </Card>
+        <div
+          className={homeCard("rise-in flex flex-col gap-4")}
+          style={{ "--rise-delay": "180ms" } as React.CSSProperties}
+        >
+          <SectionLabel>Próximas faturas</SectionLabel>
+          <ColumnChart
+            title="Valor das faturas por vencimento"
+            height={140}
+            maxWidth={22}
+            columns={bills.map((bill) => {
+              const value = bill.paid ? (bill.paidAmount ?? bill.amount) : bill.amount;
+              return {
+                key: bill.dueDateIso,
+                label: new Intl.DateTimeFormat("pt-BR", { month: "short" })
+                  .format(bill.dueDate)
+                  .replace(".", ""),
+                value,
+                valueLabel: formatCurrency(value),
+                tone: bill.paid ? ("muted" as const) : ("accent" as const),
+                detail: `${bill.overdue ? "Venceu" : "Vence"} ${formatDate(bill.dueDate)}${
+                  bill.paid ? " · paga" : bill.overdue ? " · vencida" : ""
+                }`,
+                selected: bill === bills.find((b) => !b.paid && b.amount > 0),
+              };
+            })}
+          />
+        </div>
       )}
 
       <div className="flex flex-col gap-2">
         <SectionLabel>Faturas</SectionLabel>
-        {bills.map((bill) => (
-          <Card key={bill.dueDateIso}>
-            <CardContent className="flex items-center justify-between gap-3 py-3">
-              <div className="min-w-0">
-                <p className="font-medium">
-                  {bill.overdue ? "Venceu" : "Vence"} {formatDate(bill.dueDate)}
-                </p>
-                {bill.estimateAmount > 0 && (
-                  <p className="text-xs text-muted-foreground tabular-nums">
-                    inclui {formatCurrency(bill.estimateAmount)} previstos
-                  </p>
-                )}
-              </div>
-              <div className="flex shrink-0 items-center gap-2">
-                {bill.paid ? (
-                  <Badge variant="secondary">Paga</Badge>
-                ) : (
-                  bill.overdue && <Badge variant="destructive">Vencida</Badge>
-                )}
-                <span
-                  className={`font-medium tabular-nums ${
-                    // Uma fatura zerada não é uma dívida: não merece o destaque
-                    // de um valor a pagar.
-                    bill.amount === 0 ? "text-muted-foreground" : ""
-                  }`}
-                >
+        {bills.map((bill, index) => (
+          <div key={bill.dueDateIso} className="rise-in" style={stagger(index, 220)}>
+            <ListRow
+              title={`${bill.overdue ? "Venceu" : "Vence"} ${formatDate(bill.dueDate)}`}
+              subtitle={
+                bill.estimateAmount > 0
+                  ? `inclui ${formatCurrency(bill.estimateAmount)} previstos`
+                  : undefined
+              }
+              value={
+                <span className="flex items-center gap-2">
+                  {bill.paid ? (
+                    <span className="flex h-[22px] items-center rounded-full bg-secondary px-2.5 text-[11px] font-semibold">
+                      Paga
+                    </span>
+                  ) : (
+                    bill.overdue && (
+                      <span className="flex h-[22px] items-center rounded-full bg-negative/15 px-2.5 text-[11px] font-semibold text-negative">
+                        Vencida
+                      </span>
+                    )
+                  )}
                   {formatCurrency(bill.paid ? (bill.paidAmount ?? bill.amount) : bill.amount)}
                 </span>
-              </div>
-            </CardContent>
-          </Card>
+              }
+              valueClassName={bill.amount === 0 ? "text-muted-foreground" : undefined}
+            />
+          </div>
         ))}
       </div>
 
@@ -115,25 +114,18 @@ export function CardBillProjection({
         <div className="flex flex-col gap-2">
           <SectionLabel>Previsões lançadas</SectionLabel>
           {estimates.map((estimate) => (
-            <Card key={estimate.id}>
-              <CardContent className="flex items-center justify-between gap-3 py-3">
-                <div className="min-w-0">
-                  <p className="truncate font-medium">{estimate.description}</p>
-                  <p className="text-sm text-muted-foreground">
-                    Na fatura de {formatDate(estimate.dueDate)}
-                  </p>
-                </div>
-                <div className="flex shrink-0 items-center gap-2">
-                  <span className="font-medium tabular-nums">
-                    {formatCurrency(estimate.amount)}
-                  </span>
-                  <DeleteIconButton
-                    action={deleteCardBillEstimate.bind(null, estimate.id, cardId)}
-                    confirmMessage={`Excluir a previsão "${estimate.description}"? A fatura volta a mostrar só o que as compras somam.`}
-                  />
-                </div>
-              </CardContent>
-            </Card>
+            <ListRow
+              key={estimate.id}
+              title={estimate.description}
+              subtitle={`Na fatura de ${formatDate(estimate.dueDate)}`}
+              value={formatCurrency(estimate.amount)}
+              trailing={
+                <DeleteIconButton
+                  action={deleteCardBillEstimate.bind(null, estimate.id, cardId)}
+                  confirmMessage={`Excluir a previsão "${estimate.description}"? A fatura volta a mostrar só o que as compras somam.`}
+                />
+              }
+            />
           ))}
         </div>
       )}

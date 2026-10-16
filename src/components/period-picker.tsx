@@ -35,7 +35,7 @@ const MODES: { value: RangeMode; label: string }[] = [
  * dispara o clique — o botão pisca e não navega.
  */
 const ARROW_CLASS =
-  "flex size-11 shrink-0 touch-manipulation items-center justify-center rounded-xl text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground active:bg-muted active:text-foreground";
+  "flex size-11 shrink-0 touch-manipulation items-center justify-center rounded-[14px] text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground active:bg-muted active:text-foreground";
 
 /**
  * A barra de período: setas para os vizinhos e o rótulo como gatilho do
@@ -79,7 +79,7 @@ export function PeriodPicker({ range }: { range: ResolvedRange }) {
   }
 
   return (
-    <div className="flex items-center justify-between gap-2 rounded-2xl bg-card p-2 shadow-surface ring-1 ring-foreground/10 lg:w-fit lg:gap-6 lg:self-start">
+    <div className="rise-in flex items-center justify-between gap-2 rounded-[18px] bg-card p-1.5 shadow-[inset_0_0_0_1px_rgb(247_236_233/0.08)] lg:w-fit lg:min-w-[24rem] lg:self-start">
       <Link
         href={hrefFor(range.previous)}
         className={ARROW_CLASS}
@@ -93,12 +93,12 @@ export function PeriodPicker({ range }: { range: ResolvedRange }) {
           render={
             <button
               type="button"
-              className="flex min-w-0 items-center justify-center gap-1.5 rounded-xl px-2 py-1 transition-colors hover:bg-muted"
+              className="flex min-h-11 min-w-0 items-center justify-center gap-1.5 rounded-[14px] px-3 transition-colors hover:bg-muted"
             />
           }
         >
           {/* `capitalize` maiusculiza toda palavra e viraria "Agosto De 2026". */}
-          <span className="truncate font-heading font-medium first-letter:uppercase">
+          <span className="truncate font-heading text-base font-semibold tracking-[-0.01em] first-letter:uppercase">
             {range.label}
           </span>
           <ChevronDown className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />

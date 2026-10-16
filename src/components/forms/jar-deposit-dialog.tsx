@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CurrencyInput } from "@/components/currency-input";
 import { depositToJar, withdrawFromJar } from "@/lib/actions/jar";
+import { iconButton } from "@/components/ui/icon-button";
 
 /**
  * Guardar e resgatar são o mesmo formulário com a direção trocada: o resgate
@@ -24,10 +25,15 @@ export function JarDepositDialog({
   jarId,
   jarName,
   mode = "deposit",
+  onDone,
+  disabled,
 }: {
   jarId: string;
   jarName: string;
   mode?: "deposit" | "withdraw";
+  /** Depois de salvar, com o id do movimento e o valor — para o toast. */
+  onDone?: (result: { depositId: string; amount: number }) => void;
+  disabled?: boolean;
 }) {
   const withdraw = mode === "withdraw";
   const [open, setOpen] = useState(false);
@@ -38,8 +44,9 @@ export function JarDepositDialog({
     setError(null);
     startTransition(async () => {
       try {
-        await (withdraw ? withdrawFromJar : depositToJar)(jarId, formData);
+        const result = await (withdraw ? withdrawFromJar : depositToJar)(jarId, formData);
         setOpen(false);
+        onDone?.({ depositId: result.depositId, amount: Number(formData.get("amount")) });
       } catch (e) {
         setError(e instanceof Error ? e.message : "Erro ao salvar");
       }
@@ -49,17 +56,21 @@ export function JarDepositDialog({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger
-        render={<Button variant={withdraw ? "ghost" : "secondary"} size="sm" className="gap-2" />}
+        disabled={disabled}
+        render={
+          <button
+            type="button"
+            className={iconButton({
+              tone: withdraw ? "outline" : "solid",
+              size: "lg",
+              className: "h-10 w-auto flex-1 rounded-[14px]",
+            })}
+            aria-label={withdraw ? "Resgatar" : "Guardar"}
+            title={withdraw ? "Resgatar" : "Guardar"}
+          />
+        }
       >
-        {withdraw ? (
-          <>
-            <ArrowUpFromLine className="size-4" /> Resgatar
-          </>
-        ) : (
-          <>
-            <ArrowDownToLine className="size-4" /> Guardar
-          </>
-        )}
+        {withdraw ? <ArrowUpFromLine aria-hidden="true" /> : <ArrowDownToLine aria-hidden="true" />}
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>

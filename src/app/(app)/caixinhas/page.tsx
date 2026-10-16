@@ -1,14 +1,10 @@
 import { PiggyBank } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/auth-helpers";
-import { formatCurrency } from "@/lib/format";
-import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/page-header";
 import { JarFormDialog } from "@/components/forms/jar-form-dialog";
-import { JarDepositDialog } from "@/components/forms/jar-deposit-dialog";
-import { DeleteIconButton } from "@/components/delete-icon-button";
-import { deleteJar } from "@/lib/actions/jar";
+import { JarsGrid } from "@/components/jars-grid";
 
 export default async function JarsPage() {
   const userId = await requireUserId();
@@ -18,45 +14,24 @@ export default async function JarsPage() {
   });
 
   return (
-    <div className="flex flex-col gap-6">
-      <PageHeader title="Caixinhas" subtitle="Onde a sobra do período vai parar" />
-
-      <JarFormDialog />
+    <div className="flex flex-col gap-5 lg:gap-6">
+      <PageHeader
+        title="Caixinhas"
+        subtitle="Onde a sobra do período vai parar"
+        action={<JarFormDialog />}
+      />
 
       {jars.length === 0 ? (
         <EmptyState
           icon={PiggyBank}
           text="Nenhuma caixinha criada ainda."
-          hint="Crie uma para guardar o que sobrar no fim do período."
+          hint="Toque no + para criar uma e guardar o que sobrar no fim do período."
         />
       ) : (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {jars.map((jar) => (
-            <Card key={jar.id}>
-              <CardContent className="flex flex-col gap-3 py-4">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <PiggyBank className="size-5 shrink-0 text-primary" aria-hidden="true" />
-                    <p className="truncate font-medium">{jar.name}</p>
-                  </div>
-                  <DeleteIconButton
-                    action={deleteJar.bind(null, jar.id)}
-                    confirmMessage={`Excluir a caixinha "${jar.name}"? Os depósitos continuam no Histórico.`}
-                  />
-                </div>
-                <p className="font-heading text-2xl leading-tight font-semibold tracking-[-0.02em] tabular-nums">
-                  {formatCurrency(Number(jar.balance))}
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  <JarDepositDialog jarId={jar.id} jarName={jar.name} />
-                  {Number(jar.balance) > 0 && (
-                    <JarDepositDialog jarId={jar.id} jarName={jar.name} mode="withdraw" />
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+        // Decimal não atravessa para o cliente: o saldo vai como número.
+        <JarsGrid
+          jars={jars.map((jar) => ({ id: jar.id, name: jar.name, balance: Number(jar.balance) }))}
+        />
       )}
     </div>
   );

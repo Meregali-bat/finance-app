@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Plus } from "lucide-react";
+import { CalendarPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/select";
 import { CurrencyInput } from "@/components/currency-input";
 import { createCardBillEstimate } from "@/lib/actions/card-bill-estimate";
+import { iconButton } from "@/components/ui/icon-button";
 
 /** Um vencimento oferecido no seletor: valor em ISO, rótulo já formatado. */
 export type DueDateOption = { value: string; label: string };
@@ -53,8 +54,17 @@ export function CardBillEstimateDialog({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={<Button variant="ghost" className="gap-2 lg:w-fit" />}>
-        <Plus className="size-4" /> Prever valor na fatura
+      <DialogTrigger
+        render={
+          <button
+            type="button"
+            className={iconButton({ tone: "outline", size: "xl" })}
+            aria-label="Prever valor na fatura"
+            title="Prever valor na fatura"
+          />
+        }
+      >
+        <CalendarPlus aria-hidden="true" />
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>

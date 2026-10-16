@@ -11,10 +11,10 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
  * dispara o clique. É a mesma lição que o `period-picker` carrega.
  */
 const ARROW_CLASS =
-  "flex size-11 shrink-0 touch-manipulation items-center justify-center rounded-xl text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground active:bg-muted active:text-foreground";
+  "flex size-11 shrink-0 touch-manipulation items-center justify-center rounded-[14px] text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground active:bg-muted active:text-foreground";
 
 const ARROW_DISABLED_CLASS =
-  "flex size-11 shrink-0 items-center justify-center rounded-xl text-muted-foreground/30";
+  "flex size-11 shrink-0 items-center justify-center rounded-[14px] text-muted-foreground/30";
 
 /**
  * A barra de navegação entre ciclos previstos. Não tem estado nenhum: os
@@ -36,7 +36,7 @@ export function ForecastNav({
   nextHref: string | null;
 }) {
   return (
-    <div className="flex items-center justify-between gap-2 rounded-2xl bg-card p-2 shadow-surface ring-1 ring-foreground/10 lg:w-fit lg:gap-6 lg:self-start">
+    <div className="rise-in flex items-center justify-between gap-2 rounded-[18px] bg-card p-1.5 shadow-[inset_0_0_0_1px_rgb(247_236_233/0.08)] lg:w-fit lg:min-w-[24rem] lg:self-start">
       {previousHref ? (
         <Link href={previousHref} className={ARROW_CLASS} aria-label="Período anterior">
           <ChevronLeft className="size-5" aria-hidden="true" />
@@ -48,7 +48,7 @@ export function ForecastNav({
       )}
 
       <div className="min-w-0 px-2 text-center">
-        <p className="truncate font-heading font-medium">{label}</p>
+        <p className="truncate font-heading text-base font-semibold tracking-[-0.01em]">{label}</p>
         <p className="truncate text-xs text-muted-foreground">{caption}</p>
       </div>
 

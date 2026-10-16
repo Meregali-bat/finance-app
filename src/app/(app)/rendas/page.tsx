@@ -1,10 +1,9 @@
 import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/auth-helpers";
 import { formatCurrency, formatShortDate } from "@/lib/format";
-import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
-import { PageHeader } from "@/components/page-header";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { FixedTabs } from "@/components/fixed-tabs";
+import { ListRow, stagger } from "@/components/list-row";
 import { IncomeFormDialog } from "@/components/forms/income-form-dialog";
 import { ExpenseFormDialog } from "@/components/forms/expense-form-dialog";
 import { CategoryFormDialog } from "@/components/forms/category-form-dialog";
@@ -36,98 +35,116 @@ export default async function FixedPage() {
 
   const cards = creditCards.map((c) => ({ id: c.id, name: c.name }));
   // A aba Categorias lista todas para gerenciar; os formulários só oferecem as ativas.
-  const activeCategories = categories.filter((c) => c.active).map((c) => ({ id: c.id, name: c.name }));
+  const activeCategories = categories
+    .filter((c) => c.active)
+    .map((c) => ({ id: c.id, name: c.name }));
   const cardNameById = new Map(cards.map((c) => [c.id, c.name]));
 
   return (
-    <div className="flex flex-col gap-6">
-      <PageHeader
-        title="Rendas e despesas fixas"
-        subtitle="O que se repete todo mês"
-      />
-
-      <Tabs defaultValue="rendas">
-        {/* As abas ocupam a largura toda no celular; em telas largas voltam ao
-            tamanho do conteúdo, senão viram três faixas gigantes. */}
-        <TabsList className="w-full lg:w-fit">
-          <TabsTrigger value="rendas" className="flex-1 lg:flex-none">
-            Rendas
-          </TabsTrigger>
-          <TabsTrigger value="despesas" className="flex-1 lg:flex-none">
-            Despesas
-          </TabsTrigger>
-          <TabsTrigger value="categorias" className="flex-1 lg:flex-none">
-            Categorias
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="rendas" className="flex flex-col gap-4">
-          <IncomeFormDialog />
-          {incomes.length === 0 ? (
-            <EmptyState text="Nenhuma renda cadastrada ainda." />
-          ) : (
-            <div className="grid gap-2 xl:grid-cols-2">
-              {incomes.map((income) => (
-                <Card key={income.id}>
-                  <CardContent className="flex items-center justify-between gap-3 py-3">
-                    <div className="min-w-0">
-                      <p className="truncate font-medium">{income.label}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {formatCurrency(Number(income.amount))} · todo dia {income.dayOfMonth}
-                      </p>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-1">
-                      <ToggleActiveButton
-                        active={income.active}
-                        onToggle={toggleIncomeActive.bind(null, income.id)}
-                      />
-                      <IncomeFormDialog
-                        income={{
-                          id: income.id,
-                          label: income.label,
-                          amount: Number(income.amount),
-                          dayOfMonth: income.dayOfMonth,
-                        }}
-                      />
-                      <DeleteIconButton
-                        action={deleteIncome.bind(null, income.id)}
-                        confirmMessage={`Excluir a renda "${income.label}"? Ela deixa de ser prevista; o que ela já pagou continua no Histórico e no saldo.`}
-                      />
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
-        </TabsContent>
-
-        <TabsContent value="despesas" className="flex flex-col gap-4">
-          <ExpenseFormDialog cards={cards} categories={activeCategories} />
-          {expenses.length === 0 ? (
-            <EmptyState text="Nenhuma despesa fixa cadastrada ainda." />
-          ) : (
-            <div className="grid gap-2 xl:grid-cols-2">
-              {expenses.map((expense) => {
-                const cardName = expense.cardId ? cardNameById.get(expense.cardId) : undefined;
-                return (
-                  <Card key={expense.id}>
-                    <CardContent className="flex items-center justify-between gap-3 py-3">
-                      <div className="min-w-0">
-                        <p className="truncate font-medium">{expense.label}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {formatCurrency(Number(expense.amount))}
-                          {cardName
-                            ? ` · ${cardName}`
-                            : ` · vence dia ${expense.dueDay}`}
-                          {expense.installmentCount != null &&
-                            ` · ${expense.installmentCount} ${expense.installmentCount === 1 ? "parcela" : "parcelas"}`}
-                        </p>
+    <div className="flex flex-col gap-5 lg:gap-6">
+      <FixedTabs
+        actions={{
+          rendas: <IncomeFormDialog />,
+          despesas: <ExpenseFormDialog cards={cards} categories={activeCategories} />,
+          categorias: <CategoryFormDialog />,
+        }}
+        panels={{
+          rendas:
+            incomes.length === 0 ? (
+              <EmptyState
+                text="Nenhuma renda cadastrada ainda."
+                hint="Toque no + para cadastrar."
+              />
+            ) : (
+              <ul className="grid gap-2 xl:grid-cols-2">
+                {incomes.map((income, index) => (
+                  <li key={income.id} className="rise-in" style={stagger(index, 80, 45)}>
+                    <ListRow
+                      dim={!income.active}
+                      title={income.label}
+                      subtitle={`${formatCurrency(Number(income.amount))} · todo dia ${income.dayOfMonth}`}
+                      trailing={
+                        <>
+                          <ToggleActiveButton
+                            active={income.active}
+                            label={`${income.active ? "Desativar" : "Ativar"} ${income.label}`}
+                            onToggle={toggleIncomeActive.bind(null, income.id)}
+                          />
+                          <IncomeFormDialog
+                            income={{
+                              id: income.id,
+                              label: income.label,
+                              amount: Number(income.amount),
+                              dayOfMonth: income.dayOfMonth,
+                            }}
+                          />
+                          <DeleteIconButton
+                            action={deleteIncome.bind(null, income.id)}
+                            confirmMessage={`Excluir a renda "${income.label}"? Ela deixa de ser prevista; o que ela já pagou continua no Histórico e no saldo.`}
+                          />
+                        </>
+                      }
+                    />
+                  </li>
+                ))}
+              </ul>
+            ),
+          despesas:
+            expenses.length === 0 ? (
+              <EmptyState
+                text="Nenhuma despesa fixa cadastrada ainda."
+                hint="Toque no + para cadastrar."
+              />
+            ) : (
+              <ul className="grid items-start gap-2 xl:grid-cols-2">
+                {expenses.map((expense, index) => {
+                  const cardName = expense.cardId ? cardNameById.get(expense.cardId) : undefined;
+                  return (
+                    <li key={expense.id} className="rise-in" style={stagger(index, 80, 45)}>
+                      <ListRow
+                        dim={!expense.active}
+                        title={expense.label}
+                        subtitle={[
+                          formatCurrency(Number(expense.amount)),
+                          cardName ?? `vence dia ${expense.dueDay}`,
+                          expense.installmentCount != null &&
+                            `${expense.installmentCount} ${expense.installmentCount === 1 ? "parcela" : "parcelas"}`,
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")}
+                        trailing={
+                          <>
+                            <ToggleActiveButton
+                              active={expense.active}
+                              label={`${expense.active ? "Desativar" : "Ativar"} ${expense.label}`}
+                              onToggle={toggleFixedExpenseActive.bind(null, expense.id)}
+                            />
+                            <ExpenseFormDialog
+                              expense={{
+                                id: expense.id,
+                                label: expense.label,
+                                amount: Number(expense.amount),
+                                dueDay: expense.dueDay,
+                                cardId: expense.cardId,
+                                categoryId: expense.categoryId,
+                                installmentCount: expense.installmentCount,
+                              }}
+                              cards={cards}
+                              categories={activeCategories}
+                            />
+                            <DeleteIconButton
+                              action={deleteFixedExpense.bind(null, expense.id)}
+                              confirmMessage={`Excluir a despesa "${expense.label}"? Ela para de ser cobrada daqui para frente; os meses em que já foi cobrada continuam no Histórico.`}
+                            />
+                          </>
+                        }
+                      >
                         {/* Um adiamento não é dinheiro e não aparece no
                             Histórico; é aqui que ele se vê e se desfaz. */}
                         {expense.deferrals.map((deferral) => (
                           <div
                             key={deferral.id}
-                            className="flex items-center gap-2 text-xs text-muted-foreground"
+                            className="flex items-center justify-between gap-2 rounded-xl bg-muted py-1 pr-1 pl-3 text-xs text-muted-foreground"
                           >
                             <span className="tabular-nums">
                               Adiada: {formatShortDate(deferral.dueDate, "UTC")} →{" "}
@@ -135,69 +152,51 @@ export default async function FixedPage() {
                               {formatCurrency(Number(deferral.amount))}
                               {deferral.mode === "end" ? ", depois da última" : ""})
                             </span>
-                            <UndoDeferralButton action={undoExpenseDeferral.bind(null, deferral.id)} />
+                            <UndoDeferralButton
+                              action={undoExpenseDeferral.bind(null, deferral.id)}
+                            />
                           </div>
                         ))}
-                      </div>
-                      <div className="flex shrink-0 items-center gap-1">
-                        <ToggleActiveButton
-                          active={expense.active}
-                          onToggle={toggleFixedExpenseActive.bind(null, expense.id)}
-                        />
-                        <ExpenseFormDialog
-                          expense={{
-                            id: expense.id,
-                            label: expense.label,
-                            amount: Number(expense.amount),
-                            dueDay: expense.dueDay,
-                            cardId: expense.cardId,
-                            categoryId: expense.categoryId,
-                            installmentCount: expense.installmentCount,
-                          }}
-                          cards={cards}
-                          categories={activeCategories}
-                        />
-                        <DeleteIconButton
-                          action={deleteFixedExpense.bind(null, expense.id)}
-                          confirmMessage={`Excluir a despesa "${expense.label}"? Ela para de ser cobrada daqui para frente; os meses em que já foi cobrada continuam no Histórico.`}
-                        />
-                      </div>
-                    </CardContent>
-                  </Card>
-                );
-              })}
-            </div>
-          )}
-        </TabsContent>
-
-        <TabsContent value="categorias" className="flex flex-col gap-4">
-          <CategoryFormDialog />
-          {categories.length === 0 ? (
-            <EmptyState text="Nenhuma categoria cadastrada ainda." />
-          ) : (
-            <div className="grid gap-2 xl:grid-cols-2">
-              {categories.map((category) => (
-                <Card key={category.id}>
-                  <CardContent className="flex items-center justify-between gap-3 py-3">
-                    <p className="min-w-0 truncate font-medium">{category.name}</p>
-                    <div className="flex shrink-0 items-center gap-1">
-                      <ToggleActiveButton
-                        active={category.active}
-                        onToggle={toggleCategoryActive.bind(null, category.id)}
-                      />
-                      <CategoryFormDialog category={{ id: category.id, name: category.name }} />
-                      <DeleteIconButton
-                        action={deleteCategory.bind(null, category.id)}
-                        confirmMessage={`Excluir a categoria "${category.name}"?`}
-                      />
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
-        </TabsContent>
-      </Tabs>
+                      </ListRow>
+                    </li>
+                  );
+                })}
+              </ul>
+            ),
+          categorias:
+            categories.length === 0 ? (
+              <EmptyState
+                text="Nenhuma categoria cadastrada ainda."
+                hint="Toque no + para cadastrar."
+              />
+            ) : (
+              <ul className="grid gap-2 xl:grid-cols-2">
+                {categories.map((category, index) => (
+                  <li key={category.id} className="rise-in" style={stagger(index, 80, 45)}>
+                    <ListRow
+                      dim={!category.active}
+                      title={category.name}
+                      trailing={
+                        <>
+                          <ToggleActiveButton
+                            active={category.active}
+                            label={`${category.active ? "Desativar" : "Ativar"} ${category.name}`}
+                            onToggle={toggleCategoryActive.bind(null, category.id)}
+                          />
+                          <CategoryFormDialog category={{ id: category.id, name: category.name }} />
+                          <DeleteIconButton
+                            action={deleteCategory.bind(null, category.id)}
+                            confirmMessage={`Excluir a categoria "${category.name}"?`}
+                          />
+                        </>
+                      }
+                    />
+                  </li>
+                ))}
+              </ul>
+            ),
+        }}
+      />
     </div>
   );
 }

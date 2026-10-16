@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CurrencyInput } from "@/components/currency-input";
 import { createIncome, updateIncome } from "@/lib/actions/income";
+import { iconButton } from "@/components/ui/icon-button";
 
 type IncomeValues = {
   id: string;
@@ -49,20 +50,19 @@ export function IncomeFormDialog({ income }: { income?: IncomeValues }) {
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger
         render={
-          isEdit ? (
-            <Button variant="ghost" size="icon" aria-label="Editar renda" />
-          ) : (
-            <Button className="gap-2 lg:w-fit" />
-          )
+          <button
+            type="button"
+            className={
+              isEdit
+                ? iconButton({ tone: "ghost", size: "sm" })
+                : iconButton({ tone: "cta", size: "lg" })
+            }
+            aria-label={isEdit ? "Editar renda" : "Nova renda"}
+            title={isEdit ? "Editar renda" : "Nova renda"}
+          />
         }
       >
-        {isEdit ? (
-          <Pencil className="size-4" />
-        ) : (
-          <>
-            <Plus className="size-4" /> Nova renda
-          </>
-        )}
+        {isEdit ? <Pencil aria-hidden="true" /> : <Plus aria-hidden="true" />}
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>

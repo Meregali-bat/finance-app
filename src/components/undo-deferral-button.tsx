@@ -1,6 +1,8 @@
 "use client";
 
 import { useTransition } from "react";
+import { Undo2 } from "lucide-react";
+import { iconButton } from "@/components/ui/icon-button";
 
 /** "Desfazer" de um adiamento: a ocorrência volta a ser cobrada no mês dela. */
 export function UndoDeferralButton({ action }: { action: () => Promise<void> }) {
@@ -10,9 +12,15 @@ export function UndoDeferralButton({ action }: { action: () => Promise<void> }) 
       type="button"
       disabled={isPending}
       onClick={() => startTransition(() => action())}
-      className="font-medium text-foreground underline-offset-2 hover:underline disabled:opacity-50"
+      aria-label="Desfazer adiamento"
+      title="Desfazer adiamento"
+      className={iconButton({
+        tone: "ghost",
+        size: "sm",
+        className: "text-primary hover:text-primary",
+      })}
     >
-      {isPending ? "Desfazendo..." : "Desfazer"}
+      <Undo2 aria-hidden="true" />
     </button>
   );
 }

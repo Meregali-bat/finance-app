@@ -363,11 +363,89 @@
     transform: none;
   }
 }
+/*
+ * `backwards`, e não `both`: mantido no fim, o keyframe deixaria um
+ * `transform` de identidade no elemento, e todo `position: fixed` lá dentro
+ * (o botão +, um toast) passaria a se prender a ele em vez da tela.
+ */
 .rise-in {
-  animation: riseIn 750ms cubic-bezier(0.22, 1, 0.36, 1) var(--rise-delay, 0ms) both;
+  animation: riseIn 750ms cubic-bezier(0.22, 1, 0.36, 1) var(--rise-delay, 0ms) backwards;
+}
+
+/* A troca de tela: o conteúdo novo sobe 10px e aparece. Mesmo cuidado com o
+   `backwards`. */
+@keyframes pageIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+.page-in {
+  animation:
+    pageIn 520ms cubic-bezier(0.22, 1, 0.36, 1) backwards,
+    fadeOnly 420ms ease-out backwards;
+}
+@keyframes fadeOnly {
+  from {
+    opacity: 0;
+  }
+}
+
+/* Itens que entram pela esquerda (a lista do login). */
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-12px);
+  }
+}
+.slide-in {
+  animation: slideIn 600ms cubic-bezier(0.22, 1, 0.36, 1) var(--rise-delay, 0ms) backwards;
+}
+
+/* Entrada com overshoot, para cards em grade (caixinhas). */
+@keyframes popIn {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+}
+.pop-in {
+  animation: popIn 520ms cubic-bezier(0.34, 1.56, 0.64, 1) var(--rise-delay, 0ms) backwards;
+}
+
+/* Colunas de gráfico crescendo a partir da base. */
+@keyframes growUp {
+  from {
+    transform: scaleY(0);
+  }
+}
+.grow-up {
+  transform-origin: bottom;
+  animation: growUp 700ms cubic-bezier(0.22, 1, 0.36, 1) var(--grow-delay, 0ms) backwards;
+}
+.grow-down {
+  transform-origin: top;
+  animation: growUp 700ms cubic-bezier(0.22, 1, 0.36, 1) var(--grow-delay, 0ms) backwards;
+}
+
+/* Barras horizontais (limite do cartão, categorias) enchendo da esquerda. */
+@keyframes growRight {
+  from {
+    transform: scaleX(0);
+  }
+}
+.grow-right {
+  transform-origin: left;
+  animation: growRight 900ms cubic-bezier(0.22, 1, 0.36, 1) var(--grow-delay, 200ms) backwards;
 }
 @media (prefers-reduced-motion: reduce) {
-  .rise-in {
+  .rise-in,
+  .slide-in,
+  .page-in,
+  .pop-in,
+  .grow-up,
+  .grow-down,
+  .grow-right {
     animation: none;
   }
 }

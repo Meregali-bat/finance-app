@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CurrencyInput } from "@/components/currency-input";
 import { createCreditCard, updateCreditCard } from "@/lib/actions/card";
+import { iconButton } from "@/components/ui/icon-button";
 
 type CardValues = {
   id: string;
@@ -50,22 +51,19 @@ export function CardFormDialog({ card }: { card?: CardValues }) {
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger
         render={
-          isEdit ? (
-            <Button variant="ghost" size="icon" aria-label="Editar cartão" />
-          ) : (
-            // Largura cheia no celular (alvo de toque); em telas largas volta
-            // ao tamanho do texto, senão vira uma faixa verde de ponta a ponta.
-            <Button className="gap-2 lg:w-fit" />
-          )
+          <button
+            type="button"
+            className={
+              isEdit
+                ? iconButton({ tone: "ghost", size: "sm" })
+                : iconButton({ tone: "cta", size: "lg" })
+            }
+            aria-label={isEdit ? "Editar cartão" : "Novo cartão"}
+            title={isEdit ? "Editar cartão" : "Novo cartão"}
+          />
         }
       >
-        {isEdit ? (
-          <Pencil className="size-4" />
-        ) : (
-          <>
-            <Plus className="size-4" /> Novo cartão
-          </>
-        )}
+        {isEdit ? <Pencil aria-hidden="true" /> : <Plus aria-hidden="true" />}
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>

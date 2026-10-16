@@ -5,18 +5,14 @@ import {
   CreditCard as CardIcon,
   Receipt,
   CircleCheck,
+  PiggyBank,
 } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
+import { IconSquare, ListRow, listRowSurface, type IconTone } from "@/components/list-row";
 import { DeleteIconButton } from "@/components/delete-icon-button";
 import { MovementFormDialog } from "@/components/forms/movement-form-dialog";
 import { unmarkExpensePayment } from "@/lib/actions/expense-payment";
 import { unmarkIncomeReceived } from "@/lib/actions/income-receipt";
-import {
-  formatCurrency,
-  formatDateTime,
-  formatInstant,
-  formatShortDate,
-} from "@/lib/format";
+import { formatCurrency, formatDateTime, formatInstant, formatShortDate } from "@/lib/format";
 import { toMovementValues, type HistoryItem, type MovementValues } from "@/lib/history-item";
 
 type Options = {
@@ -34,12 +30,15 @@ export function MovementRow({
   cards,
   categories,
   subtitle,
-  icon,
+  icon = <Receipt />,
+  tone = "neutral",
   displayAmount,
 }: Options & {
   movement: MovementValues;
   subtitle?: string;
+  /** O ícone lucide, sem tamanho: o quadrado de ícone ajusta. */
   icon?: React.ReactNode;
+  tone?: IconTone;
   /**
    * O valor da linha, quando ele difere do que o formulário edita: uma parcela
    * mostra o valor dela, mas abre a compra inteira para edição.
@@ -48,30 +47,28 @@ export function MovementRow({
 }) {
   return (
     <MovementFormDialog movement={movement} cards={cards} categories={categories}>
-      <Card variant="interactive">
-        <CardContent className="flex min-h-[3rem] items-center justify-between gap-3 py-3">
-          <div className="flex min-w-0 items-center gap-3">
-            {icon}
-            <div className="min-w-0">
-              <p className="truncate font-medium">{movement.description}</p>
-              {subtitle && <p className="text-sm text-muted-foreground">{subtitle}</p>}
-            </div>
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
-            <span
-              className={`font-medium tabular-nums ${
-                movement.type === "income" ? "text-positive" : ""
-              }`}
-            >
-              {formatCurrency(displayAmount ?? movement.amount)}
-            </span>
-            <ChevronRight
-              className="size-4 text-muted-foreground/60 transition-transform duration-150 group-hover/card:translate-x-0.5"
-              aria-hidden="true"
-            />
-          </div>
-        </CardContent>
-      </Card>
+      <div
+        className={listRowSurface(
+          "group/row flex cursor-pointer items-center gap-3 transition-[transform,background-color,box-shadow] duration-150 ease-out-quint hover:-translate-y-0.5 hover:bg-card-hover hover:shadow-(--shadow-card-hover) active:scale-[0.99]",
+        )}
+      >
+        <IconSquare tone={tone}>{icon}</IconSquare>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[14.5px] font-semibold">{movement.description}</p>
+          {subtitle && <p className="text-[12.5px] text-muted-foreground">{subtitle}</p>}
+        </div>
+        <span
+          className={`shrink-0 text-[14.5px] font-semibold tabular-nums ${
+            movement.type === "income" ? "text-positive" : ""
+          }`}
+        >
+          {formatCurrency(displayAmount ?? movement.amount)}
+        </span>
+        <ChevronRight
+          className="size-4 shrink-0 text-muted-foreground/60 transition-transform duration-150 group-hover/row:translate-x-0.5"
+          aria-hidden="true"
+        />
+      </div>
     </MovementFormDialog>
   );
 }
@@ -124,72 +121,64 @@ export function HistoryRow({ item, cards, categories }: Options & { item: Histor
                   item.installments && item.installments > 1
                     ? `${item.installmentNumber}/${item.installments} de ${formatCurrency(item.purchaseAmount ?? 0)}`
                     : null,
-                  item.purchaseDate ? `comprado em ${formatShortDate(item.purchaseDate, "UTC")}` : null,
+                  item.purchaseDate
+                    ? `comprado em ${formatShortDate(item.purchaseDate, "UTC")}`
+                    : null,
                 ]
                   .filter(Boolean)
                   .join(" · ")
               : formatDateTime(item.date, item.createdAt);
 
   const icon = isConfirmation ? (
-    <CircleCheck className="size-4 shrink-0 text-primary" aria-hidden="true" />
+    <CircleCheck />
+  ) : item.kind === "jarDeposit" ? (
+    <PiggyBank />
   ) : item.kind === "card" ||
     isCardFixedExpense ||
     item.kind === "cardEstimate" ||
     item.kind === "cardBillAdjustment" ? (
-    <CardIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+    <CardIcon />
   ) : (
-    <Receipt className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+    <Receipt />
   );
+  const tone: IconTone = isConfirmation ? "accent" : "neutral";
 
   if (isDerived) {
     return (
-      <Card>
-        <CardContent className="flex items-center justify-between gap-3 py-3">
-          <div className="flex min-w-0 items-center gap-3">
-            {icon}
-            <div className="min-w-0">
-              <p className="truncate font-medium">{item.description}</p>
-              <p className="text-sm text-muted-foreground">{subtitle}</p>
-            </div>
-          </div>
-          <span className="shrink-0 font-medium tabular-nums">
-            {formatCurrency(item.amount)}
-          </span>
-        </CardContent>
-      </Card>
+      <ListRow
+        icon={icon}
+        tone={tone}
+        title={item.description}
+        subtitle={subtitle}
+        value={formatCurrency(item.amount)}
+      />
     );
   }
 
   if (isConfirmation) {
     return (
-      <Card>
-        <CardContent className="flex items-center justify-between gap-3 py-3">
-          <div className="flex min-w-0 items-center gap-3">
-            {icon}
-            <div className="min-w-0">
-              <p className="truncate font-medium">{item.description}</p>
-              <p className="text-sm text-muted-foreground">{subtitle}</p>
-            </div>
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
-            <span className={`font-medium tabular-nums ${isReceipt ? "text-positive" : ""}`}>
-              {formatCurrency(Math.abs(item.amount))}
-            </span>
-            <DeleteIconButton
-              action={
-                isReceipt && item.incomeId
-                  ? unmarkIncomeReceived.bind(null, item.incomeId, item.date)
-                  : unmarkExpensePayment.bind(null, item.id)
-              }
-              confirmMessage={
-                isReceipt
-                  ? `Desfazer o recebimento de "${item.description}"? O lembrete volta a aparecer no início.`
-                  : `Desfazer o pagamento de "${item.description}"? O lembrete volta a aparecer no início.`
-              }
-            />
-          </div>
-        </CardContent>
-      </Card>
+      <ListRow
+        icon={icon}
+        tone={tone}
+        title={item.description}
+        subtitle={subtitle}
+        value={formatCurrency(Math.abs(item.amount))}
+        valueClassName={isReceipt ? "text-positive" : undefined}
+        trailing={
+          <DeleteIconButton
+            action={
+              isReceipt && item.incomeId
+                ? unmarkIncomeReceived.bind(null, item.incomeId, item.date)
+                : unmarkExpensePayment.bind(null, item.id)
+            }
+            confirmMessage={
+              isReceipt
+                ? `Desfazer o recebimento de "${item.description}"? O lembrete volta a aparecer no início.`
+                : `Desfazer o pagamento de "${item.description}"? O lembrete volta a aparecer no início.`
+            }
+          />
+        }
+      />
     );
   }
 
@@ -199,6 +188,7 @@ export function HistoryRow({ item, cards, categories }: Options & { item: Histor
       categories={categories}
       subtitle={subtitle}
       icon={icon}
+      tone={tone}
       movement={toMovementValues(item)}
       displayAmount={Math.abs(item.amount)}
     />

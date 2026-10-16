@@ -5,8 +5,9 @@ import { requireUserId } from "@/lib/auth-helpers";
 import { formatCurrency } from "@/lib/format";
 import { toFixedExpenseInput } from "@/lib/budget-inputs";
 import { buildCardBillSeries, findNextOpenBill, getCardLimitUsage } from "@/lib/period";
-import { Card, CardContent } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
+import { SectionLabel } from "@/components/page-header";
+import { stagger } from "@/components/list-row";
+import { cardGradient } from "@/lib/card-look";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/page-header";
 import { CardFormDialog } from "@/components/forms/card-form-dialog";
@@ -19,8 +20,8 @@ export default async function CardsPage() {
     include: {
       purchases: true,
       // Todas, e não só as ativas: são as datas (cadastro, pausas, encerramento)
-        // que dizem em quais faturas a assinatura entra — a mesma regra da Início.
-        fixedExpenses: { include: { pauses: true } },
+      // que dizem em quais faturas a assinatura entra — a mesma regra da Início.
+      fixedExpenses: { include: { pauses: true } },
       billEstimates: true,
       payments: true,
     },
@@ -30,10 +31,8 @@ export default async function CardsPage() {
   const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
 
   return (
-    <div className="flex flex-col gap-6">
-      <PageHeader title="Cartões de crédito" />
-
-      <CardFormDialog />
+    <div className="flex flex-col gap-5 lg:gap-6">
+      <PageHeader title="Cartões" action={<CardFormDialog />} />
 
       {cards.length === 0 ? (
         <EmptyState
@@ -42,8 +41,8 @@ export default async function CardsPage() {
           hint="Cadastre um para acompanhar a fatura."
         />
       ) : (
-        <div className="grid gap-2 xl:grid-cols-2">
-          {cards.map((card) => {
+        <div className="grid gap-3 xl:grid-cols-2">
+          {cards.map((card, index) => {
             const purchases = card.purchases.map((p) => ({
               cardId: card.id,
               amount: Number(p.amount),
@@ -96,52 +95,69 @@ export default async function CardsPage() {
               today,
             });
 
+            const overdue = nextBill && nextBill.dueDate.getTime() < todayStart.getTime();
+
             return (
-              // `h-full` porque em grid a linha "Próxima fatura" só aparece em
-              // alguns cartões, e sem isso os cards de uma mesma linha ficariam
-              // com alturas diferentes.
-              <Link key={card.id} href={`/cartoes/${card.id}`} className="h-full">
-                <Card variant="interactive" className="h-full">
-                  <CardContent className="flex items-center justify-between gap-3 py-3">
-                    <div className="min-w-0">
-                      <p className="truncate font-medium">{card.name}</p>
-                      <p className="text-sm text-muted-foreground">
-                        Fecha dia {card.closingDay} · vence dia {card.dueDay}
-                      </p>
-                      {nextBill && (
-                        <p className="mt-1.5 text-sm font-medium text-negative tabular-nums">
-                          {nextBill.dueDate.getTime() < todayStart.getTime()
-                            ? "Fatura vencida"
-                            : "Próxima fatura"}
-                          : {formatCurrency(nextBill.amount)}
-                        </p>
-                      )}
-                      {limitUsage && (
-                        <>
-                          {/* Progress renderiza os children acima da trilha, por
-                              isso o texto vem depois. Ele não adiciona nada
-                              focável, então o Link que envolve o cartão continua
-                              clicável. */}
-                          <Progress
-                            value={limitUsage.percentUsed}
-                            className="mt-2 gap-1.5"
-                            indicatorClassName={
-                              limitUsage.percentUsed >= 90 ? "bg-negative" : undefined
-                            }
-                          />
-                          <p className="text-xs text-muted-foreground tabular-nums">
-                            {formatCurrency(limitUsage.available)} de{" "}
-                            {formatCurrency(limitUsage.limit)} livres
-                          </p>
-                        </>
-                      )}
-                    </div>
-                    <ChevronRight
-                      className="size-5 shrink-0 text-muted-foreground/60 transition-transform duration-150 group-hover/card:translate-x-0.5"
+              // Um bloco com cara de cartão de crédito, com o degradê do
+              // próprio cartão. `h-full` iguala a altura dos vizinhos na grade.
+              <Link
+                key={card.id}
+                href={`/cartoes/${card.id}`}
+                className="group/card rise-in flex h-full flex-col gap-3.5 rounded-[22px] p-[18px] text-foreground shadow-[inset_0_0_0_1px_rgb(255_255_255/0.09),0_1px_2px_rgb(0_0_0/0.4)] transition-transform duration-150 ease-out-quint hover:-translate-y-0.5 active:scale-[0.98]"
+                style={{ background: cardGradient(card.id), ...stagger(index, 80, 60) }}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate font-heading text-xl leading-tight font-bold tracking-[-0.03em]">
+                      {card.name}
+                    </p>
+                    <p className="text-[12.5px] text-foreground/70">
+                      Fecha dia {card.closingDay} · vence dia {card.dueDay}
+                    </p>
+                  </div>
+                  <ChevronRight
+                    className="mt-1 size-5 shrink-0 text-foreground/60 transition-transform duration-150 group-hover/card:translate-x-0.5"
+                    aria-hidden="true"
+                  />
+                </div>
+                {nextBill ? (
+                  <div className="flex flex-col gap-0.5">
+                    <SectionLabel>{overdue ? "Fatura vencida" : "Próxima fatura"}</SectionLabel>
+                    <p
+                      className={`font-heading text-[26px] leading-tight font-bold tracking-[-0.035em] tabular-nums ${
+                        overdue ? "text-negative" : ""
+                      }`}
+                    >
+                      {formatCurrency(nextBill.amount)}
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-[13px] text-foreground/70">Sem fatura em aberto.</p>
+                )}
+                {limitUsage && (
+                  <div className="flex flex-col gap-1.5">
+                    <span
                       aria-hidden="true"
-                    />
-                  </CardContent>
-                </Card>
+                      className="h-1.5 overflow-hidden rounded-full bg-black/30"
+                    >
+                      <span
+                        className={`grow-right block h-full rounded-full ${
+                          limitUsage.percentUsed >= 90 ? "bg-negative" : "bg-primary"
+                        }`}
+                        style={
+                          {
+                            width: `${Math.min(100, Math.max(0, limitUsage.percentUsed))}%`,
+                            "--grow-delay": `${250 + index * 60}ms`,
+                          } as React.CSSProperties
+                        }
+                      />
+                    </span>
+                    <p className="text-xs text-foreground/70 tabular-nums">
+                      {formatCurrency(limitUsage.available)} de {formatCurrency(limitUsage.limit)}{" "}
+                      livres
+                    </p>
+                  </div>
+                )}
               </Link>
             );
           })}

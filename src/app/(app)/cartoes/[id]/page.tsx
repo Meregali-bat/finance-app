@@ -1,17 +1,11 @@
 import { notFound } from "next/navigation";
-import { Receipt } from "lucide-react";
+import { CreditCard, Receipt } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/auth-helpers";
-import {
-  formatCurrency,
-  formatDate,
-  formatDateTime,
-  installmentLabel,
-} from "@/lib/format";
+import { formatCurrency, formatDate, formatDateTime, installmentLabel } from "@/lib/format";
 import { toFixedExpenseInput } from "@/lib/budget-inputs";
 import { buildCardBillSeries, findNextOpenBill, getCardLimitUsage } from "@/lib/period";
-import { Card, CardContent } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
+import { stagger } from "@/components/list-row";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader, SectionLabel } from "@/components/page-header";
 import { CardFormDialog } from "@/components/forms/card-form-dialog";
@@ -23,11 +17,7 @@ import { toMovementValues } from "@/lib/history-item";
 import { DeleteIconButton } from "@/components/delete-icon-button";
 import { deleteCreditCard } from "@/lib/actions/card";
 
-export default async function CardDetailPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
+export default async function CardDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const userId = await requireUserId();
 
@@ -131,14 +121,14 @@ export default async function CardDetailPage({
   }));
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-5 lg:gap-6">
       <PageHeader
         title={card.name}
         subtitle={`Fecha dia ${card.closingDay} · vence dia ${card.dueDay}`}
         backHref="/cartoes"
         backLabel="Voltar para cartões"
         action={
-          <div className="flex items-center gap-1">
+          <>
             {/* Só os campos do formulário: o objeto do Prisma carrega as
                 compras com `amount` em Decimal, e Decimal não atravessa a
                 fronteira para um client component. */}
@@ -155,113 +145,120 @@ export default async function CardDetailPage({
               action={deleteCreditCard.bind(null, card.id)}
               confirmMessage={`Excluir o cartão "${card.name}"? As compras e faturas dele continuam no Histórico, e as parcelas que faltam continuam na previsão.`}
             />
-          </div>
+          </>
         }
       />
 
-      {/* Em telas largas o resumo da fatura fica ao lado da lista em vez de
-          empurrá-la para baixo. */}
-      <div className="flex flex-col gap-6 xl:grid xl:grid-cols-[20rem_1fr] xl:items-start">
-        <div className="flex flex-col gap-6">
-          <Card variant="elevated">
-            <CardContent className="flex flex-col gap-1 py-5">
-              <SectionLabel>Próxima fatura</SectionLabel>
-              {nextBill ? (
-                <>
-                  <p className="font-heading text-3xl leading-tight font-bold tracking-[-0.02em] text-negative tabular-nums">
-                    {formatCurrency(nextBill.amount)}
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    {nextBill.dueDate.getTime() < todayStart.getTime() ? "Venceu" : "Vence"}{" "}
-                    {formatDate(nextBill.dueDate)}
-                  </p>
-                </>
-              ) : (
-                <p className="text-sm text-muted-foreground">Sem fatura em aberto.</p>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card variant="elevated">
-            <CardContent className="flex flex-col gap-1 py-5">
-              <SectionLabel>Limite</SectionLabel>
-              {limitUsage ? (
-                <>
-                  {/* Neutro, não text-negative: dinheiro comprometido não é
-                      prejuízo, é limite ocupado. */}
-                  <p className="font-heading text-3xl leading-tight font-bold tracking-[-0.02em] tabular-nums">
-                    {formatCurrency(limitUsage.used)}
-                  </p>
-                  <Progress
-                    value={limitUsage.percentUsed}
-                    className="mt-1 gap-1.5"
-                    indicatorClassName={limitUsage.percentUsed >= 90 ? "bg-negative" : undefined}
-                  />
-                  <p className="text-sm text-muted-foreground tabular-nums">
-                    {formatCurrency(limitUsage.available)} disponíveis de{" "}
-                    {formatCurrency(limitUsage.limit)}
-                  </p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Considera as faturas em aberto dos últimos 3 meses e as parcelas futuras.
-                  </p>
-                  {limitUsage.overdueBillCount > 0 && (
-                    <p className="text-xs text-muted-foreground">
-                      {limitUsage.overdueBillCount === 1
-                        ? "1 fatura vencida ainda não marcada como paga."
-                        : `${limitUsage.overdueBillCount} faturas vencidas ainda não marcadas como pagas.`}
-                    </p>
-                  )}
-                </>
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  Informe o limite no lápis acima para acompanhar quanto já está comprometido.
-                </p>
-              )}
-            </CardContent>
-          </Card>
-
-          <CardPurchaseFormDialog cardId={card.id} categories={categoryOptions} />
-
-          <CardBillEstimateDialog cardId={card.id} dueDates={dueDateOptions} />
-
-          <CardBillProjection
-            cardId={card.id}
-            bills={projectedBills}
-            estimates={listedEstimates}
-          />
+      <div
+        className="rise-in grid grid-cols-2 gap-2.5 lg:gap-4"
+        style={{ "--rise-delay": "80ms" } as React.CSSProperties}
+      >
+        <div className="flex min-w-0 flex-col gap-1 rounded-[20px] bg-muted p-4 shadow-(--shadow-card) lg:p-5">
+          <SectionLabel>Próxima fatura</SectionLabel>
+          {nextBill ? (
+            <>
+              <p className="truncate font-heading text-[23px] leading-tight font-bold tracking-[-0.03em] text-negative tabular-nums lg:text-[28px]">
+                {formatCurrency(nextBill.amount)}
+              </p>
+              <p className="text-[12.5px] text-muted-foreground">
+                {nextBill.dueDate.getTime() < todayStart.getTime() ? "Venceu" : "Vence"}{" "}
+                {formatDate(nextBill.dueDate)}
+              </p>
+            </>
+          ) : (
+            <p className="text-[13px] text-muted-foreground">Sem fatura em aberto.</p>
+          )}
         </div>
 
-        {card.purchases.length === 0 ? (
-          <EmptyState icon={Receipt} text="Nenhuma compra lançada ainda." />
-        ) : (
-          <div className="flex flex-col gap-2">
-            {card.purchases.map((purchase) => (
-              <MovementRow
-                key={purchase.id}
-                movement={toMovementValues({
-                  id: purchase.id,
-                  kind: "card",
-                  description: purchase.description,
-                  amount: Number(purchase.amount),
-                  date: purchase.date,
-                  categoryId: purchase.categoryId,
-                  cardId: card.id,
-                  installments: purchase.installments,
-                })}
-                subtitle={[
-                  formatDateTime(purchase.date, purchase.createdAt),
-                  // O valor da linha é o total da compra; sem isto um 12x se
-                  // leria como se tudo tivesse saído no mês em que foi comprado.
-                  installmentLabel(Number(purchase.amount), purchase.installments),
-                ]
-                  .filter(Boolean)
-                  .join(" · ")}
-                cards={[{ id: card.id, name: card.name }]}
-                categories={categoryOptions}
-              />
-            ))}
-          </div>
-        )}
+        <div className="flex min-w-0 flex-col gap-1 rounded-[20px] bg-muted p-4 shadow-(--shadow-card) lg:p-5">
+          <SectionLabel>Limite usado</SectionLabel>
+          {limitUsage ? (
+            <>
+              {/* Neutro, não text-negative: dinheiro comprometido não é
+                  prejuízo, é limite ocupado. */}
+              <p className="truncate font-heading text-[23px] leading-tight font-bold tracking-[-0.03em] tabular-nums lg:text-[28px]">
+                {formatCurrency(limitUsage.used)}
+              </p>
+              <span
+                aria-hidden="true"
+                className="mt-1 h-1.5 overflow-hidden rounded-full bg-black/30"
+              >
+                <span
+                  className={`grow-right block h-full rounded-full ${
+                    limitUsage.percentUsed >= 90 ? "bg-negative" : "bg-primary"
+                  }`}
+                  style={{ width: `${Math.min(100, Math.max(0, limitUsage.percentUsed))}%` }}
+                />
+              </span>
+              <p
+                className="text-[12px] text-muted-foreground tabular-nums"
+                title="Considera as faturas em aberto dos últimos 3 meses e as parcelas futuras."
+              >
+                {formatCurrency(limitUsage.available)} de {formatCurrency(limitUsage.limit)} livres
+              </p>
+              {limitUsage.overdueBillCount > 0 && (
+                <p className="text-[11px] text-muted-foreground">
+                  {limitUsage.overdueBillCount === 1
+                    ? "1 fatura vencida ainda não marcada como paga."
+                    : `${limitUsage.overdueBillCount} faturas vencidas ainda não marcadas como pagas.`}
+                </p>
+              )}
+            </>
+          ) : (
+            <p className="text-[13px] text-muted-foreground">
+              Informe o limite no lápis acima para acompanhar quanto já está comprometido.
+            </p>
+          )}
+        </div>
+      </div>
+
+      <div
+        className="rise-in flex items-center gap-2.5 lg:max-w-md"
+        style={{ "--rise-delay": "140ms" } as React.CSSProperties}
+      >
+        <CardPurchaseFormDialog cardId={card.id} categories={categoryOptions} />
+        <CardBillEstimateDialog cardId={card.id} dueDates={dueDateOptions} />
+      </div>
+
+      <div className="grid items-start gap-6 xl:grid-cols-2">
+        <CardBillProjection cardId={card.id} bills={projectedBills} estimates={listedEstimates} />
+
+        <div className="flex flex-col gap-2 xl:pt-0">
+          <SectionLabel>Compras</SectionLabel>
+          {card.purchases.length === 0 ? (
+            <EmptyState icon={Receipt} text="Nenhuma compra lançada ainda." />
+          ) : (
+            <ul className="flex flex-col gap-2">
+              {card.purchases.map((purchase, index) => (
+                <li key={purchase.id} className="rise-in" style={stagger(Math.min(index, 10), 260)}>
+                  <MovementRow
+                    icon={<CreditCard />}
+                    movement={toMovementValues({
+                      id: purchase.id,
+                      kind: "card",
+                      description: purchase.description,
+                      amount: Number(purchase.amount),
+                      date: purchase.date,
+                      categoryId: purchase.categoryId,
+                      cardId: card.id,
+                      installments: purchase.installments,
+                    })}
+                    subtitle={[
+                      formatDateTime(purchase.date, purchase.createdAt),
+                      // O valor da linha é o total da compra; sem isto um 12x se
+                      // leria como se tudo tivesse saído no mês em que foi comprado.
+                      installmentLabel(Number(purchase.amount), purchase.installments),
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
+                    cards={[{ id: card.id, name: card.name }]}
+                    categories={categoryOptions}
+                  />
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </div>
     </div>
   );
