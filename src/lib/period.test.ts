@@ -145,7 +145,9 @@ describe("calculateDailyBudget", () => {
     });
     expect(result.incomeTotal).toBe(0);
     expect(result.periodBalance).toBe(0);
-    expect(result.incomeReminders).toEqual([{ incomeId: "i1", dueDate: new Date(2026, 0, 1), amount: 3000 }]);
+    expect(result.incomeReminders).toEqual([
+      { incomeId: "i1", dueDate: new Date(2026, 0, 1), amount: 3000 },
+    ]);
   });
 
   it("uses the confirmed receipt amount instead of the registered amount", () => {
@@ -620,13 +622,9 @@ describe("getCardBillsInPeriod", () => {
 
   it("ignores a fixed expense linked to a different card", () => {
     const subscription = { id: "youtube", amount: 34.9, cardId: "other-card" };
-    const result = getCardBillsInPeriod(
-      [card],
-      [],
-      new Date(2026, 0, 1),
-      new Date(2026, 1, 1),
-      [subscription],
-    );
+    const result = getCardBillsInPeriod([card], [], new Date(2026, 0, 1), new Date(2026, 1, 1), [
+      subscription,
+    ]);
     expect(result).toEqual([]);
   });
 });
@@ -651,8 +649,18 @@ describe("compras parceladas", () => {
   it("divide o total em parcelas iguais, uma por ciclo", () => {
     const purchases = [{ cardId: "c1", amount: 1200, date: day(2026, 0, 15), installments: 12 }];
     // A compra de 15/jan fecha no ciclo de 20/jan, que vence em 27/jan.
-    const jan = getCardBillsInPeriod([card], purchases, new Date(2026, 0, 21), new Date(2026, 1, 21));
-    const fev = getCardBillsInPeriod([card], purchases, new Date(2026, 1, 21), new Date(2026, 2, 21));
+    const jan = getCardBillsInPeriod(
+      [card],
+      purchases,
+      new Date(2026, 0, 21),
+      new Date(2026, 1, 21),
+    );
+    const fev = getCardBillsInPeriod(
+      [card],
+      purchases,
+      new Date(2026, 1, 21),
+      new Date(2026, 2, 21),
+    );
     expect(jan[0].amount).toBe(100);
     expect(fev[0].amount).toBe(100);
   });
@@ -660,8 +668,18 @@ describe("compras parceladas", () => {
   it("coloca a primeira parcela no ciclo que fecha depois da compra", () => {
     // Comprou 25/jan, depois do fechamento do dia 20: cai na fatura de fevereiro.
     const purchases = [{ cardId: "c1", amount: 400, date: day(2026, 0, 25), installments: 2 }];
-    const jan = getCardBillsInPeriod([card], purchases, new Date(2026, 0, 21), new Date(2026, 1, 21));
-    const fev = getCardBillsInPeriod([card], purchases, new Date(2026, 1, 21), new Date(2026, 2, 21));
+    const jan = getCardBillsInPeriod(
+      [card],
+      purchases,
+      new Date(2026, 0, 21),
+      new Date(2026, 1, 21),
+    );
+    const fev = getCardBillsInPeriod(
+      [card],
+      purchases,
+      new Date(2026, 1, 21),
+      new Date(2026, 2, 21),
+    );
     expect(jan).toEqual([]);
     expect(fev[0].amount).toBe(200);
   });
@@ -823,7 +841,9 @@ describe("buildCardBills", () => {
   it("casa a previsão pelo dia do vencimento, ignorando a hora", () => {
     // Mesma armadilha de findExpensePayment: o banco grava meia-noite do fuso de
     // quem gravou, então o dia pretendido está na parte UTC.
-    const estimates = [{ cardId: "c1", dueDate: new Date(Date.UTC(2026, 0, 27, 3, 0)), amount: 500 }];
+    const estimates = [
+      { cardId: "c1", dueDate: new Date(Date.UTC(2026, 0, 27, 3, 0)), amount: 500 },
+    ];
     const [bill] = buildCardBills({
       card,
       purchases: [],
@@ -920,7 +940,9 @@ describe("getCardLimitUsage", () => {
     const usage = getCardLimitUsage({
       card,
       purchases: [],
-      cardFixedExpenses: [{ id: "f1", amount: 34.9, cardId: "c1", createdAt: new Date(2026, 0, 1) }],
+      cardFixedExpenses: [
+        { id: "f1", amount: 34.9, cardId: "c1", createdAt: new Date(2026, 0, 1) },
+      ],
       today,
     })!;
     // Uma assinatura entra em todo ciclo da janela, não só em um.
@@ -1166,6 +1188,38 @@ describe("calculateDailyBudget com pagamento parcial", () => {
       { expenseId: "e1", dueDate, amount: 300, paidSoFar: 200 },
     ]);
     expect(budget.fixedExpenseTotal).toBe(300);
+  });
+});
+
+describe("renda com o dia alterado depois de receber", () => {
+  // Recebeu no dia 5 e depois mudou a renda para o dia 10 e outro valor.
+  const input = {
+    incomes: [{ id: "i1", amount: 3500, dayOfMonth: 10 }],
+    incomeReceipts: [
+      { incomeId: "i1", occurrenceDate: new Date(Date.UTC(2026, 0, 5)), amount: 3000 },
+    ],
+    creditCards: [],
+    cardPurchases: [],
+    transactions: [],
+    fixedExpenses: [],
+  };
+
+  it("não volta a pedir o recebimento do mês, nem antes nem depois do dia novo", () => {
+    for (const day of [7, 12]) {
+      const budget = calculateDailyBudget({ ...input, today: new Date(2026, 0, day) });
+      expect(budget.incomeReminders).toEqual([]);
+      expect(budget.periodStart).toEqual(new Date(2026, 0, 5));
+      // O dia novo vale a partir do mês seguinte.
+      expect(budget.periodEnd).toEqual(new Date(2026, 1, 10));
+      expect(budget.incomeTotal).toBe(3000);
+    }
+  });
+
+  it("no mês seguinte pede o recebimento no dia e com o valor novos", () => {
+    const budget = calculateDailyBudget({ ...input, today: new Date(2026, 1, 11) });
+    expect(budget.incomeReminders).toEqual([
+      { incomeId: "i1", dueDate: new Date(2026, 1, 10), amount: 3500 },
+    ]);
   });
 });
 
@@ -1441,7 +1495,9 @@ describe("assinatura encerrada", () => {
     const expenses = cardBillFixedExpenses({
       card,
       // Encerrada em 20/08, depois de o ciclo da fatura de 10/08 fechar (01/08).
-      cardFixedExpenses: [{ id: "netflix", amount: 55, cardId: "c1", endedAt: new Date(2026, 7, 20) }],
+      cardFixedExpenses: [
+        { id: "netflix", amount: 55, cardId: "c1", endedAt: new Date(2026, 7, 20) },
+      ],
       dueDate: new Date(2026, 7, 10),
     });
 
@@ -1452,7 +1508,9 @@ describe("assinatura encerrada", () => {
     const expenses = cardBillFixedExpenses({
       card,
       // O ciclo da fatura de 10/09 fecha em 01/09, depois do encerramento.
-      cardFixedExpenses: [{ id: "netflix", amount: 55, cardId: "c1", endedAt: new Date(2026, 7, 20) }],
+      cardFixedExpenses: [
+        { id: "netflix", amount: 55, cardId: "c1", endedAt: new Date(2026, 7, 20) },
+      ],
       dueDate: new Date(2026, 8, 10),
     });
 
@@ -1465,7 +1523,9 @@ describe("assinatura encerrada", () => {
     // pontas, como já era do lado do createdAt.
     const expenses = cardBillFixedExpenses({
       card,
-      cardFixedExpenses: [{ id: "netflix", amount: 55, cardId: "c1", endedAt: new Date(2026, 7, 1) }],
+      cardFixedExpenses: [
+        { id: "netflix", amount: 55, cardId: "c1", endedAt: new Date(2026, 7, 1) },
+      ],
       dueDate: new Date(2026, 7, 10),
     });
 

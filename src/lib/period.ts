@@ -305,24 +305,6 @@ function addMonths(year: number, month: number, delta: number): { year: number; 
   return { year: Math.floor(total / 12), month: ((total % 12) + 12) % 12 };
 }
 
-/** Latest occurrence of dayOfMonth that is <= reference. */
-function latestOccurrenceOnOrBefore(dayOfMonth: number, reference: Date): Date {
-  const ref = startOfDay(reference);
-  const candidate = dateForDayInMonth(ref.getFullYear(), ref.getMonth(), dayOfMonth);
-  if (candidate.getTime() <= ref.getTime()) return candidate;
-  const prev = addMonths(ref.getFullYear(), ref.getMonth(), -1);
-  return dateForDayInMonth(prev.year, prev.month, dayOfMonth);
-}
-
-/** Earliest occurrence of dayOfMonth that is strictly after reference. */
-function earliestOccurrenceAfter(dayOfMonth: number, reference: Date): Date {
-  const ref = startOfDay(reference);
-  const candidate = dateForDayInMonth(ref.getFullYear(), ref.getMonth(), dayOfMonth);
-  if (candidate.getTime() > ref.getTime()) return candidate;
-  const next = addMonths(ref.getFullYear(), ref.getMonth(), 1);
-  return dateForDayInMonth(next.year, next.month, dayOfMonth);
-}
-
 /** A primeira ocorrência de dayOfMonth em ou depois de reference. */
 function earliestOccurrenceOnOrAfter(dayOfMonth: number, reference: Date): Date {
   const ref = startOfDay(reference);
@@ -359,6 +341,74 @@ export function occurrencesInRange(dayOfMonth: number, start: Date, end: Date): 
     cursor = addMonths(cursor.year, cursor.month, 1);
   }
   return occurrences;
+}
+
+/**
+ * O dia de pagamento de uma renda num mês. Se aquele mês tem um recebimento
+ * confirmado, é o dia dele; senão, o dia cadastrado.
+ *
+ * Por que o recebimento manda: mudar o dia (ou o valor) de uma renda vale
+ * daqui para frente. Calculado só pelo dia cadastrado, trocar o 5 pelo 10
+ * depois de confirmar o dia 5 fazia o app procurar o recebimento no dia 10,
+ * não achar, pedir para receber de novo e redesenhar os períodos passados.
+ * Com o recebimento como âncora, o mês que já foi pago fica onde foi pago, e
+ * o dia novo só vale para os meses sem confirmação — os que ainda vêm.
+ */
+function paydayInMonth(
+  income: IncomeInput,
+  year: number,
+  month: number,
+  receipts: IncomeReceiptInput[],
+): Date {
+  const confirmed = receipts
+    .filter((r) => r.incomeId === income.id)
+    .map((r) => storedDay(r.occurrenceDate))
+    .filter((day) => day.getFullYear() === year && day.getMonth() === month)
+    .sort((a, b) => b.getTime() - a.getTime());
+  return confirmed[0] ?? dateForDayInMonth(year, month, income.dayOfMonth);
+}
+
+/** O último dia de pagamento da renda em ou antes de `reference`. */
+export function latestPaydayOnOrBefore(
+  income: IncomeInput,
+  reference: Date,
+  receipts: IncomeReceiptInput[] = [],
+): Date {
+  const ref = startOfDay(reference);
+  const candidate = paydayInMonth(income, ref.getFullYear(), ref.getMonth(), receipts);
+  if (candidate.getTime() <= ref.getTime()) return candidate;
+  const prev = addMonths(ref.getFullYear(), ref.getMonth(), -1);
+  return paydayInMonth(income, prev.year, prev.month, receipts);
+}
+
+/** O primeiro dia de pagamento da renda depois de `reference`. */
+export function earliestPaydayAfter(
+  income: IncomeInput,
+  reference: Date,
+  receipts: IncomeReceiptInput[] = [],
+): Date {
+  const ref = startOfDay(reference);
+  const candidate = paydayInMonth(income, ref.getFullYear(), ref.getMonth(), receipts);
+  if (candidate.getTime() > ref.getTime()) return candidate;
+  const next = addMonths(ref.getFullYear(), ref.getMonth(), 1);
+  return paydayInMonth(income, next.year, next.month, receipts);
+}
+
+/** Os dias de pagamento da renda em [start, end), com a mesma janela de `occurrencesInRange`. */
+export function paydaysInRange(
+  income: IncomeInput,
+  start: Date,
+  end: Date,
+  receipts: IncomeReceiptInput[] = [],
+): Date[] {
+  const paydays: Date[] = [];
+  let cursor = addMonths(start.getFullYear(), start.getMonth(), -1);
+  for (let i = 0; i < 3; i++) {
+    const d = paydayInMonth(income, cursor.year, cursor.month, receipts);
+    if (d.getTime() >= start.getTime() && d.getTime() < end.getTime()) paydays.push(d);
+    cursor = addMonths(cursor.year, cursor.month, 1);
+  }
+  return paydays;
 }
 
 function diffCalendarDays(a: Date, b: Date): number {
@@ -646,9 +696,9 @@ export function getPeriodBoundsDetailed(
     return { periodStart: start, periodEnd: end, fallback: true };
   }
 
-  const futureOccurrences = active.map((inc) => earliestOccurrenceAfter(inc.dayOfMonth, today));
+  const futureOccurrences = active.map((inc) => earliestPaydayAfter(inc, today, incomeReceipts));
   const validPastOccurrences = active
-    .map((inc) => ({ income: inc, occurrence: latestOccurrenceOnOrBefore(inc.dayOfMonth, today) }))
+    .map((inc) => ({ income: inc, occurrence: latestPaydayOnOrBefore(inc, today, incomeReceipts) }))
     .filter(
       ({ income, occurrence }) =>
         isOccurrenceValid(occurrence, income.createdAt) ||
@@ -1187,7 +1237,7 @@ export function budgetForBounds(
    * only way that money can ever be accounted for.
    */
   const arrivedPaydays = active
-    .map((inc) => ({ income: inc, occurrence: latestOccurrenceOnOrBefore(inc.dayOfMonth, today) }))
+    .map((inc) => ({ income: inc, occurrence: latestPaydayOnOrBefore(inc, today, incomeReceipts) }))
     .filter(({ income, occurrence }) => isPaydayAskable(occurrence, income.createdAt));
 
   /**

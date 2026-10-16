@@ -171,7 +171,9 @@ describe("forecastPeriods — despesa fixa", () => {
   it("usa o valor realmente pago quando a ocorrência já foi quitada", () => {
     const periods = forecast({
       fixedExpenses: [aluguel],
-      expensePayments: [{ fixedExpenseId: "aluguel", dueDate: storedDate(2026, 8, 10), amount: 1850 }],
+      expensePayments: [
+        { fixedExpenseId: "aluguel", dueDate: storedDate(2026, 8, 10), amount: 1850 },
+      ],
     });
 
     expect(periods[0].fixedExpenseTotal).toBe(1850);
@@ -324,9 +326,7 @@ describe("forecastPeriods — movimentação agendada", () => {
   it("deixa de fora o lançamento posterior ao período", () => {
     const periods = forecast({
       count: 1,
-      transactions: [
-        { id: "t1", description: "Longe", amount: 300, date: storedDate(2027, 5, 1) },
-      ],
+      transactions: [{ id: "t1", description: "Longe", amount: 300, date: storedDate(2027, 5, 1) }],
     });
 
     expect(periods.flatMap((p) => p.entries).filter((e) => e.kind === "scheduled")).toEqual([]);
@@ -402,9 +402,7 @@ describe("resolveForecastOffset", () => {
 });
 
 describe("forecastPeriods — o saldo passa de um ciclo para o outro", () => {
-  const confirmed = [
-    { incomeId: "salario", occurrenceDate: storedDate(2026, 8, 5), amount: 5000 },
-  ];
+  const confirmed = [{ incomeId: "salario", occurrenceDate: storedDate(2026, 8, 5), amount: 5000 }];
 
   it("abre cada ciclo com o fechamento do anterior", () => {
     const periods = forecast({ incomeReceipts: confirmed, count: 3 });
@@ -515,8 +513,20 @@ describe("forecastPeriods — o ciclo corrente é o mesmo número da Início", (
   const scenario: ForecastInput = {
     ...base,
     incomes: [
-      { id: "salario", label: "Salário", amount: 5000, dayOfMonth: 5, createdAt: new Date(2026, 5, 1) },
-      { id: "freela", label: "Freela", amount: 900, dayOfMonth: 5, createdAt: new Date(2026, 5, 1) },
+      {
+        id: "salario",
+        label: "Salário",
+        amount: 5000,
+        dayOfMonth: 5,
+        createdAt: new Date(2026, 5, 1),
+      },
+      {
+        id: "freela",
+        label: "Freela",
+        amount: 900,
+        dayOfMonth: 5,
+        createdAt: new Date(2026, 5, 1),
+      },
     ],
     incomeReceipts: [
       { incomeId: "salario", occurrenceDate: storedDate(2026, 6, 5), amount: 5000 },
@@ -524,9 +534,21 @@ describe("forecastPeriods — o ciclo corrente é o mesmo número da Início", (
       { incomeId: "salario", occurrenceDate: storedDate(2026, 8, 5), amount: 5100 },
     ],
     fixedExpenses: [
-      { id: "aluguel", label: "Aluguel", amount: 1800, dueDay: 10, createdAt: new Date(2026, 5, 1) },
+      {
+        id: "aluguel",
+        label: "Aluguel",
+        amount: 1800,
+        dueDay: 10,
+        createdAt: new Date(2026, 5, 1),
+      },
       { id: "luz", label: "Luz", amount: 250, dueDay: 7, createdAt: new Date(2026, 5, 1) },
-      { id: "spotify", label: "Spotify", amount: 30, cardId: "c1", createdAt: new Date(2026, 5, 1) },
+      {
+        id: "spotify",
+        label: "Spotify",
+        amount: 30,
+        cardId: "c1",
+        createdAt: new Date(2026, 5, 1),
+      },
     ],
     creditCards: [{ id: "c1", name: "Nubank", closingDay: 20, dueDay: 28 }],
     cardPurchases: [
@@ -570,9 +592,7 @@ describe("forecastPeriods — o ciclo corrente é o mesmo número da Início", (
 });
 
 describe("forecastPeriods — quanto cada ciclo pode gastar", () => {
-  const confirmed = [
-    { incomeId: "salario", occurrenceDate: storedDate(2026, 8, 5), amount: 5000 },
-  ];
+  const confirmed = [{ incomeId: "salario", occurrenceDate: storedDate(2026, 8, 5), amount: 5000 }];
 
   it("não oferece de novo a sobra que um ciclo anterior já ofereceu", () => {
     // Com meses que se pagam, o acumulado cresce 5.000 por ciclo — mas o livre
@@ -683,5 +703,29 @@ describe("forecastPeriods — quanto cada ciclo pode gastar", () => {
     expect(forecast({ ...input, count: 0 })[0].freeToSpend).toBe(
       forecast({ ...input, count: 6 })[0].freeToSpend,
     );
+  });
+});
+
+describe("forecastPeriods — renda com o dia alterado depois de receber", () => {
+  // Recebeu o salário de setembro no dia 5 e só depois mudou a renda para o
+  // dia 10, com outro valor. Hoje é 10/set.
+  const changed = {
+    incomes: [{ id: "salario", label: "Salário", amount: 6000, dayOfMonth: 10 }],
+    incomeReceipts: [{ incomeId: "salario", occurrenceDate: storedDate(2026, 8, 5), amount: 5000 }],
+  };
+
+  it("não pede setembro de novo: o mês pago fica no dia em que foi pago", () => {
+    const periods = forecast(changed);
+    expect(periods[0].periodStart).toEqual(new Date(2026, 8, 5));
+    // O dia novo só vale de outubro em diante.
+    expect(periods[0].periodEnd).toEqual(new Date(2026, 9, 10));
+    const incomes = entriesOf(periods, 0, "income");
+    expect(incomes).toHaveLength(1);
+    expect(incomes[0]).toMatchObject({ amount: 5000, confirmed: true });
+  });
+
+  it("projeta o próximo mês com o dia e o valor novos", () => {
+    const [next] = entriesOf(forecast(changed), 1, "income");
+    expect(next).toMatchObject({ date: new Date(2026, 9, 10), amount: 6000, confirmed: false });
   });
 });

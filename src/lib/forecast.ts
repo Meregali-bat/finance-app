@@ -26,7 +26,7 @@ import {
   getNextPeriodBounds,
   getPeriodBounds,
   isOccurrenceValid,
-  occurrencesInRange,
+  paydaysInRange,
   openOccurrenceAmounts,
   storedDay,
   type CardBillEstimateInput,
@@ -245,7 +245,9 @@ function forecastOnePeriod(
     }));
 
   const projectedIncomeEntries: ForecastEntry[] = boundingIncomes(incomes).flatMap((income) =>
-    occurrencesInRange(income.dayOfMonth, periodStart, periodEnd)
+    // Com os recebimentos: um mês já confirmado fica no dia em que foi pago,
+    // mesmo que o dia da renda tenha mudado depois.
+    paydaysInRange(income, periodStart, periodEnd, incomeReceipts)
       .filter((occurrence) => isOccurrenceValid(occurrence, income.createdAt))
       .filter((occurrence) => !findIncomeReceipt(incomeReceipts, income.id, occurrence))
       .map((occurrence) => ({
