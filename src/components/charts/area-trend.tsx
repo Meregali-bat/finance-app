@@ -1,6 +1,7 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
+import { cn } from "@/lib/utils";
 
 export interface TrendPoint {
   /** O rótulo do eixo e do tooltip: "05/10". */
@@ -23,14 +24,24 @@ export function AreaTrend({
   stroke = "var(--primary)",
   ring = "var(--rich-mahogany-3)",
   title,
+  className,
+  reveal = false,
 }: {
   points: TrendPoint[];
+  /** A altura das contas do SVG; a altura na tela vem de `className`. */
   height?: number;
   stroke?: string;
   ring?: string;
   title: string;
+  className?: string;
+  /**
+   * Entra revelado da esquerda para a direita, e só então o ponto final
+   * aparece, com um anel pulsando atrás dele.
+   */
+  reveal?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const gradientId = `trend-${useId().replace(/:/g, "")}`;
   const [index, setIndex] = useState<number | null>(null);
 
   if (points.length === 0) return null;
@@ -56,8 +67,8 @@ export function AreaTrend({
     <figure className="flex flex-col gap-1">
       <div
         ref={ref}
-        className="relative touch-none outline-none"
-        style={{ height }}
+        className={cn("relative touch-none outline-none", className)}
+        style={className ? undefined : { height }}
         tabIndex={0}
         role="img"
         aria-label={`${title}: ${points[last].valueLabel} em ${points[last].label}`}
@@ -76,16 +87,24 @@ export function AreaTrend({
           className="absolute inset-0 size-full overflow-visible"
           aria-hidden="true"
         >
-          <path d={area} fill={stroke} fillOpacity={0.12} />
-          <path
-            d={line}
-            fill="none"
-            stroke={stroke}
-            strokeWidth={2}
-            strokeLinejoin="round"
-            strokeLinecap="round"
-            vectorEffect="non-scaling-stroke"
-          />
+          <defs>
+            <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stopColor={stroke} stopOpacity={0.28} />
+              <stop offset="1" stopColor={stroke} stopOpacity={0} />
+            </linearGradient>
+          </defs>
+          <g className={reveal ? "trend-reveal" : undefined}>
+            <path d={area} fill={`url(#${gradientId})`} />
+            <path
+              d={line}
+              fill="none"
+              stroke={stroke}
+              strokeWidth={2.25}
+              strokeLinejoin="round"
+              strokeLinecap="round"
+              vectorEffect="non-scaling-stroke"
+            />
+          </g>
         </svg>
         {index !== null && (
           <span
@@ -94,15 +113,33 @@ export function AreaTrend({
             style={{ left: `${x(index)}%` }}
           />
         )}
-        {/* O ponto em HTML, não no SVG esticado: lá ele viraria uma elipse. */}
+        {/* O ponto em HTML, não no SVG esticado: lá ele viraria uma elipse.
+            A posição vertical em porcentagem acompanha a altura da tela. */}
+        {reveal && index === null && (
+          <span
+            aria-hidden="true"
+            data-ping
+            className="trend-ping absolute size-[11px] rounded-full motion-reduce:hidden"
+            style={{
+              left: `${x(last)}%`,
+              top: `${(y(points[last].value) / height) * 100}%`,
+              background: stroke,
+            }}
+          />
+        )}
         <span
           aria-hidden="true"
-          className="absolute size-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full"
+          className={cn(
+            "absolute size-[11px] rounded-full",
+            // O keyframe já centraliza com `transform`; somar as classes de
+            // translate do Tailwind (que usam `translate`) deslocaria o ponto.
+            reveal ? "trend-dot" : "-translate-x-1/2 -translate-y-1/2",
+          )}
           style={{
             left: `${x(shown)}%`,
-            top: y(points[shown].value),
+            top: `${(y(points[shown].value) / height) * 100}%`,
             background: stroke,
-            boxShadow: `0 0 0 2px ${ring}`,
+            boxShadow: `0 0 0 3px ${ring}`,
           }}
         />
         {index !== null && (
@@ -111,9 +148,7 @@ export function AreaTrend({
             className="pointer-events-none absolute bottom-full z-10 mb-1 flex -translate-x-1/2 flex-col items-center rounded-xl bg-popover px-3 py-1.5 whitespace-nowrap shadow-float ring-1 ring-foreground/10"
             style={{ left: `${Math.min(88, Math.max(12, x(index)))}%` }}
           >
-            <span className="text-sm font-semibold tabular-nums">
-              {points[index].valueLabel}
-            </span>
+            <span className="text-sm font-semibold tabular-nums">{points[index].valueLabel}</span>
             <span className="text-xs text-muted-foreground">{points[index].label}</span>
           </span>
         )}

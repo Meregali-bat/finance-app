@@ -126,9 +126,9 @@ export function MovementFormDialog({
               // Botão flutuante circular no celular; no desktop ele entra no
               // fluxo do cabeçalho e ganha rótulo, porque um círculo solto no
               // canto da tela larga fica desligado do conteúdo.
-              <Button
-                size="lg"
-                className="size-14 rounded-full p-0 shadow-float ring-1 ring-primary/30 active:scale-90 lg:size-auto lg:h-10 lg:w-auto lg:gap-2 lg:rounded-xl lg:px-4"
+              <button
+                type="button"
+                className="cta-surface fab-in flex size-[58px] items-center justify-center rounded-full text-white transition-[transform,box-shadow] duration-150 ease-out-quint active:scale-[0.97] lg:h-11 lg:w-auto lg:gap-2 lg:rounded-[14px] lg:pr-[18px] lg:pl-[14px] lg:text-sm lg:font-semibold lg:hover:-translate-y-px"
               />
             )
           }
@@ -137,7 +137,7 @@ export function MovementFormDialog({
             children
           ) : (
             <>
-              <Plus className="size-6 lg:size-4" />
+              <Plus className="size-[26px] lg:size-[18px]" aria-hidden="true" />
               <span className="sr-only lg:not-sr-only">Nova movimentação</span>
             </>
           )}

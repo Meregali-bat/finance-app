@@ -1,7 +1,8 @@
-import { Card, CardContent } from "@/components/ui/card";
+import { formatDate } from "@/lib/format";
 import { SectionLabel } from "@/components/page-header";
-import { formatCurrency, formatDate } from "@/lib/format";
+import { CountUpCurrency } from "@/components/ui/animated-number";
 import { BalanceAdjustmentDialog } from "@/components/forms/balance-adjustment-dialog";
+import { homeCard } from "@/components/home-card";
 
 /**
  * Sem nenhum ajuste o card não mostra número: um saldo derivado só das
@@ -18,38 +19,35 @@ export function AccountBalanceCard({
   registeredMovement: number;
 }) {
   return (
-    <Card>
-      <CardContent className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex min-w-0 flex-col gap-1">
-          <SectionLabel>Saldo em conta</SectionLabel>
-          {balance == null ? (
-            <p className="text-sm text-muted-foreground">
-              Informe o saldo da sua conta para acompanhar quanto você tem agora.
-            </p>
-          ) : (
-            <>
-              <p
-                className={`font-heading text-3xl leading-tight font-semibold tracking-[-0.02em] tabular-nums ${
-                  balance < 0 ? "text-negative" : ""
-                }`}
-              >
-                {formatCurrency(balance)}
+    <div className={homeCard("flex items-center justify-between gap-4")}>
+      <div className="flex min-w-0 flex-col gap-1.5">
+        <SectionLabel>Saldo em conta</SectionLabel>
+        {balance == null ? (
+          <p className="text-sm text-muted-foreground">
+            Informe o saldo da sua conta para acompanhar quanto você tem agora.
+          </p>
+        ) : (
+          <>
+            {/* Conta de novo a cada mudança: depois de pagar um lembrete, o
+                saldo anda até o valor novo em vez de trocar de repente. */}
+            <CountUpCurrency
+              value={balance}
+              duration={1.2}
+              delay={0.4}
+              className={`font-heading text-[28px] leading-none font-bold tracking-[-0.035em] tabular-nums lg:text-[32px] ${
+                balance < 0 ? "text-negative" : ""
+              }`}
+            />
+            {adjustedAt && (
+              <p className="text-xs text-muted-foreground">
+                Ajustado em {formatDate(adjustedAt)}
+                <span className="hidden sm:inline"> · atualizado pelos lançamentos</span>
               </p>
-              {adjustedAt && (
-                <p className="text-xs text-muted-foreground">
-                  Ajustado em {formatDate(adjustedAt)} · atualizado pelos seus lançamentos
-                </p>
-              )}
-            </>
-          )}
-        </div>
-        <div className="shrink-0 [&>button]:w-full sm:[&>button]:w-auto">
-          <BalanceAdjustmentDialog
-            currentBalance={balance}
-            registeredMovement={registeredMovement}
-          />
-        </div>
-      </CardContent>
-    </Card>
+            )}
+          </>
+        )}
+      </div>
+      <BalanceAdjustmentDialog currentBalance={balance} registeredMovement={registeredMovement} />
+    </div>
   );
 }

@@ -67,12 +67,14 @@ export async function markFixedExpensePaid(expenseId: string, formData: FormData
   if (!expense) throw new Error("Despesa não encontrada");
 
   const cardId = String(formData.get("cardId") ?? "");
+  let paymentId: string;
   if (!cardId) {
-    await prisma.expensePayment.upsert({
+    ({ id: paymentId } = await prisma.expensePayment.upsert({
       where: { fixedExpenseId_dueDate: { fixedExpenseId: expenseId, dueDate } },
       create: { userId, fixedExpenseId: expenseId, dueDate, amount, paidAt },
       update: { amount, paidAt },
-    });
+      select: { id: true },
+    }));
   } else {
     const card = await prisma.creditCard.findUnique({ where: { id: cardId, userId } });
     if (!card) throw new Error("Cartão não encontrado");
@@ -80,7 +82,7 @@ export async function markFixedExpensePaid(expenseId: string, formData: FormData
     // Paga no cartão: o dinheiro vira compra e entra na fatura. O pagamento
     // fica com 0 só para quitar a ocorrência — com o valor cheio nos dois
     // lugares, o orçamento cobraria a conta duas vezes.
-    await prisma.$transaction(async (tx) => {
+    paymentId = await prisma.$transaction(async (tx) => {
       const purchase = await tx.cardPurchase.create({
         data: {
           userId,
@@ -95,7 +97,7 @@ export async function markFixedExpensePaid(expenseId: string, formData: FormData
           ...(paidOn ? { date: new Date(`${paidOn}T00:00:00Z`) } : {}),
         },
       });
-      await tx.expensePayment.create({
+      const payment = await tx.expensePayment.create({
         data: {
           userId,
           fixedExpenseId: expenseId,
@@ -104,13 +106,17 @@ export async function markFixedExpensePaid(expenseId: string, formData: FormData
           paidAt,
           cardPurchaseId: purchase.id,
         },
+        select: { id: true },
       });
+      return payment.id;
     });
     revalidatePath(`/cartoes/${cardId}`);
     revalidatePath("/cartoes");
   }
   revalidatePath("/");
   revalidatePath("/historico");
+  // O id volta para o "Desfazer" do toast da Início.
+  return { paymentId };
 }
 
 export async function markCardBillPaid(cardId: string, formData: FormData) {
@@ -120,13 +126,15 @@ export async function markCardBillPaid(cardId: string, formData: FormData) {
   const card = await prisma.creditCard.findUnique({ where: { id: cardId, userId } });
   if (!card) throw new Error("Cartão não encontrado");
 
-  await prisma.expensePayment.upsert({
+  const payment = await prisma.expensePayment.upsert({
     where: { cardId_dueDate: { cardId, dueDate } },
     create: { userId, cardId, dueDate, amount, paidAt },
     update: { amount, paidAt },
+    select: { id: true },
   });
   revalidatePath("/");
   revalidatePath("/historico");
+  return { paymentId: payment.id };
 }
 
 export async function unmarkExpensePayment(paymentId: string) {

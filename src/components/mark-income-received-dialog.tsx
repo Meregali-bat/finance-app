@@ -13,17 +13,23 @@ import {
 import { Label } from "@/components/ui/label";
 import { CurrencyInput } from "@/components/currency-input";
 import { markIncomeReceived } from "@/lib/actions/income-receipt";
+import type { IconTrigger } from "@/components/ui/icon-button";
 
 export function MarkIncomeReceivedDialog({
   incomeId,
   label,
   dueDate,
   amount,
+  trigger,
+  onDone,
 }: {
   incomeId: string;
   label: string;
   dueDate: Date;
   amount: number;
+  trigger?: IconTrigger;
+  /** Depois de salvar, com o que o "Desfazer" da Início precisa. */
+  onDone?: (result: { incomeId: string; occurrenceDate: Date }) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -33,8 +39,9 @@ export function MarkIncomeReceivedDialog({
     setError(null);
     startTransition(async () => {
       try {
-        await markIncomeReceived(incomeId, formData);
+        const result = await markIncomeReceived(incomeId, formData);
         setOpen(false);
+        onDone?.(result);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Erro ao salvar");
       }
@@ -43,9 +50,24 @@ export function MarkIncomeReceivedDialog({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={<Button size="sm" variant="secondary" />}>
-        Marcar como recebida
-      </DialogTrigger>
+      {trigger ? (
+        <DialogTrigger
+          render={
+            <button
+              type="button"
+              className={trigger.className}
+              aria-label={trigger.label}
+              title={trigger.label}
+            />
+          }
+        >
+          {trigger.icon}
+        </DialogTrigger>
+      ) : (
+        <DialogTrigger render={<Button size="sm" variant="secondary" />}>
+          Marcar como recebida
+        </DialogTrigger>
+      )}
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Confirmar recebimento</DialogTitle>

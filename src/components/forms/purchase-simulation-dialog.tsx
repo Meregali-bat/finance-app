@@ -30,6 +30,7 @@ import {
 } from "@/lib/actions/purchase-simulation";
 import { MAX_SIMULATION_INSTALLMENTS } from "@/lib/purchase-simulation";
 import { todayInputValue } from "@/lib/format";
+import { iconButton } from "@/components/ui/icon-button";
 
 const NONE = "__none__";
 
@@ -130,8 +131,17 @@ export function PurchaseSimulationDialog({
         if (!next) reset();
       }}
     >
-      <DialogTrigger render={<Button variant="outline" className="gap-2" />}>
-        <Scale className="size-4" /> Posso comprar?
+      <DialogTrigger
+        render={
+          <button
+            type="button"
+            className={iconButton({ tone: "outline" })}
+            aria-label="Simular compra"
+            title="Simular compra"
+          />
+        }
+      >
+        <Scale aria-hidden="true" />
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>

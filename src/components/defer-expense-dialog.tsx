@@ -14,6 +14,7 @@ import { Label } from "@/components/ui/label";
 import { CurrencyInput } from "@/components/currency-input";
 import { formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import type { IconTrigger } from "@/components/ui/icon-button";
 
 type Mode = "nextMonth" | "end";
 
@@ -32,6 +33,8 @@ export function DeferExpenseDialog({
   amount,
   nextMonthTarget,
   endTarget,
+  trigger,
+  onDone,
 }: {
   /** `deferFixedExpense` já ligada ao id da despesa. */
   action: (formData: FormData) => Promise<void>;
@@ -41,6 +44,8 @@ export function DeferExpenseDialog({
   nextMonthTarget: Date;
   /** Nulo quando a despesa não tem número de parcelas: não há "última". */
   endTarget: Date | null;
+  trigger?: IconTrigger;
+  onDone?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<Mode>("nextMonth");
@@ -53,6 +58,7 @@ export function DeferExpenseDialog({
       try {
         await action(formData);
         setOpen(false);
+        onDone?.();
       } catch (e) {
         setError(e instanceof Error ? e.message : "Erro ao adiar");
       }
@@ -77,7 +83,22 @@ export function DeferExpenseDialog({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={<Button size="sm" variant="ghost" />}>Adiar</DialogTrigger>
+      {trigger ? (
+        <DialogTrigger
+          render={
+            <button
+              type="button"
+              className={trigger.className}
+              aria-label={trigger.label}
+              title={trigger.label}
+            />
+          }
+        >
+          {trigger.icon}
+        </DialogTrigger>
+      ) : (
+        <DialogTrigger render={<Button size="sm" variant="ghost" />}>Adiar</DialogTrigger>
+      )}
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Adiar pagamento</DialogTitle>

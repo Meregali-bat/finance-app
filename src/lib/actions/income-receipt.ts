@@ -35,6 +35,9 @@ export async function markIncomeReceived(incomeId: string, formData: FormData) {
     update: { amount: data.amount },
   });
   revalidatePath("/");
+  revalidatePath("/historico");
+  // O que o "Desfazer" do toast da Início precisa para apagar o recebimento.
+  return { incomeId, occurrenceDate };
 }
 
 export async function unmarkIncomeReceived(incomeId: string, occurrenceDate: Date) {

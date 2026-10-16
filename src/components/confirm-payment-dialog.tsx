@@ -14,6 +14,7 @@ import { Label } from "@/components/ui/label";
 import { CurrencyInput } from "@/components/currency-input";
 import { Input } from "@/components/ui/input";
 import { todayInputValue } from "@/lib/format";
+import type { IconTrigger } from "@/components/ui/icon-button";
 import {
   Select,
   SelectContent,
@@ -30,14 +31,19 @@ export function ConfirmPaymentDialog({
   dueDate,
   amount,
   cards,
+  trigger,
+  onDone,
 }: {
   /** A server action já ligada ao id da despesa ou do cartão pelo `.bind`. */
-  action: (formData: FormData) => Promise<void>;
+  action: (formData: FormData) => Promise<{ paymentId: string }>;
   label: string;
   dueDate: Date;
   amount: number;
   /** Só para despesa fixa: permite dizer que aquele mês foi pago no cartão. */
   cards?: { id: string; name: string }[];
+  trigger?: IconTrigger;
+  /** Depois de salvar, com o id do pagamento — o "Desfazer" da Início usa. */
+  onDone?: (result: { paymentId: string }) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [cardId, setCardId] = useState(ACCOUNT);
@@ -48,8 +54,9 @@ export function ConfirmPaymentDialog({
     setError(null);
     startTransition(async () => {
       try {
-        await action(formData);
+        const result = await action(formData);
         setOpen(false);
+        onDone?.(result);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Erro ao salvar");
       }
@@ -58,9 +65,24 @@ export function ConfirmPaymentDialog({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={<Button size="sm" variant="secondary" />}>
-        Marcar como paga
-      </DialogTrigger>
+      {trigger ? (
+        <DialogTrigger
+          render={
+            <button
+              type="button"
+              className={trigger.className}
+              aria-label={trigger.label}
+              title={trigger.label}
+            />
+          }
+        >
+          {trigger.icon}
+        </DialogTrigger>
+      ) : (
+        <DialogTrigger render={<Button size="sm" variant="secondary" />}>
+          Marcar como paga
+        </DialogTrigger>
+      )}
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Confirmar pagamento</DialogTitle>
