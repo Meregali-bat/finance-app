@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -13,7 +13,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { CurrencyInput } from "@/components/currency-input";
 import { Input } from "@/components/ui/input";
-import { todayInputValue } from "@/lib/format";
+import { formatCurrency, todayInputValue } from "@/lib/format";
 import type { IconTrigger } from "@/components/ui/icon-button";
 import {
   Select,
@@ -31,6 +31,8 @@ export function ConfirmPaymentDialog({
   dueDate,
   amount,
   cards,
+  allowPartial = false,
+  paidSoFar = 0,
   trigger,
   onDone,
 }: {
@@ -41,22 +43,37 @@ export function ConfirmPaymentDialog({
   amount: number;
   /** Só para despesa fixa: permite dizer que aquele mês foi pago no cartão. */
   cards?: { id: string; name: string }[];
+  /**
+   * Só para despesa fixa: troca o "Confirmar" por "Pagar parcial", que abate
+   * o valor e mantém o lembrete, e "Pagar e finalizar", que quita.
+   */
+  allowPartial?: boolean;
+  /** O que os parciais anteriores já pagaram; `amount` é só o que falta. */
+  paidSoFar?: number;
   trigger?: IconTrigger;
-  /** Depois de salvar, com o id do pagamento — o "Desfazer" da Início usa. */
-  onDone?: (result: { paymentId: string }) => void;
+  /**
+   * Depois de salvar, com o id do pagamento — o "Desfazer" da Início usa — e
+   * se ele quitou a ocorrência ou foi parcial.
+   */
+  onDone?: (result: { paymentId: string; settled: boolean }) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [cardId, setCardId] = useState(ACCOUNT);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  // Qual dos dois botões enviou o form. Um ref, e não estado: o clique roda
+  // antes do envio, mas o estado só mudaria no próximo render.
+  const settleRef = useRef(true);
 
   function handleSubmit(formData: FormData) {
     setError(null);
+    const settled = !allowPartial || settleRef.current;
+    formData.set("settle", settled ? "1" : "0");
     startTransition(async () => {
       try {
         const result = await action(formData);
         setOpen(false);
-        onDone?.(result);
+        onDone?.({ ...result, settled });
       } catch (e) {
         setError(e instanceof Error ? e.message : "Erro ao salvar");
       }
@@ -89,6 +106,11 @@ export function ConfirmPaymentDialog({
         </DialogHeader>
         <form action={handleSubmit} className="flex flex-col gap-4">
           <p className="text-sm text-muted-foreground">{label}</p>
+          {paidSoFar > 0 && (
+            <p className="text-sm text-muted-foreground">
+              Já pago: {formatCurrency(paidSoFar)} · falta {formatCurrency(amount)}
+            </p>
+          )}
           {/*
             O instante exato, não uma string "YYYY-MM-DD": formatar a data
             aqui a renderizaria no fuso do browser, o que pode cair um dia
@@ -143,9 +165,29 @@ export function ConfirmPaymentDialog({
             </p>
           )}
           <DialogFooter>
-            <Button type="submit" disabled={isPending}>
-              {isPending ? "Salvando..." : "Confirmar"}
-            </Button>
+            {allowPartial ? (
+              <>
+                <Button
+                  type="submit"
+                  variant="secondary"
+                  disabled={isPending}
+                  onClick={() => (settleRef.current = false)}
+                >
+                  Pagar parcial
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={isPending}
+                  onClick={() => (settleRef.current = true)}
+                >
+                  {isPending ? "Salvando..." : "Pagar e finalizar"}
+                </Button>
+              </>
+            ) : (
+              <Button type="submit" disabled={isPending}>
+                {isPending ? "Salvando..." : "Confirmar"}
+              </Button>
+            )}
           </DialogFooter>
         </form>
       </DialogContent>

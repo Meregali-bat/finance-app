@@ -109,6 +109,17 @@ export interface ExpensePaymentInput {
   dueDate: Date;
   /** O valor realmente pago, que pode diferir da estimativa. */
   amount: number;
+  /**
+   * false = pagamento parcial: abate do valor da ocorrência, que segue em
+   * aberto. Ausente = quitou, como todo pagamento antes dos parciais.
+   */
+  settled?: boolean;
+  /**
+   * Quanto da ocorrência este pagamento cobre. Só difere de `amount` quando
+   * foi pago no cartão: lá `amount` é 0, porque o dinheiro mora na compra.
+   * Ausente = `amount`.
+   */
+  coveredAmount?: number;
 }
 
 export interface TransactionInput {
@@ -168,6 +179,11 @@ export interface FixedExpenseReminder {
   overdue?: boolean;
   /** Quanto de `amount` veio de ocorrências adiadas para esta. */
   deferredIn?: number;
+  /**
+   * Quanto já foi pago em parciais. `amount` é só o que falta, e o lembrete
+   * fica de pé até um pagamento quitar a ocorrência.
+   */
+  paidSoFar?: number;
 }
 
 export interface IncomeReminder {
@@ -508,8 +524,51 @@ export function findExpensePayment(
   key: { fixedExpenseId?: string; cardId?: string },
   dueDate: Date,
 ): ExpensePaymentInput | undefined {
+  const matching = occurrencePayments(payments, key, dueDate);
+  // Só quita quem foi marcado assim. Os parciais de antes entram na soma: o
+  // que saiu da conta pela ocorrência é tudo o que foi pago por ela.
+  const settling = matching.find((p) => p.settled !== false);
+  if (!settling) return undefined;
+  return { ...settling, amount: matching.reduce((sum, p) => sum + p.amount, 0) };
+}
+
+/**
+ * Os pagamentos parciais de uma ocorrência ainda em aberto, somados: quanto
+ * saiu da conta e quanto do valor eles já cobrem. Undefined quando não há
+ * parcial ou quando a ocorrência já foi quitada — aí vale findExpensePayment.
+ */
+export function findPartialPayment(
+  payments: ExpensePaymentInput[],
+  key: { fixedExpenseId?: string; cardId?: string },
+  dueDate: Date,
+): { amount: number; covered: number } | undefined {
+  const matching = occurrencePayments(payments, key, dueDate);
+  if (matching.length === 0 || matching.some((p) => p.settled !== false)) return undefined;
+  return {
+    amount: matching.reduce((sum, p) => sum + p.amount, 0),
+    covered: matching.reduce((sum, p) => sum + (p.coveredAmount ?? p.amount), 0),
+  };
+}
+
+/**
+ * O que ainda falta pagar de uma ocorrência em aberto, e quanto ela pesa no
+ * orçamento: o que os parciais tiraram da conta mais o que falta.
+ */
+export function openOccurrenceAmounts(
+  estimate: number,
+  partial: { amount: number; covered: number } | undefined,
+): { remaining: number; committed: number } {
+  const remaining = Math.max(0, estimate - (partial?.covered ?? 0));
+  return { remaining, committed: (partial?.amount ?? 0) + remaining };
+}
+
+function occurrencePayments(
+  payments: ExpensePaymentInput[],
+  key: { fixedExpenseId?: string; cardId?: string },
+  dueDate: Date,
+): ExpensePaymentInput[] {
   const day = storedDay(dueDate).getTime();
-  return payments.find(
+  return payments.filter(
     (p) =>
       p.fixedExpenseId === key.fixedExpenseId &&
       p.cardId === key.cardId &&
@@ -974,6 +1033,7 @@ function obligationsInRange(
     estimate: number;
     deferredIn: number;
     payment: ExpensePaymentInput | undefined;
+    partial: { amount: number; covered: number } | undefined;
   }[];
   cardBills: (CardBillReminder & { payment: ExpensePaymentInput | undefined })[];
 } {
@@ -1007,6 +1067,7 @@ function obligationsInRange(
         estimate: charge.amount,
         deferredIn: charge.deferredIn,
         payment: findExpensePayment(expensePayments, { fixedExpenseId: exp.id }, charge.dueDate),
+        partial: findPartialPayment(expensePayments, { fixedExpenseId: exp.id }, charge.dueDate),
       })),
     );
 
@@ -1023,6 +1084,23 @@ function obligationsInRange(
   }));
 
   return { fixedExpenseOccurrences, cardBills };
+}
+
+/** O lembrete de uma ocorrência em aberto: só o que falta pagar dela. */
+function fixedExpenseReminder(occ: {
+  expenseId: string;
+  dueDate: Date;
+  estimate: number;
+  deferredIn: number;
+  partial: { amount: number; covered: number } | undefined;
+}): FixedExpenseReminder {
+  return {
+    expenseId: occ.expenseId,
+    dueDate: occ.dueDate,
+    amount: openOccurrenceAmounts(occ.estimate, occ.partial).remaining,
+    ...(occ.deferredIn > 0 ? { deferredIn: occ.deferredIn } : {}),
+    ...(occ.partial ? { paidSoFar: occ.partial.covered } : {}),
+  };
 }
 
 /**
@@ -1105,7 +1183,9 @@ export function budgetForBounds(
   const { fixedExpenseOccurrences, cardBills } = obligationsInRange(input, periodStart, periodEnd);
 
   const fixedExpenseTotal = fixedExpenseOccurrences.reduce(
-    (sum, occ) => sum + (occ.payment ? occ.payment.amount : occ.estimate),
+    (sum, occ) =>
+      sum +
+      (occ.payment ? occ.payment.amount : openOccurrenceAmounts(occ.estimate, occ.partial).committed),
     0,
   );
   const cardBillTotal = cardBills.reduce(
@@ -1136,21 +1216,8 @@ export function budgetForBounds(
   const fixedExpenseReminders: FixedExpenseReminder[] = [
     ...overdue.fixedExpenseOccurrences
       .filter((occ) => !occ.payment)
-      .map((occ) => ({
-        expenseId: occ.expenseId,
-        dueDate: occ.dueDate,
-        amount: occ.estimate,
-        overdue: true,
-        ...(occ.deferredIn > 0 ? { deferredIn: occ.deferredIn } : {}),
-      })),
-    ...fixedExpenseOccurrences
-      .filter((occ) => !occ.payment)
-      .map((occ) => ({
-        expenseId: occ.expenseId,
-        dueDate: occ.dueDate,
-        amount: occ.estimate,
-        ...(occ.deferredIn > 0 ? { deferredIn: occ.deferredIn } : {}),
-      })),
+      .map((occ) => ({ ...fixedExpenseReminder(occ), overdue: true })),
+    ...fixedExpenseOccurrences.filter((occ) => !occ.payment).map(fixedExpenseReminder),
   ];
 
   const cardBillReminders: CardBillReminder[] = [

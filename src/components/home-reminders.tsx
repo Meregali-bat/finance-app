@@ -37,6 +37,9 @@ export type HomeReminder =
         endTarget: Date | null;
       } | null;
       deferredIn: number;
+      /** Só despesa fixa: libera o "Pagar parcial". */
+      allowPartial: boolean;
+      paidSoFar: number;
     })
   | (Base & { kind: "income"; incomeId: string });
 
@@ -88,6 +91,15 @@ export function HomeReminders({ reminders }: { reminders: HomeReminder[] }) {
         },
         reduceMotion ? 0 : CONFIRM_MS,
       ),
+    );
+  }
+
+  /** Parcial: o card fica, só com o que falta, e o toast oferece desfazer. */
+  function partial(key: string, text: string, undo: () => Promise<void>) {
+    // No setTimeout, como em `finish`: chamar Date.now() direto no handler
+    // a regra de pureza do React não aceita.
+    timers.current.push(
+      window.setTimeout(() => setToast({ id: Date.now(), key, text, undo }), 0),
     );
   }
 
@@ -178,6 +190,9 @@ export function HomeReminders({ reminders }: { reminders: HomeReminder[] }) {
                       undoFn,
                     )
                   }
+                  onPartial={(undoFn) =>
+                    partial(reminder.key, `Pagamento parcial de ${reminder.label}`, undoFn)
+                  }
                   onDeferred={() => finish(reminder.key, `${reminder.label} adiada`)}
                 />
               </motion.li>
@@ -199,11 +214,13 @@ function ReminderCard({
   reminder,
   confirmed,
   onPaid,
+  onPartial,
   onDeferred,
 }: {
   reminder: HomeReminder;
   confirmed: boolean;
   onPaid: (undo: () => Promise<void>) => void;
+  onPartial: (undo: () => Promise<void>) => void;
   onDeferred: () => void;
 }) {
   const isIncome = reminder.kind === "income";
@@ -274,8 +291,12 @@ function ReminderCard({
             label={reminder.label}
             dueDate={reminder.dueDate}
             amount={reminder.amount}
+            allowPartial={reminder.allowPartial}
+            paidSoFar={reminder.paidSoFar}
             trigger={payTrigger}
-            onDone={({ paymentId }) => onPaid(() => unmarkExpensePayment(paymentId))}
+            onDone={({ paymentId, settled }) =>
+              (settled ? onPaid : onPartial)(() => unmarkExpensePayment(paymentId))
+            }
           />
         )}
       </div>
