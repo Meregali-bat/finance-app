@@ -1104,6 +1104,71 @@ describe("calculateDailyBudget com pagamentos confirmados", () => {
   });
 });
 
+describe("calculateDailyBudget com pagamento parcial", () => {
+  const baseInput = {
+    incomes: [{ id: "i1", amount: 3000, dayOfMonth: 5 }],
+    incomeReceipts: [{ incomeId: "i1", occurrenceDate: new Date(2026, 0, 5), amount: 3000 }],
+    creditCards: [],
+    cardPurchases: [],
+    transactions: [],
+    fixedExpenses: [{ id: "e1", amount: 500, dueDay: 20 }],
+    today: new Date(2026, 0, 10),
+  };
+  const dueDate = new Date(2026, 0, 20);
+
+  it("mantém o lembrete com o que falta", () => {
+    const budget = calculateDailyBudget({
+      ...baseInput,
+      expensePayments: [
+        { fixedExpenseId: "e1", dueDate, amount: 200, settled: false },
+        { fixedExpenseId: "e1", dueDate, amount: 100, settled: false },
+      ],
+    });
+    expect(current(budget.fixedExpenseReminders)).toEqual([
+      { expenseId: "e1", dueDate, amount: 200, paidSoFar: 300 },
+    ]);
+    expect(budget.fixedExpenseTotal).toBe(500);
+    expect(budget.periodBalance).toBe(3000 - 500);
+  });
+
+  it("conta o que saiu da conta quando os parciais passam do previsto", () => {
+    const budget = calculateDailyBudget({
+      ...baseInput,
+      expensePayments: [{ fixedExpenseId: "e1", dueDate, amount: 600, settled: false }],
+    });
+    expect(current(budget.fixedExpenseReminders)).toEqual([
+      { expenseId: "e1", dueDate, amount: 0, paidSoFar: 600 },
+    ]);
+    expect(budget.fixedExpenseTotal).toBe(600);
+  });
+
+  it("finalizar some com o lembrete e soma tudo o que foi pago", () => {
+    const budget = calculateDailyBudget({
+      ...baseInput,
+      expensePayments: [
+        { fixedExpenseId: "e1", dueDate, amount: 200, settled: false },
+        { fixedExpenseId: "e1", dueDate, amount: 250 },
+      ],
+    });
+    expect(current(budget.fixedExpenseReminders)).toEqual([]);
+    expect(budget.fixedExpenseTotal).toBe(450);
+  });
+
+  it("parcial no cartão abate do lembrete sem pesar duas vezes", () => {
+    // O dinheiro está na compra do cartão; o pagamento tem 0.
+    const budget = calculateDailyBudget({
+      ...baseInput,
+      expensePayments: [
+        { fixedExpenseId: "e1", dueDate, amount: 0, coveredAmount: 200, settled: false },
+      ],
+    });
+    expect(current(budget.fixedExpenseReminders)).toEqual([
+      { expenseId: "e1", dueDate, amount: 300, paidSoFar: 200 },
+    ]);
+    expect(budget.fixedExpenseTotal).toBe(300);
+  });
+});
+
 describe("confirmações gravadas por servidores de fusos diferentes", () => {
   // O banco guarda o vencimento como meia-noite do fuso de quem gravou. Um
   // vencimento no dia 20 vale `2026-01-20 00:00` quando o servidor roda em UTC

@@ -179,6 +179,8 @@ export async function deferFixedExpense(expenseId: string, formData: FormData) {
   });
   if (!expense) throw new Error("Despesa não encontrada");
   if (expense.cardId) throw new Error("Uma despesa cobrada no cartão não se adia por aqui");
+  // Também com um pagamento parcial: adiar levaria a ocorrência inteira, e o
+  // que já foi pago dela deixaria de contar no orçamento.
   if (expense.payments.length > 0) throw new Error("Esta ocorrência já foi paga");
 
   const targetDueDate = deferralTargetDate(toFixedExpenseInput(expense), dueDate, data.mode);

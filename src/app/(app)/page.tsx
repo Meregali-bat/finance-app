@@ -174,6 +174,8 @@ export default async function DashboardPage() {
       cards: undefined,
       defer: null,
       deferredIn: 0,
+      allowPartial: false,
+      paidSoFar: 0,
     })),
     ...budget.fixedExpenseReminders.map((exp) => ({
       kind: "due" as const,
@@ -184,8 +186,12 @@ export default async function DashboardPage() {
       overdue: exp.overdue ?? false,
       payAction: markFixedExpensePaid.bind(null, exp.expenseId),
       cards: cardOptions,
-      defer: deferOptions(exp.expenseId, exp.dueDate),
+      // Com parcial já pago, adiar levaria a ocorrência inteira — e o que já
+      // saiu dela deixaria de contar.
+      defer: exp.paidSoFar ? null : deferOptions(exp.expenseId, exp.dueDate),
       deferredIn: exp.deferredIn ?? 0,
+      allowPartial: true,
+      paidSoFar: exp.paidSoFar ?? 0,
     })),
     ...budget.incomeReminders.map((inc) => ({
       kind: "income" as const,
@@ -200,7 +206,9 @@ export default async function DashboardPage() {
     .map((r) => ({
       ...r,
       detail: [
-        formatCurrency(r.amount),
+        r.kind === "due" && r.paidSoFar > 0
+          ? `falta ${formatCurrency(r.amount)} (pago ${formatCurrency(r.paidSoFar)})`
+          : formatCurrency(r.amount),
         `${r.kind === "income" ? "previsto em" : r.overdue ? "venceu em" : "vence em"} ${formatDate(r.dueDate)}`,
         r.kind === "due" && r.deferredIn > 0
           ? `inclui ${formatCurrency(r.deferredIn)} adiados`

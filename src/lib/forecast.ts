@@ -22,10 +22,12 @@ import {
   buildCardBills,
   expenseCharges,
   findExpensePayment,
+  findPartialPayment,
   getNextPeriodBounds,
   getPeriodBounds,
   isOccurrenceValid,
   occurrencesInRange,
+  openOccurrenceAmounts,
   storedDay,
   type CardBillEstimateInput,
   type CardPurchaseInput,
@@ -270,12 +272,19 @@ function forecastOnePeriod(
         { fixedExpenseId: expense.id },
         charge.dueDate,
       );
+      const partial = findPartialPayment(
+        expensePayments,
+        { fixedExpenseId: expense.id },
+        charge.dueDate,
+      );
       return {
         kind: "fixedExpense" as const,
         sourceId: expense.id,
         label: expense.label,
         date: charge.dueDate,
-        amount: payment ? payment.amount : charge.amount,
+        amount: payment
+          ? payment.amount
+          : openOccurrenceAmounts(charge.amount, partial).committed,
         confirmed: payment !== undefined,
         ...(charge.deferredIn > 0 ? { deferredIn: charge.deferredIn } : {}),
       };

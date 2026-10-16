@@ -59,20 +59,29 @@ function parsePayment(formData: FormData) {
   };
 }
 
+/**
+ * Registra um pagamento de uma ocorrência de despesa fixa. Com `settle` = "0"
+ * é parcial: abate do valor, e o lembrete continua com o que falta até um
+ * pagamento quitá-la. Cada parcial é uma linha própria, com o dia em que o
+ * dinheiro saiu.
+ */
 export async function markFixedExpensePaid(expenseId: string, formData: FormData) {
   const userId = await requireUserId();
   const { dueDate, amount, paidOn, paidAt } = parsePayment(formData);
+  const settled = formData.get("settle") !== "0";
 
-  const expense = await prisma.fixedExpense.findUnique({ where: { id: expenseId, userId } });
+  const expense = await prisma.fixedExpense.findUnique({
+    where: { id: expenseId, userId },
+    include: { payments: { where: { dueDate, settled: true }, select: { id: true } } },
+  });
   if (!expense) throw new Error("Despesa não encontrada");
+  if (expense.payments.length > 0) throw new Error("Esta ocorrência já foi paga");
 
   const cardId = String(formData.get("cardId") ?? "");
   let paymentId: string;
   if (!cardId) {
-    ({ id: paymentId } = await prisma.expensePayment.upsert({
-      where: { fixedExpenseId_dueDate: { fixedExpenseId: expenseId, dueDate } },
-      create: { userId, fixedExpenseId: expenseId, dueDate, amount, paidAt },
-      update: { amount, paidAt },
+    ({ id: paymentId } = await prisma.expensePayment.create({
+      data: { userId, fixedExpenseId: expenseId, dueDate, amount, paidAt, settled },
       select: { id: true },
     }));
   } else {
@@ -104,6 +113,7 @@ export async function markFixedExpensePaid(expenseId: string, formData: FormData
           dueDate,
           amount: 0,
           paidAt,
+          settled,
           cardPurchaseId: purchase.id,
         },
         select: { id: true },
@@ -116,7 +126,7 @@ export async function markFixedExpensePaid(expenseId: string, formData: FormData
   revalidatePath("/");
   revalidatePath("/historico");
   // O id volta para o "Desfazer" do toast da Início.
-  return { paymentId };
+  return { paymentId, settled };
 }
 
 export async function markCardBillPaid(cardId: string, formData: FormData) {

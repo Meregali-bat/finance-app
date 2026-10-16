@@ -199,12 +199,18 @@ model ExpensePayment {
   /// fica com amount 0 e só existe para quitar a ocorrência. Apagar a compra
   /// apaga o pagamento junto, e o lembrete volta.
   cardPurchaseId String?       @unique
+  /// false = pagamento parcial de uma despesa fixa: abate do valor, mas a
+  /// ocorrência segue em aberto, e o lembrete continua com o que falta. Uma
+  /// ocorrência pode ter vários parciais e, no fim, um que a quita.
+  settled        Boolean       @default(true)
   user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   fixedExpense   FixedExpense? @relation(fields: [fixedExpenseId], references: [id], onDelete: Cascade)
   card           CreditCard?   @relation(fields: [cardId], references: [id], onDelete: Cascade)
   cardPurchase   CardPurchase? @relation(fields: [cardPurchaseId], references: [id], onDelete: Cascade)
 
-  @@unique([fixedExpenseId, dueDate])
+  /// Sem UNIQUE: os pagamentos parciais de uma despesa fixa dividem o
+  /// vencimento. A fatura do cartão continua com um pagamento só.
+  @@index([fixedExpenseId, dueDate])
   @@unique([cardId, dueDate])
   @@index([userId, paidAt])
 }

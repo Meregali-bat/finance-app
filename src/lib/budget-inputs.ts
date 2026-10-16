@@ -87,7 +87,10 @@ export async function loadBudgetInputs(userId: string): Promise<BudgetInputs> {
     }),
     prisma.creditCard.findMany({ where: { userId }, include: { purchases: true } }),
     prisma.transaction.findMany({ where: { userId }, orderBy: { date: "desc" } }),
-    prisma.expensePayment.findMany({ where: { userId } }),
+    prisma.expensePayment.findMany({
+      where: { userId },
+      include: { cardPurchase: { select: { amount: true } } },
+    }),
     prisma.cardBillEstimate.findMany({ where: { userId } }),
     prisma.jarDeposit.findMany({ where: { userId } }),
     prisma.balanceAdjustment.findFirst({ where: { userId }, orderBy: { createdAt: "desc" } }),
@@ -139,6 +142,9 @@ export async function loadBudgetInputs(userId: string): Promise<BudgetInputs> {
       cardId: p.cardId ?? undefined,
       dueDate: p.dueDate,
       amount: Number(p.amount),
+      settled: p.settled,
+      // Pago no cartão, o pagamento tem 0 e o valor está na compra.
+      ...(p.cardPurchase ? { coveredAmount: Number(p.cardPurchase.amount) } : {}),
     })),
     transactions: transactions.map((t) => ({
       id: t.id,
