@@ -129,22 +129,32 @@ export async function markFixedExpensePaid(expenseId: string, formData: FormData
   return { paymentId, settled };
 }
 
+/**
+ * Registra um pagamento da fatura de um cartão. Como na despesa fixa, com
+ * `settle` = "0" é parcial: abate do valor e libera o limite pago, e o
+ * lembrete continua com o que falta até um pagamento quitar a fatura.
+ */
 export async function markCardBillPaid(cardId: string, formData: FormData) {
   const userId = await requireUserId();
   const { dueDate, amount, paidAt } = parsePayment(formData);
+  const settled = formData.get("settle") !== "0";
 
-  const card = await prisma.creditCard.findUnique({ where: { id: cardId, userId } });
+  const card = await prisma.creditCard.findUnique({
+    where: { id: cardId, userId },
+    include: { payments: { where: { dueDate, settled: true }, select: { id: true } } },
+  });
   if (!card) throw new Error("Cartão não encontrado");
+  if (card.payments.length > 0) throw new Error("Esta fatura já foi paga");
 
-  const payment = await prisma.expensePayment.upsert({
-    where: { cardId_dueDate: { cardId, dueDate } },
-    create: { userId, cardId, dueDate, amount, paidAt },
-    update: { amount, paidAt },
+  const payment = await prisma.expensePayment.create({
+    data: { userId, cardId, dueDate, amount, paidAt, settled },
     select: { id: true },
   });
   revalidatePath("/");
   revalidatePath("/historico");
-  return { paymentId: payment.id };
+  revalidatePath("/cartoes");
+  revalidatePath(`/cartoes/${cardId}`);
+  return { paymentId: payment.id, settled };
 }
 
 export async function unmarkExpensePayment(paymentId: string) {

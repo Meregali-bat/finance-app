@@ -119,6 +119,8 @@ export default async function HistoryPage({
         cardId: p.cardId ?? undefined,
         dueDate: p.dueDate,
         amount: Number(p.amount),
+        // Um parcial não quita a fatura.
+        settled: p.settled,
       })),
       start: rangeStart,
       end: rangeEnd,

@@ -1169,6 +1169,64 @@ describe("calculateDailyBudget com pagamento parcial", () => {
   });
 });
 
+describe("fatura do cartão com pagamento parcial", () => {
+  // Fecha dia 10, vence dia 20: a compra de 05/jan cai na fatura de 20/jan.
+  const card = { id: "c1", closingDay: 10, dueDay: 20 };
+  const baseInput = {
+    incomes: [{ id: "i1", amount: 3000, dayOfMonth: 5 }],
+    incomeReceipts: [{ incomeId: "i1", occurrenceDate: new Date(2026, 0, 5), amount: 3000 }],
+    creditCards: [card],
+    cardPurchases: [{ cardId: "c1", amount: 1000, date: new Date(Date.UTC(2026, 0, 5)) }],
+    transactions: [],
+    fixedExpenses: [],
+    today: new Date(2026, 0, 12),
+  };
+  const dueDate = new Date(2026, 0, 20);
+
+  it("mantém o lembrete com o que falta e não muda o total do período", () => {
+    const budget = calculateDailyBudget({
+      ...baseInput,
+      expensePayments: [{ cardId: "c1", dueDate, amount: 400, settled: false }],
+    });
+    expect(current(budget.cardBillReminders)).toEqual([
+      { cardId: "c1", dueDate, amount: 600, paidSoFar: 400 },
+    ]);
+    expect(budget.cardBillTotal).toBe(1000);
+  });
+
+  it("finalizar some com o lembrete e soma tudo o que foi pago", () => {
+    const budget = calculateDailyBudget({
+      ...baseInput,
+      expensePayments: [
+        { cardId: "c1", dueDate, amount: 400, settled: false },
+        { cardId: "c1", dueDate, amount: 650 },
+      ],
+    });
+    expect(current(budget.cardBillReminders)).toEqual([]);
+    expect(budget.cardBillTotal).toBe(1050);
+  });
+
+  it("a fatura segue em aberto, com o parcial anotado, e o limite volta pelo que foi pago", () => {
+    const expensePayments = [{ cardId: "c1", dueDate, amount: 400, settled: false }];
+    const [bill] = buildCardBills({
+      card,
+      purchases: baseInput.cardPurchases,
+      expensePayments,
+      from: new Date(2026, 0, 1),
+      months: 1,
+    });
+    expect(bill).toMatchObject({ paid: false, amount: 1000, partialPaid: 400 });
+
+    const usage = getCardLimitUsage({
+      card: { ...card, creditLimit: 2000 },
+      purchases: baseInput.cardPurchases,
+      expensePayments,
+      today: baseInput.today,
+    });
+    expect(usage?.used).toBe(600);
+  });
+});
+
 describe("confirmações gravadas por servidores de fusos diferentes", () => {
   // O banco guarda o vencimento como meia-noite do fuso de quem gravou. Um
   // vencimento no dia 20 vale `2026-01-20 00:00` quando o servidor roda em UTC

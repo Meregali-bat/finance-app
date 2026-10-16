@@ -37,7 +37,7 @@ export type HomeReminder =
         endTarget: Date | null;
       } | null;
       deferredIn: number;
-      /** Só despesa fixa: libera o "Pagar parcial". */
+      /** Despesa fixa e fatura: libera o "Pagar parcial". */
       allowPartial: boolean;
       paidSoFar: number;
     })

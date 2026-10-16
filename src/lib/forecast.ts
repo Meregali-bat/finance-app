@@ -191,7 +191,8 @@ function findIncomeReceipt(
   occurrence: Date,
 ): IncomeReceiptInput | undefined {
   return receipts.find(
-    (r) => r.incomeId === incomeId && storedDay(r.occurrenceDate).getTime() === occurrence.getTime(),
+    (r) =>
+      r.incomeId === incomeId && storedDay(r.occurrenceDate).getTime() === occurrence.getTime(),
   );
 }
 
@@ -282,9 +283,7 @@ function forecastOnePeriod(
         sourceId: expense.id,
         label: expense.label,
         date: charge.dueDate,
-        amount: payment
-          ? payment.amount
-          : openOccurrenceAmounts(charge.amount, partial).committed,
+        amount: payment ? payment.amount : openOccurrenceAmounts(charge.amount, partial).committed,
         confirmed: payment !== undefined,
         ...(charge.deferredIn > 0 ? { deferredIn: charge.deferredIn } : {}),
       };
@@ -317,7 +316,13 @@ function forecastOnePeriod(
         sourceId: bill.cardId,
         label: `Fatura do ${card.name}`,
         date: bill.dueDate,
-        amount: bill.paidAmount ?? bill.amount,
+        // Com parciais: o que eles já tiraram da conta mais o que falta.
+        amount:
+          bill.paidAmount ??
+          openOccurrenceAmounts(
+            bill.amount,
+            bill.partialPaid ? { amount: bill.partialPaid, covered: bill.partialPaid } : undefined,
+          ).committed,
         confirmed: bill.paid,
         // Enquanto o fechamento não passou, compras novas ainda caem nesta
         // fatura — o valor mostrado é um piso, não o total.
@@ -379,8 +384,7 @@ function forecastOnePeriod(
   const scheduledTotal = sumOf("scheduled");
   const jarTotal = sumOf("jar");
 
-  const periodResult =
-    incomeTotal - fixedExpenseTotal - cardBillTotal - scheduledTotal - jarTotal;
+  const periodResult = incomeTotal - fixedExpenseTotal - cardBillTotal - scheduledTotal - jarTotal;
   const balance = openingBalance + periodResult;
   const totalDays = diffCalendarDays(periodEnd, periodStart);
   // No corrente, o dinheiro que resta tem de durar só os dias que faltam —

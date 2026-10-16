@@ -60,6 +60,8 @@ export default async function CardDetailPage({ params }: { params: Promise<{ id:
     cardId: p.cardId ?? undefined,
     dueDate: p.dueDate,
     amount: Number(p.amount),
+    // Um parcial não quita a fatura.
+    settled: p.settled,
   }));
   const limitUsage = getCardLimitUsage({
     card: {
@@ -100,6 +102,7 @@ export default async function CardDetailPage({ params }: { params: Promise<{ id:
     estimateAmount: bill.estimateAmount,
     paid: bill.paid,
     paidAmount: bill.paidAmount,
+    partialPaid: bill.partialPaid,
     // Calculado aqui, não no cliente: refazer a conta no navegador a leria em
     // outro fuso, o mesmo motivo pelo qual date-range.ts resolve as setas no
     // servidor.
@@ -158,11 +161,12 @@ export default async function CardDetailPage({ params }: { params: Promise<{ id:
           {nextBill ? (
             <>
               <p className="truncate font-heading text-[23px] leading-tight font-bold tracking-[-0.03em] text-negative tabular-nums lg:text-[28px]">
-                {formatCurrency(nextBill.amount)}
+                {formatCurrency(Math.max(0, nextBill.amount - (nextBill.partialPaid ?? 0)))}
               </p>
               <p className="text-[12.5px] text-muted-foreground">
                 {nextBill.dueDate.getTime() < todayStart.getTime() ? "Venceu" : "Vence"}{" "}
                 {formatDate(nextBill.dueDate)}
+                {nextBill.partialPaid ? ` · já pago ${formatCurrency(nextBill.partialPaid)}` : ""}
               </p>
             </>
           ) : (
