@@ -61,6 +61,8 @@ export default async function CardsPage() {
               cardId: p.cardId ?? undefined,
               dueDate: p.dueDate,
               amount: Number(p.amount),
+              // Um parcial não quita a fatura.
+              settled: p.settled,
             }));
             // A mesma janela de seis meses da tela do cartão, para as duas
             // telas responderem "qual é a próxima fatura" do mesmo jeito. Uma
@@ -128,8 +130,14 @@ export default async function CardsPage() {
                         overdue ? "text-negative" : ""
                       }`}
                     >
-                      {formatCurrency(nextBill.amount)}
+                      {/* Com parcial pago, o que importa é o que falta. */}
+                      {formatCurrency(Math.max(0, nextBill.amount - (nextBill.partialPaid ?? 0)))}
                     </p>
+                    {nextBill.partialPaid ? (
+                      <p className="text-xs text-foreground/70 tabular-nums">
+                        falta pagar · já pago {formatCurrency(nextBill.partialPaid)}
+                      </p>
+                    ) : null}
                   </div>
                 ) : (
                   <p className="text-[13px] text-foreground/70">Sem fatura em aberto.</p>

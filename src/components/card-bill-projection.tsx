@@ -18,6 +18,8 @@ export type ProjectedBill = {
   estimateAmount: number;
   paid: boolean;
   paidAmount?: number;
+  /** Em aberto, com pagamentos parciais: quanto eles já pagaram. */
+  partialPaid?: number;
   /** Já venceu e ainda não foi paga — resolvido no servidor, junto do resto. */
   overdue: boolean;
 };
@@ -80,9 +82,16 @@ export function CardBillProjection({
             <ListRow
               title={`${bill.overdue ? "Venceu" : "Vence"} ${formatDate(bill.dueDate)}`}
               subtitle={
-                bill.estimateAmount > 0
-                  ? `inclui ${formatCurrency(bill.estimateAmount)} previstos`
-                  : undefined
+                [
+                  bill.partialPaid
+                    ? `pago ${formatCurrency(bill.partialPaid)} · falta ${formatCurrency(Math.max(0, bill.amount - bill.partialPaid))}`
+                    : null,
+                  bill.estimateAmount > 0
+                    ? `inclui ${formatCurrency(bill.estimateAmount)} previstos`
+                    : null,
+                ]
+                  .filter(Boolean)
+                  .join(" · ") || undefined
               }
               value={
                 <span className="flex items-center gap-2">

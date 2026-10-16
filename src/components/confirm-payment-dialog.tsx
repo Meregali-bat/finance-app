@@ -44,8 +44,8 @@ export function ConfirmPaymentDialog({
   /** Só para despesa fixa: permite dizer que aquele mês foi pago no cartão. */
   cards?: { id: string; name: string }[];
   /**
-   * Só para despesa fixa: troca o "Confirmar" por "Pagar parcial", que abate
-   * o valor e mantém o lembrete, e "Pagar e finalizar", que quita.
+   * Despesa fixa e fatura: troca o "Confirmar" por "Pagar parcial", que
+   * abate o valor e mantém o lembrete, e "Pagar e finalizar", que quita.
    */
   allowPartial?: boolean;
   /** O que os parciais anteriores já pagaram; `amount` é só o que falta. */

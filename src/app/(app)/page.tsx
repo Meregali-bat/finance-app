@@ -174,8 +174,8 @@ export default async function DashboardPage() {
       cards: undefined,
       defer: null,
       deferredIn: 0,
-      allowPartial: false,
-      paidSoFar: 0,
+      allowPartial: true,
+      paidSoFar: bill.paidSoFar ?? 0,
     })),
     ...budget.fixedExpenseReminders.map((exp) => ({
       kind: "due" as const,

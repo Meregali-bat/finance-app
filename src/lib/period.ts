@@ -150,6 +150,11 @@ export interface CardBillReminder {
   amount: number;
   /** Venceu no período anterior e continua sem pagamento confirmado. */
   overdue?: boolean;
+  /**
+   * Quanto já foi pago em parciais. `amount` é só o que falta, e o lembrete
+   * fica de pé até um pagamento quitar a fatura.
+   */
+  paidSoFar?: number;
 }
 
 /** Uma fatura de um cartão: o que ela cobra, de onde vem, e se já foi paga. */
@@ -169,6 +174,11 @@ export interface CardBill {
   paid: boolean;
   /** O valor realmente pago, quando pago — pode diferir do previsto. */
   paidAmount?: number;
+  /**
+   * Em aberto, mas com pagamentos parciais: quanto eles já pagaram. A fatura
+   * só conta como paga quando um pagamento a quita.
+   */
+  partialPaid?: number;
 }
 
 export interface FixedExpenseReminder {
@@ -485,7 +495,11 @@ export function deferralTargetDate(
     throw new Error("Só uma despesa com número de parcelas pode ir para depois da última");
   }
   const queued = (expense.deferrals ?? []).filter((d) => d.mode === "end").length;
-  const target = addMonths(first.getFullYear(), first.getMonth(), expense.installmentCount + queued);
+  const target = addMonths(
+    first.getFullYear(),
+    first.getMonth(),
+    expense.installmentCount + queued,
+  );
   return dateForDayInMonth(target.year, target.month, expense.dueDay);
 }
 
@@ -510,7 +524,8 @@ function isPaydayConfirmed(
   occurrence: Date,
 ): boolean {
   return receipts.some(
-    (r) => r.incomeId === incomeId && storedDay(r.occurrenceDate).getTime() === occurrence.getTime(),
+    (r) =>
+      r.incomeId === incomeId && storedDay(r.occurrenceDate).getTime() === occurrence.getTime(),
   );
 }
 
@@ -815,6 +830,7 @@ export function buildCardBills(input: {
       .reduce((sum, e) => sum + e.amount, 0);
 
     const payment = findExpensePayment(expensePayments, { cardId: card.id }, dueDate);
+    const partial = findPartialPayment(expensePayments, { cardId: card.id }, dueDate);
 
     return {
       cardId: card.id,
@@ -827,6 +843,7 @@ export function buildCardBills(input: {
       estimateAmount,
       paid: !!payment,
       paidAmount: payment?.amount,
+      ...(partial ? { partialPaid: partial.amount } : {}),
     };
   });
 }
@@ -993,7 +1010,11 @@ export function getCardLimitUsage(input: {
     months,
   });
   const open = bills.filter((bill) => !bill.paid && bill.amount > 0);
-  const used = open.reduce((sum, bill) => sum + bill.amount, 0);
+  // Um parcial já devolve ao limite o que pagou, como no banco.
+  const used = open.reduce(
+    (sum, bill) => sum + Math.max(0, bill.amount - (bill.partialPaid ?? 0)),
+    0,
+  );
 
   return {
     limit,
@@ -1035,7 +1056,10 @@ function obligationsInRange(
     payment: ExpensePaymentInput | undefined;
     partial: { amount: number; covered: number } | undefined;
   }[];
-  cardBills: (CardBillReminder & { payment: ExpensePaymentInput | undefined })[];
+  cardBills: (CardBillReminder & {
+    payment: ExpensePaymentInput | undefined;
+    partial: { amount: number; covered: number } | undefined;
+  })[];
 } {
   // `occurrencesInRange` e `getCardBillsInPeriod` só enxergam intervalos de
   // até uns dois meses. Um intervalo maior — as contas vencidas de três meses,
@@ -1081,9 +1105,25 @@ function obligationsInRange(
   ).map((bill) => ({
     ...bill,
     payment: findExpensePayment(expensePayments, { cardId: bill.cardId }, bill.dueDate),
+    partial: findPartialPayment(expensePayments, { cardId: bill.cardId }, bill.dueDate),
   }));
 
   return { fixedExpenseOccurrences, cardBills };
+}
+
+/** O lembrete de uma fatura em aberto: só o que falta pagar dela. */
+function cardBillReminder(bill: {
+  cardId: string;
+  dueDate: Date;
+  amount: number;
+  partial: { amount: number; covered: number } | undefined;
+}): CardBillReminder {
+  return {
+    cardId: bill.cardId,
+    dueDate: bill.dueDate,
+    amount: openOccurrenceAmounts(bill.amount, bill.partial).remaining,
+    ...(bill.partial ? { paidSoFar: bill.partial.covered } : {}),
+  };
 }
 
 /** O lembrete de uma ocorrência em aberto: só o que falta pagar dela. */
@@ -1185,11 +1225,17 @@ export function budgetForBounds(
   const fixedExpenseTotal = fixedExpenseOccurrences.reduce(
     (sum, occ) =>
       sum +
-      (occ.payment ? occ.payment.amount : openOccurrenceAmounts(occ.estimate, occ.partial).committed),
+      (occ.payment
+        ? occ.payment.amount
+        : openOccurrenceAmounts(occ.estimate, occ.partial).committed),
     0,
   );
   const cardBillTotal = cardBills.reduce(
-    (sum, bill) => sum + (bill.payment?.amount ?? bill.amount),
+    (sum, bill) =>
+      sum +
+      (bill.payment
+        ? bill.payment.amount
+        : openOccurrenceAmounts(bill.amount, bill.partial).committed),
     0,
   );
 
@@ -1223,15 +1269,8 @@ export function budgetForBounds(
   const cardBillReminders: CardBillReminder[] = [
     ...overdue.cardBills
       .filter((bill) => !bill.payment)
-      .map((bill) => ({
-        cardId: bill.cardId,
-        dueDate: bill.dueDate,
-        amount: bill.amount,
-        overdue: true,
-      })),
-    ...cardBills
-      .filter((bill) => !bill.payment)
-      .map((bill) => ({ cardId: bill.cardId, dueDate: bill.dueDate, amount: bill.amount })),
+      .map((bill) => ({ ...cardBillReminder(bill), overdue: true })),
+    ...cardBills.filter((bill) => !bill.payment).map(cardBillReminder),
   ];
 
   const periodTransactions = transactions.filter(
@@ -1312,7 +1351,6 @@ export function calculateDailyBudget(
   );
   return budgetForBounds({ ...input, periodStart, periodEnd });
 }
-
 
 /**
  * The period immediately preceding [periodStart, periodEnd) — used to detect
