@@ -40,6 +40,8 @@
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
   --color-card-elevated: var(--card-elevated);
+  --color-brand: var(--brand);
+  --color-brand-foreground: var(--brand-foreground);
   --color-positive: var(--positive);
   --color-positive-foreground: var(--positive-foreground);
   --color-negative: var(--negative);
@@ -65,83 +67,80 @@
   --ease-in-quint: cubic-bezier(0.64, 0, 0.78, 0);
 }
 
+/*
+ * A paleta: ink-black, coffee-bean, rich-mahogany (1–4), black-cherry (1–2)
+ * e dark-garnet (1–2). São todos tons muito escuros — servem de fundo, de
+ * superfície e de preenchimento de botão, mas nenhum se lê como texto sobre
+ * eles. Os poucos tons claros abaixo são derivados dos próprios matizes da
+ * paleta, cada um com um papel só:
+ *
+ * - rosé (matiz do garnet clareado): destaque da marca, link, item ativo;
+ * - turquesa (matiz do ink-black, o único frio da paleta): valor positivo;
+ * - coral (garnet com mais luz): valor negativo.
+ *
+ * Contraste conferido com o validador da skill de dataviz: todos os tons de
+ * texto passam de 7:1 sobre o fundo e os cards. Os tons de gráfico ("-mark")
+ * ficam na faixa de luminosidade de marca no escuro (OKLCH L 0,48–0,67); rosé
+ * e coral NÃO são distinguíveis lado a lado (ΔE 2,9), então nunca dividem um
+ * gráfico — positivo/negativo usam turquesa e coral.
+ */
 :root {
-  --background: oklch(0.07 0.012 264);
-  --foreground: oklch(0.984 0.003 247.858);
-  --card: oklch(0.115 0.016 264);
-  --card-elevated: oklch(0.145 0.02 264);
-  --card-foreground: oklch(0.984 0.003 247.858);
-  --popover: oklch(0.115 0.016 264);
-  --popover-foreground: oklch(0.984 0.003 247.858);
-  --primary: oklch(0.696 0.17 162.48);
-  --primary-foreground: oklch(0.07 0.012 264);
-  --secondary: oklch(0.185 0.018 264);
-  --secondary-foreground: oklch(0.984 0.003 247.858);
-  --muted: oklch(0.15 0.016 264);
-  --muted-foreground: oklch(0.704 0.04 256.788);
-  --accent: oklch(0.185 0.018 264);
-  --accent-foreground: oklch(0.984 0.003 247.858);
-  --destructive: oklch(0.637 0.237 25.331);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 12%);
-  --ring: oklch(0.696 0.17 162.48);
-  --positive: oklch(0.696 0.17 162.48);
-  --positive-foreground: oklch(0.07 0.012 264);
-  --negative: oklch(0.637 0.237 25.331);
-  --negative-foreground: oklch(0.984 0.003 247.858);
-  --chart-1: oklch(0.696 0.17 162.48);
-  --chart-2: oklch(0.606 0.25 292.717);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.645 0.246 16.439);
-  --chart-5: oklch(0.6 0.118 184.704);
-  --radius: 0.75rem;
-  --sidebar: oklch(0.115 0.016 264);
-  --sidebar-foreground: oklch(0.984 0.003 247.858);
-  --sidebar-primary: oklch(0.696 0.17 162.48);
-  --sidebar-primary-foreground: oklch(0.07 0.012 264);
-  --sidebar-accent: oklch(0.185 0.018 264);
-  --sidebar-accent-foreground: oklch(0.984 0.003 247.858);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.696 0.17 162.48);
+  --ink-black: #001514;
+  --coffee-bean: #1b1110;
+  --rich-mahogany: #290f0e;
+  --rich-mahogany-2: #360d0c;
+  --rich-mahogany-3: #440b0a;
+  --rich-mahogany-4: #4b0a09;
+  --black-cherry: #510908;
+  --black-cherry-2: #5e0706;
+  --dark-garnet: #650605;
+  --dark-garnet-2: #6b0504;
+
+  --background: var(--ink-black);
+  --foreground: #f7ece9;
+  --card: var(--coffee-bean);
+  --card-elevated: var(--rich-mahogany);
+  --card-foreground: #f7ece9;
+  --popover: var(--coffee-bean);
+  --popover-foreground: #f7ece9;
+  --brand: var(--dark-garnet-2);
+  --brand-foreground: #ffffff;
+  --primary: #f2a99f;
+  --primary-foreground: var(--ink-black);
+  --secondary: var(--rich-mahogany-2);
+  --secondary-foreground: #f7ece9;
+  --muted: var(--rich-mahogany);
+  --muted-foreground: #bfa5a0;
+  --accent: var(--rich-mahogany-2);
+  --accent-foreground: #f7ece9;
+  --destructive: #ff7a6b;
+  --border: rgb(255 236 233 / 8%);
+  --input: rgb(255 236 233 / 12%);
+  --ring: #f2a99f;
+  --positive: #5fd0c0;
+  --positive-foreground: var(--ink-black);
+  --negative: #ff7a6b;
+  --negative-foreground: #ffffff;
+  /* Marcas de gráfico. */
+  --chart-1: #cf6f63;
+  --chart-2: #26a392;
+  --chart-3: #ea5d4f;
+  --chart-4: #8f7370;
+  --chart-5: var(--rich-mahogany-3);
+  --radius: 0.875rem;
+  --sidebar: var(--coffee-bean);
+  --sidebar-foreground: #f7ece9;
+  --sidebar-primary: #f2a99f;
+  --sidebar-primary-foreground: var(--ink-black);
+  --sidebar-accent: var(--rich-mahogany-2);
+  --sidebar-accent-foreground: #f7ece9;
+  --sidebar-border: rgb(255 236 233 / 8%);
+  --sidebar-ring: #f2a99f;
 }
 
+/* Só há tema escuro: a paleta inteira é escura. */
 .dark {
-  --background: oklch(0.07 0.012 264);
-  --foreground: oklch(0.984 0.003 247.858);
-  --card: oklch(0.115 0.016 264);
-  --card-elevated: oklch(0.145 0.02 264);
-  --card-foreground: oklch(0.984 0.003 247.858);
-  --popover: oklch(0.115 0.016 264);
-  --popover-foreground: oklch(0.984 0.003 247.858);
-  --primary: oklch(0.696 0.17 162.48);
-  --primary-foreground: oklch(0.07 0.012 264);
-  --secondary: oklch(0.185 0.018 264);
-  --secondary-foreground: oklch(0.984 0.003 247.858);
-  --muted: oklch(0.15 0.016 264);
-  --muted-foreground: oklch(0.704 0.04 256.788);
-  --accent: oklch(0.185 0.018 264);
-  --accent-foreground: oklch(0.984 0.003 247.858);
-  --destructive: oklch(0.637 0.237 25.331);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 12%);
-  --ring: oklch(0.696 0.17 162.48);
-  --positive: oklch(0.696 0.17 162.48);
-  --positive-foreground: oklch(0.07 0.012 264);
-  --negative: oklch(0.637 0.237 25.331);
-  --negative-foreground: oklch(0.984 0.003 247.858);
-  --chart-1: oklch(0.696 0.17 162.48);
-  --chart-2: oklch(0.606 0.25 292.717);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.645 0.246 16.439);
-  --chart-5: oklch(0.6 0.118 184.704);
-  --sidebar: oklch(0.115 0.016 264);
-  --sidebar-foreground: oklch(0.984 0.003 247.858);
-  --sidebar-primary: oklch(0.696 0.17 162.48);
-  --sidebar-primary-foreground: oklch(0.07 0.012 264);
-  --sidebar-accent: oklch(0.185 0.018 264);
-  --sidebar-accent-foreground: oklch(0.984 0.003 247.858);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.696 0.17 162.48);
+  color-scheme: dark;
 }
 
 @layer base {
@@ -150,6 +149,10 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+  ::selection {
+    background: var(--dark-garnet);
+    color: #fff;
   }
   html {
     @apply font-sans;
@@ -182,4 +185,47 @@
   [data-slot="sidebar-nav"] {
     background: var(--card);
   }
+}
+/*
+ * O fundo da tela: um brilho de garnet saindo do canto e uma trama de pontos
+ * que some nas bordas — a "nuvem de partículas" da referência, só com CSS.
+ * Fica atrás de tudo e não recebe clique.
+ */
+.app-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(60rem 40rem at 85% -10%, rgb(107 5 4 / 0.55), transparent 60%),
+    radial-gradient(40rem 30rem at -10% 110%, rgb(75 10 9 / 0.45), transparent 60%),
+    var(--ink-black);
+}
+.app-backdrop::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(rgb(242 169 159 / 0.22) 1px, transparent 1.5px);
+  background-size: 18px 18px;
+  mask-image: radial-gradient(50rem 30rem at 80% 0%, #000 0%, transparent 70%);
+}
+
+/*
+ * O card de destaque — o "saldo" de cada tela, como o card azul da referência:
+ * degradê de garnet para mogno com a mesma trama de pontos, mais forte num
+ * canto.
+ */
+.hero-surface {
+  background:
+    radial-gradient(28rem 18rem at 100% 0%, rgb(107 5 4 / 0.95), transparent 70%),
+    linear-gradient(145deg, var(--black-cherry-2) 0%, var(--rich-mahogany-3) 45%, var(--rich-mahogany) 100%);
+}
+.hero-surface::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: radial-gradient(rgb(255 255 255 / 0.18) 1px, transparent 1.5px);
+  background-size: 14px 14px;
+  mask-image: radial-gradient(24rem 16rem at 100% 0%, #000 0%, transparent 75%);
 }

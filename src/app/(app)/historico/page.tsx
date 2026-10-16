@@ -1,7 +1,11 @@
 import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/auth-helpers";
 import { resolveRange, type RangeParams } from "@/lib/date-range";
-import { calculateReportTotals, countsAsSpending } from "@/lib/report-totals";
+import { calculateReportTotals, countsAsSpending, spendingBuckets } from "@/lib/report-totals";
+import { ColumnChart } from "@/components/charts/column-chart";
+import { Card, CardContent } from "@/components/ui/card";
+import { SectionLabel } from "@/components/page-header";
+import { formatCurrency, formatDate } from "@/lib/format";
 import { PeriodPicker } from "@/components/period-picker";
 import { ReportTotalsCard } from "@/components/report-totals-card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -228,6 +232,7 @@ export default async function HistoryPage({
   ].sort((a, b) => b.date.getTime() - a.date.getTime());
 
   const totals = calculateReportTotals({ items, rangeStart, rangeEnd, today: new Date() });
+  const buckets = spendingBuckets({ items, rangeStart, rangeEnd });
 
   // Agrupado por id, não por nome: nada impede duas categorias homônimas, e
   // fundi-las num balde só esconderia a diferença.
@@ -265,6 +270,44 @@ export default async function HistoryPage({
       <PeriodPicker range={range} />
 
       <ReportTotalsCard totals={totals} />
+
+      {/* O gasto do período no tempo: uma série só, em rosé, sem legenda — o
+          título diz o que é. As colunas somam o "Gasto" do resumo. */}
+      {buckets.length > 1 && (
+        <Card>
+          <CardContent className="flex flex-col gap-4 py-5">
+            <SectionLabel>
+              {buckets[0].unit === "month" ? "Gasto por mês" : "Gasto por dia"}
+            </SectionLabel>
+            <ColumnChart
+              title={buckets[0].unit === "month" ? "Gasto por mês" : "Gasto por dia"}
+              height={140}
+              columns={buckets.map((bucket, index) => ({
+                key: bucket.start.toISOString(),
+                // Rótulo a cada poucos dias, para o eixo não virar uma sopa.
+                label:
+                  bucket.unit === "month"
+                    ? new Intl.DateTimeFormat("pt-BR", { month: "short" })
+                        .format(bucket.start)
+                        .replace(".", "")
+                    : index % Math.ceil(buckets.length / 8) === 0
+                      ? String(bucket.start.getDate())
+                      : "",
+                value: bucket.total,
+                valueLabel: formatCurrency(bucket.total),
+                tone: "accent" as const,
+                detail:
+                  bucket.unit === "month"
+                    ? new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric" }).format(
+                        bucket.start,
+                      )
+                    : formatDate(bucket.start),
+                selected: bucket.total === Math.max(...buckets.map((b) => b.total)) && bucket.total > 0,
+              }))}
+            />
+          </CardContent>
+        </Card>
+      )}
 
       <Tabs defaultValue="lancamentos">
         <TabsList className="w-full lg:w-fit">

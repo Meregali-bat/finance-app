@@ -126,7 +126,7 @@ export function PurchaseVerdict({
       <div className="flex flex-col gap-1">
         <p
           className={`font-heading text-[2.25rem] leading-[1.05] font-bold tracking-[-0.03em] ${
-            result.approved ? "text-primary" : "text-negative"
+            result.approved ? "text-positive" : "text-negative"
           }`}
         >
           {result.approved ? "Pode comprar" : "Melhor não"}

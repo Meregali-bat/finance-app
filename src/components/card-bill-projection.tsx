@@ -4,6 +4,7 @@ import { SectionLabel } from "@/components/page-header";
 import { DeleteIconButton } from "@/components/delete-icon-button";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { deleteCardBillEstimate } from "@/lib/actions/card-bill-estimate";
+import { ColumnChart } from "@/components/charts/column-chart";
 
 /**
  * Uma fatura projetada, já reduzida a valores que atravessam para o cliente —
@@ -39,6 +40,37 @@ export function CardBillProjection({
 }) {
   return (
     <div className="flex flex-col gap-6">
+      {/* As próximas faturas lado a lado, em rosé; a já paga fica de fundo.
+          "Vencida" não depende da cor — está no tooltip, na tabela e no selo
+          da lista logo abaixo. */}
+      {bills.length > 1 && (
+        <Card>
+          <CardContent className="flex flex-col gap-4 py-5">
+            <SectionLabel>Próximas faturas</SectionLabel>
+            <ColumnChart
+              title="Valor das faturas por vencimento"
+              height={140}
+              columns={bills.map((bill) => {
+                const value = bill.paid ? (bill.paidAmount ?? bill.amount) : bill.amount;
+                return {
+                  key: bill.dueDateIso,
+                  label: new Intl.DateTimeFormat("pt-BR", { month: "short" })
+                    .format(bill.dueDate)
+                    .replace(".", ""),
+                  value,
+                  valueLabel: formatCurrency(value),
+                  tone: bill.paid ? ("muted" as const) : ("accent" as const),
+                  detail: `${bill.overdue ? "Venceu" : "Vence"} ${formatDate(bill.dueDate)}${
+                    bill.paid ? " · paga" : bill.overdue ? " · vencida" : ""
+                  }`,
+                  selected: bill === bills.find((b) => !b.paid && b.amount > 0),
+                };
+              })}
+            />
+          </CardContent>
+        </Card>
+      )}
+
       <div className="flex flex-col gap-2">
         <SectionLabel>Faturas</SectionLabel>
         {bills.map((bill) => (

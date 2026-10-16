@@ -3,6 +3,8 @@ import { AlertTriangle, ArrowDownLeft, Receipt } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/auth-helpers";
 import { deferralTargetDate, fallsOnDay, type OpeningSource } from "@/lib/period";
+import { cumulativeDailySpending } from "@/lib/spending-trend";
+import { AreaTrend } from "@/components/charts/area-trend";
 import { forecastPeriods } from "@/lib/forecast";
 import { calculateCurrentBudget } from "@/lib/carry-over";
 import { accountBalanceOf, loadBudgetInputs, registeredMovementOf } from "@/lib/budget-inputs";
@@ -72,6 +74,17 @@ export default async function DashboardPage() {
   const totalDays = differenceInCalendarDays(budget.periodEnd, budget.periodStart);
   const elapsedDays = totalDays - budget.daysRemaining + 1;
   const progressPercent = totalDays > 0 ? Math.min(100, Math.round((elapsedDays / totalDays) * 100)) : 0;
+
+  const spendingTrend = cumulativeDailySpending({
+    start: budget.periodStart,
+    today,
+    transactions,
+    cardPurchases: inputs.cardPurchases,
+  }).map((point) => ({
+    label: formatDate(point.day),
+    value: point.total,
+    valueLabel: formatCurrency(point.total),
+  }));
 
   const tomorrow = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
 
@@ -165,58 +178,91 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      <Card variant="elevated">
-        {/* Empilhado até `xl`. Só a partir daí os três blocos viram regiões
-            lado a lado separadas por divisores verticais — em `lg` a barra de
-            sidebar come 240px e sobrariam 200px por região, o que esmaga a
-            barra de progresso e quebra os contadores de dia em duas linhas. */}
-        <CardContent className="flex flex-col gap-5 py-6 xl:grid xl:grid-cols-[1fr_1fr_16rem] xl:gap-8">
-          <div className="flex flex-col gap-1 xl:justify-center">
-            <p className="text-sm text-muted-foreground">
-              {isOverBudget ? "Você já estourou o orçamento de hoje" : "Você pode gastar hoje"}
-            </p>
-            <AnimatedCurrency
-              value={dailyAvailable}
-              className={`font-heading text-[2.75rem] leading-[1.02] font-bold tracking-[-0.03em] tabular-nums lg:text-[3.25rem] ${
-                isOverBudget ? "text-negative" : "text-primary"
-              }`}
-            />
+      {/* O card de destaque: degradê garnet, o número do dia em branco e o
+          ritmo de gasto do período logo abaixo. */}
+      <section
+        aria-label="Orçamento de hoje"
+        className="hero-surface relative overflow-hidden rounded-[1.75rem] text-white shadow-float ring-1 ring-white/10"
+      >
+        <div className="relative z-10 flex flex-col gap-6 p-6 lg:p-8 xl:grid xl:grid-cols-[1fr_1fr] xl:gap-10">
+          <div className="flex flex-col gap-5">
+            <div className="flex flex-col gap-1">
+              <p className="text-sm text-white/70">
+                {isOverBudget ? "Você já estourou o orçamento de hoje" : "Você pode gastar hoje"}
+              </p>
+              <AnimatedCurrency
+                value={dailyAvailable}
+                className={`font-heading text-[3rem] leading-[1] font-bold tracking-[-0.04em] lg:text-[3.75rem] ${
+                  isOverBudget ? "text-negative" : "text-white"
+                }`}
+              />
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <Progress
+                value={progressPercent}
+                className="[&_[data-slot=progress-track]]:bg-white/15"
+                indicatorClassName={isOverBudget ? "bg-negative" : "bg-white"}
+              />
+              <div className="flex justify-between text-xs text-white/70 tabular-nums">
+                <span>
+                  Dia {Math.max(1, elapsedDays)} de {Math.max(1, totalDays)}
+                </span>
+                <span>
+                  {budget.daysRemaining}{" "}
+                  {budget.daysRemaining === 1 ? "dia restante" : "dias restantes"}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <div className="flex flex-col rounded-2xl bg-black/20 px-4 py-2.5 ring-1 ring-white/10">
+                <span className="text-[0.6875rem] font-semibold tracking-[0.08em] text-white/60 uppercase">
+                  Saldo do período
+                </span>
+                <span className="font-medium tabular-nums">
+                  {formatCurrency(budget.periodBalance)}
+                </span>
+              </div>
+              <div className="flex flex-col rounded-2xl bg-black/20 px-4 py-2.5 ring-1 ring-white/10">
+                <span className="text-[0.6875rem] font-semibold tracking-[0.08em] text-white/60 uppercase">
+                  Recebe em
+                </span>
+                <span className="font-medium">{formatDate(budget.periodEnd)}</span>
+              </div>
+            </div>
+            {(caption || reservedForLater > 0.005) && (
+              <div className="flex flex-col gap-0.5 text-xs text-white/70">
+                {caption && <p>{caption}</p>}
+                {reservedForLater > 0.005 && (
+                  <p>já contando {formatCurrency(reservedForLater)} que vão faltar mais à frente</p>
+                )}
+              </div>
+            )}
           </div>
 
-          <div className="flex flex-col gap-2 xl:justify-center xl:border-l xl:border-border/60 xl:pl-8">
-            <Progress
-              value={progressPercent}
-              indicatorClassName={isOverBudget ? "bg-negative" : undefined}
+          {/* O ritmo do período: quanto do dia a dia (lançamentos e compras no
+              cartão) já saiu, dia a dia. Uma série só, então sem legenda — o
+              título diz o que é. */}
+          <div className="flex flex-col justify-end gap-2 border-t border-white/10 pt-5 xl:border-t-0 xl:border-l xl:pt-0 xl:pl-10">
+            <div className="flex items-baseline justify-between gap-3">
+              <p className="text-sm text-white/70">Gasto no período</p>
+              <p className="font-heading text-lg font-semibold tracking-[-0.02em]">
+                {formatCurrency(spendingTrend.at(-1)?.value ?? 0)}
+              </p>
+            </div>
+            <AreaTrend
+              points={spendingTrend}
+              stroke="#ffd2cb"
+              title="Gasto acumulado no período"
             />
-            <div className="flex justify-between text-xs text-muted-foreground tabular-nums">
-              <span>
-                Dia {Math.max(1, elapsedDays)} de {Math.max(1, totalDays)}
-              </span>
-              <span>
-                {budget.daysRemaining}{" "}
-                {budget.daysRemaining === 1 ? "dia restante" : "dias restantes"}
-              </span>
+            <div className="flex justify-between text-[0.6875rem] text-white/60 tabular-nums">
+              <span>{spendingTrend[0]?.label}</span>
+              <span>hoje</span>
             </div>
           </div>
-
-          <div className="grid grid-cols-2 gap-3 border-t border-border/60 pt-4 xl:grid-cols-1 xl:content-center xl:gap-6 xl:border-t-0 xl:border-l xl:pt-0 xl:pl-8">
-            <div className="flex flex-col gap-1">
-              <SectionLabel>Saldo do período</SectionLabel>
-              <p className="font-medium tabular-nums">{formatCurrency(budget.periodBalance)}</p>
-              {caption && <p className="text-xs text-muted-foreground">{caption}</p>}
-              {reservedForLater > 0.005 && (
-                <p className="text-xs text-muted-foreground">
-                  já contando {formatCurrency(reservedForLater)} que vão faltar mais à frente
-                </p>
-              )}
-            </div>
-            <div className="flex flex-col gap-1">
-              <SectionLabel>Recebe em</SectionLabel>
-              <p className="font-medium">{formatDate(budget.periodEnd)}</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+        </div>
+      </section>
 
       <AccountBalanceCard
         balance={accountBalance}
@@ -259,7 +305,7 @@ export default async function DashboardPage() {
                     // Faixa lateral em vez de só um ícone: a cor identifica o
                     // tipo do lembrete de relance, antes de ler o texto.
                     className={`pl-1 before:absolute before:inset-y-0 before:left-0 before:w-1 ${
-                      isIncome ? "before:bg-primary" : "before:bg-negative"
+                      isIncome ? "before:bg-positive" : "before:bg-negative"
                     }`}
                   >
                     {/* A ação fica numa linha própria no celular: espremida ao
@@ -268,7 +314,7 @@ export default async function DashboardPage() {
                       <div className="flex min-w-0 items-center gap-3">
                         {isIncome ? (
                           <ArrowDownLeft
-                            className="size-4 shrink-0 text-primary"
+                            className="size-4 shrink-0 text-positive"
                             aria-hidden="true"
                           />
                         ) : (

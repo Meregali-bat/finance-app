@@ -60,7 +60,7 @@ export function MovementRow({
           <div className="flex shrink-0 items-center gap-2">
             <span
               className={`font-medium tabular-nums ${
-                movement.type === "income" ? "text-primary" : ""
+                movement.type === "income" ? "text-positive" : ""
               }`}
             >
               {formatCurrency(displayAmount ?? movement.amount)}
@@ -172,7 +172,7 @@ export function HistoryRow({ item, cards, categories }: Options & { item: Histor
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-2">
-            <span className={`font-medium tabular-nums ${isReceipt ? "text-primary" : ""}`}>
+            <span className={`font-medium tabular-nums ${isReceipt ? "text-positive" : ""}`}>
               {formatCurrency(Math.abs(item.amount))}
             </span>
             <DeleteIconButton

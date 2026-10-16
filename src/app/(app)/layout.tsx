@@ -4,6 +4,7 @@ import { SidebarNav } from "@/components/sidebar-nav";
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-screen flex-col lg:flex-row">
+      <div aria-hidden="true" className="app-backdrop" />
       <SidebarNav />
       {/* O mesmo elemento serve aos dois modos: `flex-1` ocupa o que sobra ao
           lado da barra lateral, o `max-w-*` limita e as margens automáticas
