@@ -22,10 +22,22 @@ const plexMono = IBM_Plex_Mono({
   weight: ["400", "500"],
 });
 
-export const metadata: Metadata = {
-  title: "Finanças",
-  description: "Quanto você pode gastar hoje até receber de novo.",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const theme = await currentTheme();
+  return {
+    title: "Finanças",
+    description: "Quanto você pode gastar hoje até receber de novo.",
+    // Aberto da tela de início do iPhone: em tela cheia, com este nome.
+    appleWebApp: {
+      capable: true,
+      title: "Finanças",
+      // No escuro, a barra de status fica transparente sobre o fundo (o
+      // conteúdo desce pelo safe-area); no claro, a barra branca padrão —
+      // o relógio branco do "translucent" sumiria no fundo creme.
+      statusBarStyle: theme === "dark" ? "black-translucent" : "default",
+    },
+  };
+}
 
 /** A cor da barra do navegador acompanha o tema escolhido. */
 export async function generateViewport(): Promise<Viewport> {
@@ -35,6 +47,8 @@ export async function generateViewport(): Promise<Viewport> {
   return {
     width: "device-width",
     initialScale: 1,
+    // Ocupa a tela toda no iPhone; o safe-area dá o espaço do relógio e da barra.
+    viewportFit: "cover",
     themeColor:
       theme === "system"
         ? [
