@@ -58,7 +58,7 @@ export function CategoryBreakdown({
                   />
                 </div>
               </div>
-              <span aria-hidden="true" className="h-1.5 overflow-hidden rounded-full bg-black/30">
+              <span aria-hidden="true" className="h-1.5 overflow-hidden rounded-full bg-(--track)">
                 <span
                   className="grow-right block h-full rounded-full bg-primary"
                   style={

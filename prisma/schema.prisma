@@ -251,6 +251,9 @@ model CreditCard {
   /// O nome não é `limit` porque essa é palavra reservada em SQL e precisaria de
   /// aspas em toda migration escrita à mão.
   creditLimit   Decimal?
+  /// A cor do cartão, do catálogo de src/lib/card-look.ts ("nubank:roxinho").
+  /// Vazio = a cor automática.
+  style         String?
   /// Apagado pelo usuário: some das listas, mas continua no banco com as compras,
   /// os pagamentos e as previsões. Apagar de verdade levava tudo por cascade — o
   /// Histórico perdia os gastos e o saldo em conta subia pelos pagamentos que

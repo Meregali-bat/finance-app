@@ -142,6 +142,7 @@ export default async function CardDetailPage({ params }: { params: Promise<{ id:
                 closingDay: card.closingDay,
                 dueDay: card.dueDay,
                 creditLimit: card.creditLimit ? Number(card.creditLimit) : undefined,
+                style: card.style,
               }}
             />
             <DeleteIconButton
@@ -185,7 +186,7 @@ export default async function CardDetailPage({ params }: { params: Promise<{ id:
               </p>
               <span
                 aria-hidden="true"
-                className="mt-1 h-1.5 overflow-hidden rounded-full bg-black/30"
+                className="mt-1 h-1.5 overflow-hidden rounded-full bg-(--track)"
               >
                 <span
                   className={`grow-right block h-full rounded-full ${

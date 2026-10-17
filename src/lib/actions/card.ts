@@ -4,13 +4,21 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/auth-helpers";
+import { isCardStyle } from "@/lib/card-look";
 
 const cardSchema = z.object({
   name: z.string().trim().min(1, "Informe um nome").max(80),
   closingDay: z.coerce.number().int().min(1).max(31),
   dueDay: z.coerce.number().int().min(1).max(31),
   creditLimit: z.coerce.number().positive("Limite deve ser maior que zero").optional(),
+  // Só valores do catálogo; vazio volta à cor automática.
+  style: z.string().refine(isCardStyle, "Cor de cartão desconhecida").nullable(),
 });
+
+/** A cor escolhida, ou null para a automática. */
+function styleField(formData: FormData) {
+  return String(formData.get("style") ?? "") || null;
+}
 
 /**
  * O limite como o formulário manda: CurrencyInput emite "" quando está vazio, e
@@ -28,6 +36,7 @@ export async function createCreditCard(formData: FormData) {
     closingDay: formData.get("closingDay"),
     dueDay: formData.get("dueDay"),
     creditLimit: creditLimitField(formData),
+    style: styleField(formData),
   });
 
   await prisma.creditCard.create({ data: { ...data, userId } });
@@ -42,6 +51,7 @@ export async function updateCreditCard(id: string, formData: FormData) {
     closingDay: formData.get("closingDay"),
     dueDay: formData.get("dueDay"),
     creditLimit: creditLimitField(formData),
+    style: styleField(formData),
   });
 
   // O null explícito é o que faz apagar o campo apagar a coluna: com
@@ -51,6 +61,7 @@ export async function updateCreditCard(id: string, formData: FormData) {
     data: { ...data, creditLimit: data.creditLimit ?? null },
   });
   revalidatePath("/cartoes");
+  revalidatePath(`/cartoes/${id}`);
   revalidatePath("/");
 }
 

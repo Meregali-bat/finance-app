@@ -30,7 +30,7 @@ export function ReportTotalsCard({ totals }: { totals: ReportTotals }) {
         {figures.map((figure) => (
           <div
             key={figure.label}
-            className="flex flex-col gap-1 px-4 py-3.5 shadow-[-1px_-1px_0_0_rgb(247_236_233/0.08)] lg:px-5 lg:py-4"
+            className="flex flex-col gap-1 px-4 py-3.5 shadow-[-1px_-1px_0_0_var(--hairline)] lg:px-5 lg:py-4"
           >
             <SectionLabel>{figure.label}</SectionLabel>
             <p

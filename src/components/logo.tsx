@@ -13,7 +13,8 @@ import { cn } from "@/lib/utils";
  */
 const TONES = {
   /** Sobre o fundo escuro do app. */
-  dark: { ring: "#f2a99f", dot: "#ffffff" },
+  /** Sobre o fundo do app: segue o tema (rosé e branco no escuro, garnet e coral no claro). */
+  dark: { ring: "var(--logo-ring)", dot: "var(--logo-dot)" },
   /** Dentro do ícone de app, sobre o garnet. */
   icon: { ring: "#ffd2cb", dot: "#ffffff" },
   /** Sobre fundo claro. */

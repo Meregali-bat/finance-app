@@ -7,6 +7,8 @@ import { cn } from "@/lib/utils";
 import { springDefault } from "@/lib/motion";
 import { navItems, isNavItemActive } from "@/components/nav-items";
 import { Logo } from "@/components/logo";
+import { ThemeSwitcher } from "@/components/theme-toggle";
+import type { Theme } from "@/lib/theme";
 
 /**
  * A navegação em telas largas. Substitui a barra inferior a partir de `lg` —
@@ -14,13 +16,13 @@ import { Logo } from "@/components/logo";
  * daqui usa um `layoutId` próprio para o motion não tentar animá-la entre os
  * dois containers.
  */
-export function SidebarNav() {
+export function SidebarNav({ theme }: { theme: Theme }) {
   const pathname = usePathname();
 
   return (
     <div
       data-slot="sidebar-nav"
-      className="sticky top-0 hidden h-screen w-[248px] shrink-0 flex-col gap-9 border-r border-white/[0.07] bg-[rgb(27_17_16/0.6)] px-4 py-7 backdrop-blur-[24px] backdrop-saturate-150 lg:flex"
+      className="sticky top-0 hidden h-screen w-[248px] shrink-0 flex-col gap-9 border-r border-border bg-(--sidebar-surface) px-4 py-7 backdrop-blur-[24px] backdrop-saturate-150 lg:flex"
     >
       <Logo className="px-2.5" />
 
@@ -43,7 +45,7 @@ export function SidebarNav() {
                       layoutId="sidebar-nav-pill"
                       aria-hidden="true"
                       transition={springDefault}
-                      className="absolute inset-0 -z-10 rounded-[14px] bg-primary/10 shadow-[inset_0_0_0_1px_rgb(242_169_159/0.14)]"
+                      className="absolute inset-0 -z-10 rounded-[14px] bg-primary/10 ring-1 ring-primary/15 ring-inset"
                     />
                   )}
                   <Icon className="size-5 shrink-0" aria-hidden="true" />
@@ -54,6 +56,8 @@ export function SidebarNav() {
           })}
         </ul>
       </nav>
+
+      <ThemeSwitcher initial={theme} className="mt-auto" />
     </div>
   );
 }

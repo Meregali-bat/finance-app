@@ -1,11 +1,13 @@
 import { BottomNav } from "@/components/bottom-nav";
 import { SidebarNav } from "@/components/sidebar-nav";
+import { currentTheme } from "@/lib/theme-server";
 
-export default function AppLayout({ children }: { children: React.ReactNode }) {
+export default async function AppLayout({ children }: { children: React.ReactNode }) {
+  const theme = await currentTheme();
   return (
     <div className="flex min-h-screen flex-col lg:flex-row">
       <div aria-hidden="true" className="app-backdrop" />
-      <SidebarNav />
+      <SidebarNav theme={theme} />
       {/* O mesmo elemento serve aos dois modos: `flex-1` ocupa o que sobra ao
           lado da barra lateral, o `max-w-*` limita e as margens automáticas
           centralizam a coluna dentro desse espaço. */}
