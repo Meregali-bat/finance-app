@@ -21,7 +21,7 @@ export function BottomNav() {
       <nav
         aria-label="Navegação principal"
         data-slot="bottom-nav"
-        className="fixed inset-x-0 bottom-0 z-20 border-t border-white/[0.07] bg-[rgb(27_17_16/0.75)] shadow-nav backdrop-blur-[24px] backdrop-saturate-150 pb-[env(safe-area-inset-bottom)] lg:hidden"
+        className="fixed inset-x-0 bottom-0 z-20 border-t border-border bg-(--nav-surface) shadow-nav backdrop-blur-[24px] backdrop-saturate-150 pb-[env(safe-area-inset-bottom)] lg:hidden"
       >
         <ul className="mx-auto flex max-w-lg items-stretch justify-between px-2">
           {navItems.map(({ href, label, icon: Icon }) => {
@@ -41,7 +41,7 @@ export function BottomNav() {
                       layoutId="nav-pill"
                       aria-hidden="true"
                       transition={springDefault}
-                      className="absolute inset-x-1 inset-y-1 -z-10 rounded-[14px] bg-primary/10 shadow-[inset_0_0_0_1px_rgb(242_169_159/0.14)]"
+                      className="absolute inset-x-1 inset-y-1 -z-10 rounded-[14px] bg-primary/10 ring-1 ring-primary/15 ring-inset"
                     />
                   )}
                   <Icon

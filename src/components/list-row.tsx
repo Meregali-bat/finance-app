@@ -36,7 +36,7 @@ export function IconSquare({
 /** A superfície de uma linha de lista: raio 18, café, anel de 1px por dentro. */
 export function listRowSurface(className?: string) {
   return cn(
-    "rounded-[18px] bg-card py-3 pr-3.5 pl-3 shadow-[inset_0_0_0_1px_rgb(247_236_233/0.08)]",
+    "rounded-[18px] bg-card py-3 pr-3.5 pl-3 shadow-[inset_0_0_0_1px_var(--hairline)]",
     className,
   );
 }

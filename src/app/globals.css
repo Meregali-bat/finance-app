@@ -2,7 +2,18 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
-@custom-variant dark (&:is(.dark *));
+/* O tema vem de `data-theme` no <html>: "dark", "light" ou "system" (segue o
+   aparelho). O `dark:` dos componentes acompanha os três. */
+@custom-variant dark {
+  &:where([data-theme="dark"], [data-theme="dark"] *) {
+    @slot;
+  }
+  @media (prefers-color-scheme: dark) {
+    &:where([data-theme="system"], [data-theme="system"] *) {
+      @slot;
+    }
+  }
+}
 
 @theme inline {
   --color-background: var(--background);
@@ -155,11 +166,154 @@
   --sidebar-accent-foreground: #f7ece9;
   --sidebar-border: rgb(255 236 233 / 8%);
   --sidebar-ring: #f2a99f;
+  /* Tokens que a paleta clara redefine. No escuro, os valores de sempre. */
+  --secondary-hover: var(--rich-mahogany-3);
+  --toast-foreground: #f7ece9;
+  --hairline: rgb(247 236 233 / 0.08);
+  --hairline-strong: rgb(247 236 233 / 0.16);
+  --track: rgb(0 0 0 / 0.3);
+  --nav-surface: rgb(27 17 16 / 0.75);
+  --sidebar-surface: rgb(27 17 16 / 0.6);
+  --field: rgb(0 0 0 / 0.25);
+  --logo-ring: #f2a99f;
+  --logo-dot: #ffffff;
+  --glow-corner: rgb(75 10 9 / 0.4);
+  --glow-float: rgb(107 5 4 / 0.6);
+  --dots: rgb(242 169 159 / 0.18);
+  /* Painel solto sobre o fundo (o formulário do login). */
+  --shadow-panel: 0 2px 4px rgb(0 0 0 / 0.5), 0 24px 60px -20px rgb(0 0 0 / 0.9),
+    inset 0 1px 0 rgb(255 255 255 / 0.1), inset 0 0 0 1px rgb(247 236 233 / 0.06);
+  color-scheme: dark;
 }
 
-/* Só há tema escuro: a paleta inteira é escura. */
-.dark {
-  color-scheme: dark;
+/*
+ * Tema claro: os mesmos papéis em fundo creme. Os tons de texto escurecem
+ * (o rosé vira garnet, o turquesa e o coral ganham peso) para passar de 4,5:1
+ * sobre o branco. O card de destaque e a cor dos cartões continuam escuros —
+ * são a marca, não a superfície. Repetido para o "system" porque CSS não tem
+ * como reaproveitar um bloco de variáveis dentro de uma media query.
+ */
+:root[data-theme="light"] {
+  --background: #fbf7f5;
+  --foreground: #2a1210;
+  --card: #ffffff;
+  --card-elevated: #f7efec;
+  --card-foreground: #2a1210;
+  --popover: #ffffff;
+  --popover-foreground: #2a1210;
+  --primary: #9b2a20;
+  --primary-foreground: #ffffff;
+  --secondary: #f4e6e2;
+  --secondary-foreground: #2a1210;
+  --secondary-hover: #ecd6d0;
+  --muted: #f6ecea;
+  --muted-foreground: #76544f;
+  --accent: #f4e6e2;
+  --accent-foreground: #2a1210;
+  --destructive: #c4392b;
+  --border: rgb(42 18 16 / 10%);
+  --input: rgb(42 18 16 / 16%);
+  --ring: #9b2a20;
+  --positive: #0b7a6b;
+  --positive-foreground: #ffffff;
+  --negative: #c4392b;
+  --negative-foreground: #ffffff;
+  --chart-4: #b9a29e;
+  --chart-5: #f0dcd8;
+  --card-hover: #fdf9f8;
+  --toast: #2a1210;
+  --toast-foreground: #fbf2ef;
+  --hairline: rgb(42 18 16 / 0.09);
+  --hairline-strong: rgb(42 18 16 / 0.16);
+  --track: rgb(42 18 16 / 0.08);
+  --nav-surface: rgb(255 255 255 / 0.78);
+  --sidebar-surface: rgb(255 255 255 / 0.6);
+  --field: rgb(42 18 16 / 0.03);
+  --logo-ring: #9b2a20;
+  --logo-dot: #ea5d4f;
+  --glow-corner: rgb(242 169 159 / 0.22);
+  --glow-float: rgb(242 169 159 / 0.38);
+  --dots: rgb(155 42 32 / 0.1);
+  --shadow-panel: 0 2px 4px rgb(60 20 15 / 0.06), 0 24px 60px -24px rgb(60 20 15 / 0.25),
+    inset 0 0 0 1px rgb(42 18 16 / 0.06);
+  --shadow-card: 0 1px 2px rgb(60 20 15 / 0.06), inset 0 0 0 1px rgb(42 18 16 / 0.08);
+  --shadow-card-hover: 0 12px 28px -14px rgb(60 20 15 / 0.28), inset 0 0 0 1px rgb(42 18 16 / 0.14);
+  --shadow-hero: 0 2px 4px rgb(60 20 15 / 0.12), 0 24px 60px -20px rgb(60 20 15 / 0.45),
+    inset 0 1px 0 rgb(255 255 255 / 0.12);
+  --shadow-cta: inset 0 1px 0 rgb(255 255 255 / 0.18), 0 0 0 1px rgb(107 5 4 / 0.25),
+    0 12px 30px -12px rgb(107 5 4 / 0.45);
+  --sidebar: #ffffff;
+  --sidebar-foreground: #2a1210;
+  --sidebar-primary: #9b2a20;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #f4e6e2;
+  --sidebar-accent-foreground: #2a1210;
+  --sidebar-border: rgb(42 18 16 / 10%);
+  --sidebar-ring: #9b2a20;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: light) {
+  :root[data-theme="system"] {
+    --background: #fbf7f5;
+    --foreground: #2a1210;
+    --card: #ffffff;
+    --card-elevated: #f7efec;
+    --card-foreground: #2a1210;
+    --popover: #ffffff;
+    --popover-foreground: #2a1210;
+    --primary: #9b2a20;
+    --primary-foreground: #ffffff;
+    --secondary: #f4e6e2;
+    --secondary-foreground: #2a1210;
+    --secondary-hover: #ecd6d0;
+    --muted: #f6ecea;
+    --muted-foreground: #76544f;
+    --accent: #f4e6e2;
+    --accent-foreground: #2a1210;
+    --destructive: #c4392b;
+    --border: rgb(42 18 16 / 10%);
+    --input: rgb(42 18 16 / 16%);
+    --ring: #9b2a20;
+    --positive: #0b7a6b;
+    --positive-foreground: #ffffff;
+    --negative: #c4392b;
+    --negative-foreground: #ffffff;
+    --chart-4: #b9a29e;
+    --chart-5: #f0dcd8;
+    --card-hover: #fdf9f8;
+    --toast: #2a1210;
+    --toast-foreground: #fbf2ef;
+    --hairline: rgb(42 18 16 / 0.09);
+    --hairline-strong: rgb(42 18 16 / 0.16);
+    --track: rgb(42 18 16 / 0.08);
+    --nav-surface: rgb(255 255 255 / 0.78);
+    --sidebar-surface: rgb(255 255 255 / 0.6);
+    --field: rgb(42 18 16 / 0.03);
+    --logo-ring: #9b2a20;
+    --logo-dot: #ea5d4f;
+    --glow-corner: rgb(242 169 159 / 0.22);
+    --glow-float: rgb(242 169 159 / 0.38);
+    --dots: rgb(155 42 32 / 0.1);
+    --shadow-panel: 0 2px 4px rgb(60 20 15 / 0.06), 0 24px 60px -24px rgb(60 20 15 / 0.25),
+      inset 0 0 0 1px rgb(42 18 16 / 0.06);
+  --shadow-panel: 0 2px 4px rgb(60 20 15 / 0.06), 0 24px 60px -24px rgb(60 20 15 / 0.25),
+    inset 0 0 0 1px rgb(42 18 16 / 0.06);
+    --shadow-card: 0 1px 2px rgb(60 20 15 / 0.06), inset 0 0 0 1px rgb(42 18 16 / 0.08);
+    --shadow-card-hover: 0 12px 28px -14px rgb(60 20 15 / 0.28), inset 0 0 0 1px rgb(42 18 16 / 0.14);
+    --shadow-hero: 0 2px 4px rgb(60 20 15 / 0.12), 0 24px 60px -20px rgb(60 20 15 / 0.45),
+      inset 0 1px 0 rgb(255 255 255 / 0.12);
+    --shadow-cta: inset 0 1px 0 rgb(255 255 255 / 0.18), 0 0 0 1px rgb(107 5 4 / 0.25),
+      0 12px 30px -12px rgb(107 5 4 / 0.45);
+    --sidebar: #ffffff;
+    --sidebar-foreground: #2a1210;
+    --sidebar-primary: #9b2a20;
+    --sidebar-primary-foreground: #ffffff;
+    --sidebar-accent: #f4e6e2;
+    --sidebar-accent-foreground: #2a1210;
+    --sidebar-border: rgb(42 18 16 / 10%);
+    --sidebar-ring: #9b2a20;
+    color-scheme: light;
+  }
 }
 
 @layer base {
@@ -217,8 +371,8 @@
   overflow: hidden;
   pointer-events: none;
   background:
-    radial-gradient(40rem 30rem at -10% 110%, rgb(75 10 9 / 0.4), transparent 60%),
-    var(--ink-black);
+    radial-gradient(40rem 30rem at -10% 110%, var(--glow-corner), transparent 60%),
+    var(--background);
 }
 .app-backdrop::before {
   content: "";
@@ -227,14 +381,14 @@
   top: -14rem;
   width: 64rem;
   height: 44rem;
-  background: radial-gradient(closest-side, rgb(107 5 4 / 0.6), transparent);
+  background: radial-gradient(closest-side, var(--glow-float), transparent);
   animation: floatGlow 18s ease-in-out infinite;
 }
 .app-backdrop::after {
   content: "";
   position: absolute;
   inset: 0;
-  background-image: radial-gradient(rgb(242 169 159 / 0.18) 1px, transparent 1.5px);
+  background-image: radial-gradient(var(--dots) 1px, transparent 1.5px);
   background-size: 20px 20px;
   mask-image: radial-gradient(50rem 30rem at 80% 0%, #000 0%, transparent 70%);
 }

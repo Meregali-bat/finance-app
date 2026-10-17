@@ -31,7 +31,7 @@ const tabsListVariants = cva(
     variants: {
       variant: {
         default:
-          "rounded-[14px] bg-card p-1 shadow-[inset_0_0_0_1px_rgb(247_236_233/0.08)] group-data-horizontal/tabs:h-[46px]",
+          "rounded-[14px] bg-card p-1 shadow-[inset_0_0_0_1px_var(--hairline)] group-data-horizontal/tabs:h-[46px]",
         line: "gap-1 bg-transparent",
       },
     },

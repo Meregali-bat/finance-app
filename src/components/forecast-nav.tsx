@@ -36,7 +36,7 @@ export function ForecastNav({
   nextHref: string | null;
 }) {
   return (
-    <div className="rise-in flex items-center justify-between gap-2 rounded-[18px] bg-card p-1.5 shadow-[inset_0_0_0_1px_rgb(247_236_233/0.08)] lg:w-fit lg:min-w-[24rem] lg:self-start">
+    <div className="rise-in flex items-center justify-between gap-2 rounded-[18px] bg-card p-1.5 shadow-[inset_0_0_0_1px_var(--hairline)] lg:w-fit lg:min-w-[24rem] lg:self-start">
       {previousHref ? (
         <Link href={previousHref} className={ARROW_CLASS} aria-label="Período anterior">
           <ChevronLeft className="size-5" aria-hidden="true" />

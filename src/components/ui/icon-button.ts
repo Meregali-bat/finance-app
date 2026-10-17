@@ -30,9 +30,9 @@ export function iconButton({
     size === "sm" && "size-11 lg:size-[38px] [&_svg]:size-[18px]",
     size === "lg" && "size-11 [&_svg]:size-5",
     size === "xl" && "size-12 rounded-2xl [&_svg]:size-5",
-    tone === "solid" && "bg-secondary text-foreground hover:bg-(--rich-mahogany-3)",
+    tone === "solid" && "bg-secondary text-foreground hover:bg-(--secondary-hover)",
     tone === "outline" &&
-      "border border-[rgb(255_236_233/0.14)] bg-[rgb(255_236_233/0.04)] text-foreground hover:border-[rgb(242_169_159/0.4)]",
+      "border border-(--hairline-strong) bg-(--field) text-foreground hover:border-primary/40",
     tone === "ghost" && "text-muted-foreground hover:bg-muted hover:text-foreground",
     tone === "cta" && "cta-surface text-white hover:-translate-y-px",
     className,

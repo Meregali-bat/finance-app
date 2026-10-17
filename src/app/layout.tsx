@@ -1,4 +1,5 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
+import { currentTheme } from "@/lib/theme-server";
 import { Bricolage_Grotesque, Geist, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -26,21 +27,39 @@ export const metadata: Metadata = {
   description: "Quanto você pode gastar hoje até receber de novo.",
 };
 
-export const viewport = {
-  width: "device-width",
-  initialScale: 1,
-  themeColor: "#0c0706",
-};
+/** A cor da barra do navegador acompanha o tema escolhido. */
+export async function generateViewport(): Promise<Viewport> {
+  const theme = await currentTheme();
+  const dark = "#0c0706";
+  const light = "#fbf7f5";
+  return {
+    width: "device-width",
+    initialScale: 1,
+    themeColor:
+      theme === "system"
+        ? [
+            { media: "(prefers-color-scheme: dark)", color: dark },
+            { media: "(prefers-color-scheme: light)", color: light },
+          ]
+        : theme === "light"
+          ? light
+          : dark,
+  };
+}
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default async function RootLayout({ children }: LayoutProps<"/">) {
+  // Lido no servidor: o HTML já sai com o tema certo, sem piscar.
+  const theme = await currentTheme();
   return (
     <html
       lang="pt-BR"
-      className={`dark ${heading.variable} ${sans.variable} ${plexMono.variable} h-full antialiased`}
+      data-theme={theme}
+      // O ThemeSwitcher troca o atributo direto no <html> antes do servidor
+      // responder; sem isto o React reclamaria da diferença.
+      suppressHydrationWarning
+      className={`${heading.variable} ${sans.variable} ${plexMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col bg-background text-foreground">
-        {children}
-      </body>
+      <body className="min-h-full flex flex-col bg-background text-foreground">{children}</body>
     </html>
   );
 }

@@ -7,7 +7,7 @@ import { SubmitButton } from "./submit-button";
 
 /** Os campos do login: 46px, raio 14, fundo escuro e anel rosé no foco. */
 const FIELD =
-  "h-[46px] rounded-[14px] border border-[rgb(255_236_233/0.12)] bg-black/25 px-3.5 text-[15px] text-foreground outline-none transition-[border-color,box-shadow] duration-150 placeholder:text-muted-foreground/60 focus:border-primary focus:shadow-[0_0_0_3px_rgb(242_169_159/0.2)]";
+  "h-[46px] rounded-[14px] border border-input bg-(--field) px-3.5 text-[15px] text-foreground outline-none transition-[border-color,box-shadow] duration-150 placeholder:text-muted-foreground/60 focus:border-primary focus:shadow-[0_0_0_3px_rgb(242_169_159/0.2)]";
 
 export default async function LoginPage({
   searchParams,
@@ -53,7 +53,7 @@ export default async function LoginPage({
                 className="slide-in flex items-center gap-3"
                 style={{ "--rise-delay": `${500 + index * 120}ms` } as React.CSSProperties}
               >
-                <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-brand/60 text-primary shadow-[inset_0_0_0_1px_rgb(255_255_255/0.1)]">
+                <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/12 text-primary">
                   <Check className="size-3.5" strokeWidth={2.5} aria-hidden="true" />
                 </span>
                 {line}
@@ -64,7 +64,7 @@ export default async function LoginPage({
 
         <form
           action={authenticate}
-          className="rise-in flex flex-[0_1_380px] flex-col gap-4 rounded-3xl bg-muted p-7 shadow-[0_2px_4px_rgb(0_0_0/0.5),0_24px_60px_-20px_rgb(0_0_0/0.9),inset_0_1px_0_rgb(255_255_255/0.1),inset_0_0_0_1px_rgb(247_236_233/0.06)]"
+          className="rise-in flex flex-[0_1_380px] flex-col gap-4 rounded-3xl bg-card-elevated p-7 shadow-(--shadow-panel)"
           style={{ "--rise-delay": "150ms" } as React.CSSProperties}
         >
           <h2 className="font-heading text-[26px] font-bold tracking-[-0.03em]">Entrar</h2>

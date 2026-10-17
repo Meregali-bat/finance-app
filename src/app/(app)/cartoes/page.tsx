@@ -5,7 +5,6 @@ import { requireUserId } from "@/lib/auth-helpers";
 import { formatCurrency } from "@/lib/format";
 import { toFixedExpenseInput } from "@/lib/budget-inputs";
 import { buildCardBillSeries, findNextOpenBill, getCardLimitUsage } from "@/lib/period";
-import { SectionLabel } from "@/components/page-header";
 import { stagger } from "@/components/list-row";
 import { cardGradient } from "@/lib/card-look";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -105,42 +104,46 @@ export default async function CardsPage() {
               <Link
                 key={card.id}
                 href={`/cartoes/${card.id}`}
-                className="group/card rise-in flex h-full flex-col gap-3.5 rounded-[22px] p-[18px] text-foreground shadow-[inset_0_0_0_1px_rgb(255_255_255/0.09),0_1px_2px_rgb(0_0_0/0.4)] transition-transform duration-150 ease-out-quint hover:-translate-y-0.5 active:scale-[0.98]"
-                style={{ background: cardGradient(card.id), ...stagger(index, 80, 60) }}
+                className="group/card rise-in flex h-full flex-col gap-3.5 rounded-[22px] p-[18px] text-white shadow-[inset_0_0_0_1px_rgb(255_255_255/0.09),0_1px_2px_rgb(0_0_0/0.4)] transition-transform duration-150 ease-out-quint hover:-translate-y-0.5 active:scale-[0.98]"
+                style={{ background: cardGradient(card.id, card.style), ...stagger(index, 80, 60) }}
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="truncate font-heading text-xl leading-tight font-bold tracking-[-0.03em]">
                       {card.name}
                     </p>
-                    <p className="text-[12.5px] text-foreground/70">
+                    <p className="text-[12.5px] text-white/70">
                       Fecha dia {card.closingDay} · vence dia {card.dueDay}
                     </p>
                   </div>
                   <ChevronRight
-                    className="mt-1 size-5 shrink-0 text-foreground/60 transition-transform duration-150 group-hover/card:translate-x-0.5"
+                    className="mt-1 size-5 shrink-0 text-white/60 transition-transform duration-150 group-hover/card:translate-x-0.5"
                     aria-hidden="true"
                   />
                 </div>
                 {nextBill ? (
                   <div className="flex flex-col gap-0.5">
-                    <SectionLabel>{overdue ? "Fatura vencida" : "Próxima fatura"}</SectionLabel>
+                    {/* Cores fixas, e não os tokens do tema: o fundo é a cor do cartão,
+                        escura nos dois temas. */}
+                    <span className="text-[11px] font-semibold tracking-[0.08em] text-white/70 uppercase">
+                      {overdue ? "Fatura vencida" : "Próxima fatura"}
+                    </span>
                     <p
                       className={`font-heading text-[26px] leading-tight font-bold tracking-[-0.035em] tabular-nums ${
-                        overdue ? "text-negative" : ""
+                        overdue ? "text-[#ffb0a6]" : ""
                       }`}
                     >
                       {/* Com parcial pago, o que importa é o que falta. */}
                       {formatCurrency(Math.max(0, nextBill.amount - (nextBill.partialPaid ?? 0)))}
                     </p>
                     {nextBill.partialPaid ? (
-                      <p className="text-xs text-foreground/70 tabular-nums">
+                      <p className="text-xs text-white/70 tabular-nums">
                         falta pagar · já pago {formatCurrency(nextBill.partialPaid)}
                       </p>
                     ) : null}
                   </div>
                 ) : (
-                  <p className="text-[13px] text-foreground/70">Sem fatura em aberto.</p>
+                  <p className="text-[13px] text-white/70">Sem fatura em aberto.</p>
                 )}
                 {limitUsage && (
                   <div className="flex flex-col gap-1.5">
@@ -150,7 +153,7 @@ export default async function CardsPage() {
                     >
                       <span
                         className={`grow-right block h-full rounded-full ${
-                          limitUsage.percentUsed >= 90 ? "bg-negative" : "bg-primary"
+                          limitUsage.percentUsed >= 90 ? "bg-[#ff7a6b]" : "bg-white/90"
                         }`}
                         style={
                           {
@@ -160,7 +163,7 @@ export default async function CardsPage() {
                         }
                       />
                     </span>
-                    <p className="text-xs text-foreground/70 tabular-nums">
+                    <p className="text-xs text-white/70 tabular-nums">
                       {formatCurrency(limitUsage.available)} de {formatCurrency(limitUsage.limit)}{" "}
                       livres
                     </p>

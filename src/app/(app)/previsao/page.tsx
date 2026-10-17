@@ -294,7 +294,7 @@ export default async function ForecastPage({
 
       {shortfall && (
         <div
-          className="rise-in flex items-start gap-3 rounded-[20px] bg-card p-3.5 shadow-[inset_0_0_0_1px_rgb(255_122_107/0.25)]"
+          className="rise-in flex items-start gap-3 rounded-[20px] bg-card p-3.5 shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--negative)_30%,transparent)]"
           style={{ "--rise-delay": "160ms" } as React.CSSProperties}
         >
           <IconSquare tone="negative">
