@@ -33,7 +33,7 @@ export default async function LoginPage({
   }
 
   return (
-    <div className="relative flex min-h-screen w-full items-center justify-center overflow-hidden px-5 py-8">
+    <div className="relative flex min-h-screen w-full items-center justify-center overflow-hidden px-5 pt-[max(2rem,calc(env(safe-area-inset-top)+1rem))] pb-8">
       <div aria-hidden="true" className="app-backdrop" />
       {/* Duas colunas que quebram sozinhas quando não cabem. */}
       <div className="flex w-full max-w-[1000px] flex-wrap items-center justify-between gap-12">
