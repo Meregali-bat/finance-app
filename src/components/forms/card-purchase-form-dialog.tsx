@@ -23,6 +23,7 @@ import {
 import { CurrencyInput } from "@/components/currency-input";
 import { createCardPurchase } from "@/lib/actions/card";
 import { todayInputValue } from "@/lib/format";
+import { LoanFields } from "@/components/forms/loan-fields";
 
 const NONE = "__none__";
 
@@ -127,6 +128,7 @@ export function CardPurchaseFormDialog({
               </Select>
             </div>
           )}
+          <LoanFields />
           {error && (
             <p role="alert" className="text-sm text-negative">
               {error}

@@ -19,6 +19,7 @@ import { billLinesInRange } from "@/lib/history-bills";
 import { toFixedExpenseInput } from "@/lib/budget-inputs";
 
 const UNCATEGORIZED = "__none__";
+const LENT = "__lent__";
 
 export default async function HistoryPage({
   searchParams,
@@ -39,7 +40,10 @@ export default async function HistoryPage({
       // nova — o mesmo salário contado duas vezes.
       prisma.transaction.findMany({
         where: { userId, fromPeriodClose: false, date: { gte: utcRangeStart, lt: utcRangeEnd } },
-        include: { category: { select: { id: true, name: true } } },
+        include: {
+          category: { select: { id: true, name: true } },
+          loan: { select: { person: { select: { name: true } } } },
+        },
       }),
       // Agrupado pela data em que foi pago, não pelo vencimento: pagar antes do
       // vencimento faz o registro cair no mês em que o dinheiro de fato saiu.
@@ -66,7 +70,12 @@ export default async function HistoryPage({
         where: { userId },
         orderBy: { name: "asc" },
         include: {
-          purchases: { include: { category: { select: { id: true, name: true } } } },
+          purchases: {
+            include: {
+              category: { select: { id: true, name: true } },
+              loan: { select: { person: { select: { name: true } } } },
+            },
+          },
           fixedExpenses: {
             include: { pauses: true, category: { select: { id: true, name: true } } },
           },
@@ -144,6 +153,7 @@ export default async function HistoryPage({
             installmentNumber: line.installmentNumber,
             purchaseAmount: Number(purchase.amount),
             purchaseDate: purchase.date,
+            lentTo: purchase.loan?.person.name,
           };
         }
         case "subscription": {
@@ -195,6 +205,7 @@ export default async function HistoryPage({
       date: t.date,
       createdAt: t.createdAt,
       categoryId: rememberCategory(t.category),
+      lentTo: t.loan?.person.name,
     })),
     ...cardItems,
     ...expensePayments.map((p) => ({
@@ -241,7 +252,9 @@ export default async function HistoryPage({
   // fundi-las num balde só esconderia a diferença.
   const byCategory = new Map<string, { amount: number; items: HistoryItem[] }>();
   for (const item of items.filter(countsAsSpending)) {
-    const key = item.categoryId ?? UNCATEGORIZED;
+    // O emprestado vai para um balde próprio: o jantar pago para um amigo não
+    // é gasto seu com "Alimentação", mesmo que tenha saído do seu bolso.
+    const key = item.lentTo ? LENT : (item.categoryId ?? UNCATEGORIZED);
     const group = byCategory.get(key) ?? { amount: 0, items: [] };
     group.amount += item.amount;
     group.items.push(item);
@@ -252,7 +265,11 @@ export default async function HistoryPage({
     .map(([key, group]) => ({
       key,
       name:
-        key === UNCATEGORIZED ? "Sem categoria" : (categoryNameById.get(key) ?? "Sem categoria"),
+        key === LENT
+          ? "Emprestado"
+          : key === UNCATEGORIZED
+            ? "Sem categoria"
+            : (categoryNameById.get(key) ?? "Sem categoria"),
       amount: group.amount,
       items: group.items,
       percent:

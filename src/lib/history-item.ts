@@ -53,6 +53,8 @@ export type HistoryItem = {
   purchaseDate?: Date;
   /** Presente quando kind === "incomeReceipt": a receita fixa que foi confirmada. */
   incomeId?: string;
+  /** A despesa foi emprestada: o nome de quem vai devolver. */
+  lentTo?: string;
 };
 
 /** Os valores que o formulário de edição espera. */
