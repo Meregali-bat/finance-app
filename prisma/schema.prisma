@@ -29,6 +29,9 @@ model User {
   balanceAdjustments BalanceAdjustment[]
   fixedExpensePauses FixedExpensePause[]
   expenseDeferrals   ExpenseDeferral[]
+  people             Person[]
+  loans              Loan[]
+  loanRepayments     LoanRepayment[]
   createdAt          DateTime            @default(now())
 
   /// Quanto da renda o usuário aceita ver comprometido com despesa fixa e fatura
@@ -234,6 +237,10 @@ model Transaction {
   categoryId      String?
   user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   category        Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  /// Esta despesa foi emprestada para alguém (ver Loan).
+  loan            Loan?
+  /// Esta receita é dinheiro que alguém devolveu (ver LoanRepayment).
+  loanRepayment   LoanRepayment?
 
   @@index([userId, date])
   @@index([categoryId])
@@ -287,6 +294,8 @@ model CardPurchase {
   user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   category       Category?       @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   expensePayment ExpensePayment?
+  /// Esta compra foi feita para alguém, que vai devolver (ver Loan).
+  loan           Loan?
 
   @@index([cardId, date])
   @@index([userId])
@@ -386,4 +395,62 @@ model BalanceAdjustment {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, createdAt])
+}
+
+/// Alguém a quem você emprestou dinheiro. Criada na hora, pelo nome digitado
+/// no formulário — não há tela de cadastro.
+model Person {
+  id         String          @id @default(cuid())
+  userId     String
+  name       String
+  createdAt  DateTime        @default(now())
+  user       User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  loans      Loan[]
+  repayments LoanRepayment[]
+
+  @@unique([userId, name])
+}
+
+/// Uma despesa (lançamento ou compra no cartão) feita por alguém, que vai
+/// devolver. O dinheiro já saiu — a despesa conta no orçamento normalmente —;
+/// o empréstimo só lembra quem deve e quanto. Apagar a despesa apaga o
+/// empréstimo junto.
+model Loan {
+  id             String        @id @default(cuid())
+  userId         String
+  personId       String
+  /// Quanto a pessoa deve. Pode ser menos que a despesa (uma conta dividida).
+  amount         Decimal
+  /// Em quantas vezes a pessoa combinou devolver. 1 = de uma vez.
+  installments   Int           @default(1)
+  /// Quando vence a primeira parcela (as outras, mês a mês). Nulo = sem data.
+  firstDueDate   DateTime?
+  transactionId  String?       @unique
+  cardPurchaseId String?       @unique
+  createdAt      DateTime      @default(now())
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  person         Person        @relation(fields: [personId], references: [id], onDelete: Cascade)
+  transaction    Transaction?  @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  cardPurchase   CardPurchase? @relation(fields: [cardPurchaseId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([personId])
+}
+
+/// Dinheiro que uma pessoa devolveu. É uma receita comum (a Transaction
+/// ligada, com valor negativo), então entra no saldo, no orçamento e no
+/// Histórico sem regra nova; esta linha só diz de quem veio. Abate os
+/// empréstimos mais antigos primeiro (src/lib/loans.ts). Apagar a receita
+/// desfaz o recebimento.
+model LoanRepayment {
+  id            String      @id @default(cuid())
+  userId        String
+  personId      String
+  transactionId String      @unique
+  createdAt     DateTime    @default(now())
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  person        Person      @relation(fields: [personId], references: [id], onDelete: Cascade)
+  transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+
+  @@index([personId])
 }

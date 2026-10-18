@@ -22,19 +22,12 @@ import {
   SelectItem,
 } from "@/components/ui/select";
 import { CurrencyInput } from "@/components/currency-input";
-import {
-  createTransaction,
-  updateTransaction,
-  deleteTransaction,
-} from "@/lib/actions/transaction";
-import {
-  createCardPurchase,
-  updateCardPurchase,
-  deleteCardPurchase,
-} from "@/lib/actions/card";
+import { createTransaction, updateTransaction, deleteTransaction } from "@/lib/actions/transaction";
+import { createCardPurchase, updateCardPurchase, deleteCardPurchase } from "@/lib/actions/card";
 import { todayInputValue } from "@/lib/format";
 import type { MovementValues } from "@/lib/history-item";
 import { cn } from "@/lib/utils";
+import { LoanFields } from "@/components/forms/loan-fields";
 
 const CASH = "__cash__";
 const NONE = "__none__";
@@ -292,6 +285,15 @@ export function MovementFormDialog({
                   </SelectContent>
                 </Select>
               </div>
+            )}
+            {kind === "expense" && (
+              <LoanFields
+                link={
+                  movement
+                    ? { kind: movement.kind === "card" ? "card" : "transaction", id: movement.id }
+                    : undefined
+                }
+              />
             )}
             {error && (
               <p role="alert" className="text-sm text-negative">

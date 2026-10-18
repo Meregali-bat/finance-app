@@ -128,6 +128,7 @@ export function HistoryRow({ item, cards, categories }: Options & { item: Histor
                   .filter(Boolean)
                   .join(" · ")
               : formatDateTime(item.date, item.createdAt);
+  const fullSubtitle = item.lentTo ? `${subtitle} · emprestado a ${item.lentTo}` : subtitle;
 
   const icon = isConfirmation ? (
     <CircleCheck />
@@ -186,7 +187,7 @@ export function HistoryRow({ item, cards, categories }: Options & { item: Histor
     <MovementRow
       cards={cards}
       categories={categories}
-      subtitle={subtitle}
+      subtitle={fullSubtitle}
       icon={icon}
       tone={tone}
       movement={toMovementValues(item)}

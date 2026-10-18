@@ -25,6 +25,8 @@ import { AccountBalanceCard } from "@/components/account-balance-card";
 import { PurchaseSimulationDialog } from "@/components/forms/purchase-simulation-dialog";
 import { HomeReminders, type HomeReminder } from "@/components/home-reminders";
 import { homeCard } from "@/components/home-card";
+import { HomeDebts } from "@/components/home-debts";
+import { loadDebts } from "@/lib/loans-data";
 
 /**
  * O que o período herdou, dito do jeito que a pessoa leria.
@@ -87,6 +89,7 @@ export default async function DashboardPage() {
     }),
     currentTheme(),
   ]);
+  const debts = await loadDebts(userId, today);
 
   const accountBalance = accountBalanceOf(inputs, today);
   const registeredMovement = registeredMovementOf(inputs, today);
@@ -256,8 +259,13 @@ export default async function DashboardPage() {
                   .join(" · ")}
               </p>
             </div>
-            <span className="shrink-0 text-[15px] font-semibold tabular-nums">
-              {formatCurrency(t.amount)}
+            {/* Receita é negativa no banco; na tela, positiva e em turquesa. */}
+            <span
+              className={`shrink-0 text-[15px] font-semibold tabular-nums ${
+                t.amount < 0 ? "text-positive" : ""
+              }`}
+            >
+              {t.amount < 0 ? `+${formatCurrency(-t.amount)}` : formatCurrency(t.amount)}
             </span>
             <ChevronRight
               className="size-4 shrink-0 text-muted-foreground/60 transition-transform duration-150 group-hover/row:translate-x-0.5"
@@ -433,7 +441,10 @@ export default async function DashboardPage() {
           impede que a coluna mais curta estique até a altura da outra. */}
       <div className="grid grid-cols-[repeat(auto-fit,minmax(min(340px,100%),1fr))] items-start gap-6">
         <div className="rise-in" style={rise(300)}>
-          <HomeReminders reminders={reminders} />
+          <div className="flex flex-col gap-6">
+            <HomeReminders reminders={reminders} />
+            <HomeDebts debts={debts} />
+          </div>
         </div>
 
         <div className="rise-in flex flex-col gap-6" style={rise(380)}>

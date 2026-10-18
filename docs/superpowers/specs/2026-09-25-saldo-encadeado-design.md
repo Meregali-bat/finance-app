@@ -97,3 +97,15 @@ Ao lado de "Marcar como paga", o lembrete de despesa fixa avulsa tem **Adiar**: 
 - **depois da última parcela**, como uma cobrança extra — como pular uma parcela de financiamento. Só para despesas com **Parcelas restantes** (campo novo, opcional; vazio = não termina). Adiar duas vezes para o fim enfileira duas cobranças.
 
 Cada adiamento é uma linha em `ExpenseDeferral`, com o alvo calculado e gravado na hora (`deferralTargetDate`). A regra de "quanto vence nesta data" mora em `expenseCharges`, usada pelo orçamento e pela previsão. Adiar de novo uma ocorrência que já acumulava leva tudo junto. Os adiamentos aparecem em Fixos, onde se desfazem. As parcelas contam meses de calendário a partir do primeiro vencimento depois do cadastro; uma pausa não estende o fim.
+
+## Empréstimos (18/10)
+
+Uma despesa (lançamento ou compra no cartão) pode ser marcada como **emprestada para alguém**. Decisões do usuário:
+
+- **Conta como saída na hora.** A despesa entra no orçamento e no saldo como qualquer outra; o empréstimo (`Loan`, ligado à despesa) só lembra quem deve e quanto. Apagar a despesa apaga o empréstimo.
+- **A pessoa deve o total** (ou menos, numa conta dividida), com a opção de combinar **parcelas mensais** a partir de uma data. Sem data, fica só o lembrete do total.
+- **Só o que te devem**, não o que você deve.
+
+O que volta é uma **receita comum** ("Recebido de João", `Transaction` negativa) com um `LoanRepayment` dizendo de quem veio — por isso entra no saldo, no orçamento do dia em que chegou e no Histórico sem regra nova. Abate os empréstimos da pessoa do mais antigo para o mais novo (`src/lib/loans.ts`). Apagar a receita desfaz o recebimento.
+
+A Início mostra **A receber**: uma linha por pessoa com o total em aberto e a próxima parcela (ou "desde"), e o "Recebi". A Previsão não conta com o que te devem. No Histórico, a despesa emprestada diz "emprestado a João" e vai para o balde **Emprestado** em "Por categoria".
