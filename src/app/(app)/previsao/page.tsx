@@ -10,14 +10,14 @@ import {
   type ForecastEntryKind,
   type PeriodForecast,
 } from "@/lib/forecast";
-import { formatCurrency, formatDate } from "@/lib/format";
+import { formatCompactCurrency, formatCurrency, formatDate } from "@/lib/format";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader, SectionLabel } from "@/components/page-header";
 import { CountUpCurrency } from "@/components/ui/animated-number";
 import { IconSquare, ListRow, stagger } from "@/components/list-row";
 import { homeCard } from "@/components/home-card";
 import { ForecastNav } from "@/components/forecast-nav";
-import { ColumnChart } from "@/components/charts/column-chart";
+import { CycleTimeline } from "@/components/charts/cycle-timeline";
 import { cn } from "@/lib/utils";
 
 /** Quantos ciclos o gráfico mostra, contando o corrente. */
@@ -43,6 +43,11 @@ const GROUPS: { kind: ForecastEntryKind; label: string; incoming: boolean }[] = 
  */
 function groupLabel(kind: ForecastEntryKind, label: string, offset: number) {
   return kind === "scheduled" && offset === 0 ? "Lançamentos" : label;
+}
+
+/** "o ciclo atual", "nov" — como um ciclo é chamado numa frase. */
+function cycleName(period: PeriodForecast) {
+  return period.offset === 0 ? "o ciclo atual" : monthLabel(period.periodStart);
 }
 
 function forecastHref(offset: number) {
@@ -157,6 +162,17 @@ export default async function ForecastPage({
   const period = periods[offset];
   const isNegative = period.endBalance < -0.005;
   const timeline = periods.slice(0, TIMELINE_LENGTH);
+  const timelineShort = timeline.filter((item) => item.endBalance < -0.005);
+  // Com falta, o ciclo mais no vermelho; sem, o de menor folga.
+  const timelineWorst = timeline.reduce((worst, item) =>
+    timelineShort.length > 0
+      ? item.endBalance < worst.endBalance
+        ? item
+        : worst
+      : item.freeToSpend < worst.freeToSpend
+        ? item
+        : worst,
+  );
 
   // O primeiro ciclo, deste em diante, que fecha no vermelho mesmo guardando
   // tudo o que dá. O aviso aparece em todo ciclo até ele: é neles que dá para
@@ -315,39 +331,65 @@ export default async function ForecastPage({
 
       {/* Um ciclo por coluna: para cima o que fica livre (turquesa), para
           baixo o que vai faltar (coral) — positivo e negativo em torno do
-          zero. A coluna é o link para o ciclo, e a selecionada leva o valor. */}
+          zero. Acima, a leitura do gráfico numa frase: quantos fecham no
+          vermelho e qual é o pior, ou, sem nenhum, onde a folga é menor. */}
       <div
-        className={homeCard("rise-in flex flex-col gap-4")}
+        className={homeCard("rise-in flex flex-col gap-5")}
         style={{ "--rise-delay": "220ms" } as React.CSSProperties}
       >
-        <div className="flex items-baseline justify-between gap-3">
-          <SectionLabel>Próximos ciclos</SectionLabel>
+        <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
+          <div className="flex flex-col gap-1.5">
+            <SectionLabel>Próximos ciclos</SectionLabel>
+            <p className="text-[13.5px] text-muted-foreground tabular-nums">
+              {timelineShort.length > 0 ? (
+                <>
+                  <span className="font-semibold text-foreground">
+                    {timelineShort.length} de {timeline.length}
+                  </span>{" "}
+                  {timelineShort.length === 1 ? "ciclo fecha" : "ciclos fecham"} no vermelho · pior
+                  em{" "}
+                  <span className="font-semibold text-negative">
+                    {cycleName(timelineWorst)} ({formatCurrency(timelineWorst.endBalance)})
+                  </span>
+                </>
+              ) : (
+                <>
+                  Todos os {timeline.length} ciclos fecham no azul · menor folga em{" "}
+                  <span className="font-semibold text-foreground">
+                    {cycleName(timelineWorst)} ({formatCurrency(timelineWorst.freeToSpend)})
+                  </span>
+                </>
+              )}
+            </p>
+          </div>
           <div className="flex items-center gap-3 text-xs text-muted-foreground">
             <span className="flex items-center gap-1.5">
-              <span aria-hidden="true" className="size-2.5 rounded-[3px] bg-chart-2" />
+              <span aria-hidden="true" className="size-2.5 rounded-full bg-chart-2" />
               Livre
             </span>
             <span className="flex items-center gap-1.5">
-              <span aria-hidden="true" className="size-2.5 rounded-[3px] bg-chart-3" />
+              <span aria-hidden="true" className="size-2.5 rounded-full bg-chart-3" />
               Vai faltar
             </span>
           </div>
         </div>
-        <ColumnChart
+        <CycleTimeline
           title="Livre para gastar ou falta, por ciclo"
-          height={170}
-          dimOpacity={0.55}
-          maxWidth={22}
-          columns={timeline.map((item) => {
+          cycles={timeline.map((item, index) => {
             const short = item.endBalance < -0.005;
             const value = short ? item.endBalance : item.freeToSpend;
+            const previous = timeline[index - 1];
             return {
               key: String(item.offset),
-              label: item.offset === 0 ? "Atual" : monthLabel(item.periodStart),
+              label: item.offset === 0 ? "Agora" : monthLabel(item.periodStart),
+              year:
+                previous && previous.periodStart.getFullYear() !== item.periodStart.getFullYear()
+                  ? String(item.periodStart.getFullYear())
+                  : undefined,
               value,
               valueLabel: formatCurrency(value),
-              tone: short ? "negative" : "positive",
-              detail: `${periodLabel(item)} · ${short ? "vai faltar" : "livre"}`,
+              compactLabel: formatCompactCurrency(value),
+              detail: periodLabel(item),
               href: forecastHref(item.offset),
               selected: item.offset === offset,
             };

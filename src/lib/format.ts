@@ -95,3 +95,14 @@ export function installmentLabel(total: number, installments: number): string | 
   const first = base + (cents - base * installments);
   return `${installments}x de ${formatCurrency(first / 100)}`;
 }
+
+/** "R$ 1,4 mil" — para rótulos de gráfico, onde o valor exato não cabe. */
+export function formatCompactCurrency(amount: number): string {
+  return new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+    notation: "compact",
+    // Abaixo de mil não há o que abreviar, e "R$ 820,0" só faz ruído.
+    maximumFractionDigits: Math.abs(amount) < 1000 ? 0 : 1,
+  }).format(amount);
+}
