@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/auth-helpers";
 import { resolveRange, type RangeParams } from "@/lib/date-range";
 import { calculateReportTotals, countsAsSpending, spendingBuckets } from "@/lib/report-totals";
-import { ColumnChart } from "@/components/charts/column-chart";
+import { LineChart } from "@/components/charts/line-chart";
 import { homeCard } from "@/components/home-card";
 import { stagger } from "@/components/list-row";
 import { SectionLabel } from "@/components/page-header";
@@ -300,12 +300,10 @@ export default async function HistoryPage({
           <SectionLabel>
             {buckets[0].unit === "month" ? "Gasto por mês" : "Gasto por dia"}
           </SectionLabel>
-          <ColumnChart
+          <LineChart
             title={buckets[0].unit === "month" ? "Gasto por mês" : "Gasto por dia"}
-            height={140}
-            maxWidth={14}
-            growStep={35}
-            columns={buckets.map((bucket, index) => ({
+            height={150}
+            points={buckets.map((bucket, index) => ({
               key: bucket.start.toISOString(),
               // Rótulo a cada poucos dias, para o eixo não virar uma sopa.
               label:
@@ -318,7 +316,6 @@ export default async function HistoryPage({
                     : "",
               value: bucket.total,
               valueLabel: formatCurrency(bucket.total),
-              tone: "accent" as const,
               detail:
                 bucket.unit === "month"
                   ? new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric" }).format(
