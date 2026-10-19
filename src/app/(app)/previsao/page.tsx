@@ -17,7 +17,7 @@ import { CountUpCurrency } from "@/components/ui/animated-number";
 import { IconSquare, ListRow, stagger } from "@/components/list-row";
 import { homeCard } from "@/components/home-card";
 import { ForecastNav } from "@/components/forecast-nav";
-import { CycleTimeline } from "@/components/charts/cycle-timeline";
+import { LineChart } from "@/components/charts/line-chart";
 import { cn } from "@/lib/utils";
 
 /** Quantos ciclos o gráfico mostra, contando o corrente. */
@@ -205,14 +205,14 @@ export default async function ForecastPage({
 
       <section
         aria-label="Este ciclo"
-        className="hero-surface rise-in relative overflow-hidden rounded-[26px] text-white lg:rounded-[28px]"
+        className="hero-surface rise-in relative overflow-hidden rounded-[26px] lg:rounded-[28px]"
         style={{ "--rise-delay": "80ms" } as React.CSSProperties}
       >
         <div className="relative z-10 p-1 lg:px-4 lg:py-3">
           <div className="grid grid-cols-[repeat(auto-fit,minmax(min(300px,100%),1fr))] overflow-hidden">
             <div className="flex flex-col gap-4 p-[18px] lg:p-5">
               <div className="flex flex-col gap-1.5">
-                <p className="text-sm font-medium text-white/72">
+                <p className="text-sm font-medium text-(--hero-muted)">
                   {isNegative ? "Vai faltar ao fim do período" : "Livre para gastar no período"}
                 </p>
                 {/* Mesmo elemento entre um ciclo e outro (trocar a query não
@@ -223,12 +223,12 @@ export default async function ForecastPage({
                   delay={0.2}
                   className={cn(
                     "font-heading text-[44px] leading-none font-bold tracking-[-0.04em] tabular-nums lg:text-[52px]",
-                    isNegative ? "text-negative" : "text-white",
+                    isNegative ? "text-negative" : "text-(--hero-fg)",
                   )}
                 />
               </div>
-              <p className="text-sm text-white/80 tabular-nums">
-                <span className="font-semibold text-white">
+              <p className="text-sm text-(--hero-muted) tabular-nums">
+                <span className="font-semibold text-(--hero-fg)">
                   {formatCurrency(period.dailyAvailable)}
                 </span>{" "}
                 por dia ·{" "}
@@ -259,11 +259,11 @@ export default async function ForecastPage({
                 ].map((chip) => (
                   <div
                     key={chip.label}
-                    className="flex min-w-0 items-center gap-2.5 rounded-2xl bg-black/22 px-3.5 py-2.5 ring-1 ring-white/10"
+                    className="flex min-w-0 items-center gap-2.5 rounded-2xl bg-(--hero-chip) px-3.5 py-2.5 ring-1 ring-(--hero-line)"
                   >
                     {chip.icon}
                     <div className="flex min-w-0 flex-col gap-0.5">
-                      <span className="truncate text-[11px] font-semibold tracking-[0.08em] text-white/60 uppercase">
+                      <span className="truncate text-[11px] font-semibold tracking-[0.08em] text-(--hero-faint) uppercase">
                         {chip.label}
                       </span>
                       <span className="truncate text-[15px] font-semibold tabular-nums">
@@ -280,22 +280,22 @@ export default async function ForecastPage({
                 para a frente. Sem ela, um mês com renda maior que as contas
                 aparecer negativo — ou menor do que parece — parece erro. O
                 divisor é a mesma sombra de 1px do hero da Início. */}
-            <dl className="flex flex-col justify-center gap-2.5 p-[18px] text-[13.5px] tabular-nums shadow-[-1px_-1px_0_0_rgb(255_255_255/0.12)] lg:p-5">
+            <dl className="flex flex-col justify-center gap-2.5 p-[18px] text-[13.5px] tabular-nums shadow-[-1px_-1px_0_0_var(--hero-line)] lg:p-5">
               <div className="flex items-baseline justify-between gap-3">
-                <dt className="text-white/72">{inheritedLabel}</dt>
+                <dt className="text-(--hero-muted)">{inheritedLabel}</dt>
                 <dd className="font-medium">{formatCurrency(period.inherited)}</dd>
               </div>
               <div className="flex items-baseline justify-between gap-3">
-                <dt className="text-white/72">Resultado do período</dt>
+                <dt className="text-(--hero-muted)">Resultado do período</dt>
                 <dd className="font-medium">{formatCurrency(period.periodResult)}</dd>
               </div>
               {period.reservedForLater > 0.005 && (
                 <div className="flex items-baseline justify-between gap-3">
-                  <dt className="text-white/72">Reservado para ciclos à frente</dt>
+                  <dt className="text-(--hero-muted)">Reservado para ciclos à frente</dt>
                   <dd className="font-medium">− {formatCurrency(period.reservedForLater)}</dd>
                 </div>
               )}
-              <div className="mt-1 flex items-baseline justify-between gap-3 border-t border-white/12 pt-3">
+              <div className="mt-1 flex items-baseline justify-between gap-3 border-t border-(--hero-line) pt-3">
                 <dt className="font-semibold">
                   {isNegative ? "Falta no fim do ciclo" : "Livre para gastar"}
                 </dt>
@@ -373,23 +373,26 @@ export default async function ForecastPage({
             </span>
           </div>
         </div>
-        <CycleTimeline
+        <LineChart
           title="Livre para gastar ou falta, por ciclo"
-          cycles={timeline.map((item, index) => {
+          variant="polarity"
+          valueLabels="all"
+          height={190}
+          points={timeline.map((item, index) => {
             const short = item.endBalance < -0.005;
             const value = short ? item.endBalance : item.freeToSpend;
             const previous = timeline[index - 1];
             return {
               key: String(item.offset),
               label: item.offset === 0 ? "Agora" : monthLabel(item.periodStart),
-              year:
+              sublabel:
                 previous && previous.periodStart.getFullYear() !== item.periodStart.getFullYear()
                   ? String(item.periodStart.getFullYear())
                   : undefined,
               value,
               valueLabel: formatCurrency(value),
               compactLabel: formatCompactCurrency(value),
-              detail: periodLabel(item),
+              detail: `${periodLabel(item)} · ${short ? "vai faltar" : "livre"}`,
               href: forecastHref(item.offset),
               selected: item.offset === offset,
             };

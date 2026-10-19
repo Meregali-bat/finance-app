@@ -89,8 +89,8 @@ export function AreaTrend({
         >
           <defs>
             <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0" stopColor={stroke} stopOpacity={0.28} />
-              <stop offset="1" stopColor={stroke} stopOpacity={0} />
+              <stop offset="0" style={{ stopColor: stroke, stopOpacity: 0.28 }} />
+              <stop offset="1" style={{ stopColor: stroke, stopOpacity: 0 }} />
             </linearGradient>
           </defs>
           <g className={reveal ? "trend-reveal" : undefined}>
@@ -98,7 +98,8 @@ export function AreaTrend({
             <path
               d={line}
               fill="none"
-              stroke={stroke}
+              // Em `style`, não como atributo: atributo de SVG não lê var().
+              style={{ stroke }}
               strokeWidth={2.25}
               strokeLinejoin="round"
               strokeLinecap="round"
@@ -109,7 +110,7 @@ export function AreaTrend({
         {index !== null && (
           <span
             aria-hidden="true"
-            className="absolute inset-y-0 w-px bg-white/30"
+            className="absolute inset-y-0 w-px bg-(--hero-line)"
             style={{ left: `${x(index)}%` }}
           />
         )}

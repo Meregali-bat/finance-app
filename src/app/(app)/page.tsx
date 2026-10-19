@@ -310,14 +310,14 @@ export default async function DashboardPage() {
           horizontal sozinho — o `overflow-hidden` corta a metade que sobra. */}
       <section
         aria-label="Orçamento de hoje"
-        className="hero-surface rise-in relative overflow-hidden rounded-[26px] text-white lg:rounded-[28px]"
+        className="hero-surface rise-in relative overflow-hidden rounded-[26px] lg:rounded-[28px]"
         style={rise(80)}
       >
         <div className="relative z-10 p-1 lg:px-4 lg:py-3">
           <div className="grid grid-cols-[repeat(auto-fit,minmax(min(300px,100%),1fr))] overflow-hidden">
             <div className="flex flex-col gap-5 p-[18px] lg:p-5">
               <div className="flex flex-col gap-2">
-                <p className="text-sm font-medium text-white/72">
+                <p className="text-sm font-medium text-(--hero-muted)">
                   {isOverBudget ? "Você já estourou o orçamento de hoje" : "Você pode gastar hoje"}
                 </p>
                 <CountUpCurrency
@@ -326,7 +326,7 @@ export default async function DashboardPage() {
                   duration={1.3}
                   delay={0.25}
                   className={`flex items-baseline font-heading text-[64px] leading-[0.9] font-bold tracking-[-0.045em] tabular-nums lg:text-[80px] ${
-                    isOverBudget ? "text-negative" : "text-white"
+                    isOverBudget ? "text-negative" : "text-(--hero-fg)"
                   }`}
                   symbolClassName="mr-1.5 text-[24px] tracking-[-0.02em] opacity-70 lg:mr-2 lg:text-[30px]"
                   centsClassName="text-[30px] tracking-[-0.03em] opacity-70 lg:text-[36px]"
@@ -335,7 +335,7 @@ export default async function DashboardPage() {
 
               <div className="flex flex-col gap-2">
                 <DayRuler totalDays={totalDays} elapsedDays={elapsedDays} />
-                <div className="flex justify-between text-xs font-medium text-white/72 tabular-nums">
+                <div className="flex justify-between text-xs font-medium text-(--hero-muted) tabular-nums">
                   <span>
                     Dia {Math.max(1, elapsedDays)} de {Math.max(1, totalDays)}
                   </span>
@@ -356,9 +356,9 @@ export default async function DashboardPage() {
                 ].map((chip) => (
                   <div
                     key={chip.label}
-                    className="flex min-w-0 flex-col gap-0.5 rounded-[14px] bg-black/22 px-3.5 py-2.5 ring-1 ring-white/10 sm:rounded-2xl sm:px-4"
+                    className="flex min-w-0 flex-col gap-0.5 rounded-[14px] bg-(--hero-chip) px-3.5 py-2.5 ring-1 ring-(--hero-line) sm:rounded-2xl sm:px-4"
                   >
-                    <span className="truncate text-[11px] font-semibold tracking-[0.08em] text-white/60 uppercase">
+                    <span className="truncate text-[11px] font-semibold tracking-[0.08em] text-(--hero-faint) uppercase">
                       {chip.label}
                     </span>
                     <span className="truncate text-[15px] font-semibold tabular-nums">
@@ -368,7 +368,7 @@ export default async function DashboardPage() {
                 ))}
               </div>
               {(caption || reservedForLater > 0.005) && (
-                <div className="flex flex-col gap-0.5 text-xs text-white/72">
+                <div className="flex flex-col gap-0.5 text-xs text-(--hero-muted)">
                   {caption && <p>{caption}</p>}
                   {reservedForLater > 0.005 && (
                     <p>
@@ -382,9 +382,9 @@ export default async function DashboardPage() {
             {/* O ritmo do período: quanto do dia a dia (lançamentos e compras no
               cartão) já saiu, dia a dia. Uma série só, então sem legenda — o
               título diz o que é. */}
-            <div className="flex flex-col justify-end gap-3 p-[18px] shadow-[-1px_-1px_0_0_rgb(255_255_255/0.12)] lg:p-5">
+            <div className="flex flex-col justify-end gap-3 p-[18px] shadow-[-1px_-1px_0_0_var(--hero-line)] lg:p-5">
               <div className="flex items-baseline justify-between gap-3">
-                <p className="text-sm text-white/72">Gasto no período</p>
+                <p className="text-sm text-(--hero-muted)">Gasto no período</p>
                 <CountUpCurrency
                   value={spendingTrend.at(-1)?.value ?? 0}
                   duration={1.5}
@@ -396,12 +396,12 @@ export default async function DashboardPage() {
                 points={spendingTrend}
                 height={96}
                 className="h-16 lg:h-24"
-                stroke="#ffd2cb"
-                ring="#4a0a09"
+                stroke="var(--hero-chart)"
+                ring="var(--hero-dot-ring)"
                 reveal
                 title="Gasto acumulado no período"
               />
-              <div className="hidden justify-between text-[11px] text-white/60 tabular-nums lg:flex">
+              <div className="hidden justify-between text-[11px] text-(--hero-faint) tabular-nums lg:flex">
                 <span>{spendingTrend[0]?.label}</span>
                 <span>hoje</span>
               </div>

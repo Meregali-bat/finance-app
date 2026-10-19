@@ -4,7 +4,7 @@ import { SectionLabel } from "@/components/page-header";
 import { DeleteIconButton } from "@/components/delete-icon-button";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { deleteCardBillEstimate } from "@/lib/actions/card-bill-estimate";
-import { ColumnChart } from "@/components/charts/column-chart";
+import { LineChart } from "@/components/charts/line-chart";
 
 /**
  * Uma fatura projetada, já reduzida a valores que atravessam para o cliente —
@@ -51,11 +51,10 @@ export function CardBillProjection({
           style={{ "--rise-delay": "180ms" } as React.CSSProperties}
         >
           <SectionLabel>Próximas faturas</SectionLabel>
-          <ColumnChart
+          <LineChart
             title="Valor das faturas por vencimento"
-            height={140}
-            maxWidth={22}
-            columns={bills.map((bill) => {
+            height={150}
+            points={bills.map((bill) => {
               const value = bill.paid ? (bill.paidAmount ?? bill.amount) : bill.amount;
               return {
                 key: bill.dueDateIso,
@@ -64,7 +63,7 @@ export function CardBillProjection({
                   .replace(".", ""),
                 value,
                 valueLabel: formatCurrency(value),
-                tone: bill.paid ? ("muted" as const) : ("accent" as const),
+                muted: bill.paid,
                 detail: `${bill.overdue ? "Venceu" : "Vence"} ${formatDate(bill.dueDate)}${
                   bill.paid ? " · paga" : bill.overdue ? " · vencida" : ""
                 }`,

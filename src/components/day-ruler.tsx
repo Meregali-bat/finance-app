@@ -42,9 +42,9 @@ export function DayRuler({
             key={i}
             className={cn(
               "min-w-0 flex-1 rounded-[3px]",
-              state === "past" && "h-[18px] bg-white/92",
-              state === "today" && "h-full bg-chart-line",
-              state === "future" && "h-3 bg-white/16",
+              state === "past" && "h-[18px] bg-(--hero-ruler-past)",
+              state === "today" && "h-full bg-(--hero-ruler-today)",
+              state === "future" && "h-3 bg-(--hero-ruler-future)",
             )}
             style={{
               transition:
