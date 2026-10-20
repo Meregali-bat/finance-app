@@ -36,12 +36,12 @@ O período não é o mês do calendário: vai **de um pagamento ao próximo**, c
 
 ## Capabilities and Constraints
 
-- Funcionalidades confirmadas: orçamento diário encadeado entre períodos; previsão de até 24 ciclos com aviso de falta; rendas fixas, despesas fixas (com parcelas, pausa e adiamento), categorias; cartões, compras parceladas, faturas, previsões manuais na fatura e limite; pagamento parcial de despesa fixa e de fatura; saldo em conta com ajuste manual; caixinhas (guardar, resgatar — inclusive mais do que o saldo, pelo rendimento); empréstimos para outras pessoas com "a receber"; histórico por período e por categoria; simulação "posso comprar isso?"; tema claro, escuro e automático.
+- Funcionalidades confirmadas: orçamento diário encadeado entre períodos; previsão de até 24 ciclos com aviso de falta; rendas fixas, despesas fixas (com parcelas, pausa e adiamento), categorias; cartões, compras parceladas, faturas, previsões manuais na fatura e limite; pagamento parcial de despesa fixa e de fatura; saldo em conta com ajuste manual; caixinhas (guardar, resgatar — inclusive mais do que o saldo, pelo rendimento); empréstimos para outras pessoas com "a receber"; histórico por período e por categoria; simulação "posso comprar isso?"; tema claro, escuro e automático; lançamento automático de pagamentos por aproximação pelo app Atalhos do iPhone.
 - Idioma e formato: português do Brasil, reais (BRL), fuso `America/Sao_Paulo`. Datas de calendário são guardadas em meia-noite UTC.
 - Stack: Next.js (App Router) + Prisma + Postgres (Supabase), Auth.js com email e senha, hospedado na Vercel. Os cálculos de dinheiro vivem em módulos puros e testados (`src/lib/period.ts`, `carry-over.ts`, `forecast.ts`, `loans.ts` e vizinhos).
 - O que entra no orçamento e como está documentado em `docs/superpowers/specs/2026-09-25-saldo-encadeado-design.md`; mudanças de regra são registradas lá.
 - Cadastro aberto com email e senha na tela de login, seguido de um primeiro uso curto em `/comecar` (renda obrigatória; saldo, contas fixas e cartão opcionais) que termina mostrando o número do dia.
-- **Em aberto:** o app não envia emails, então não há confirmação de email nem recuperação de senha (a senha é redefinida por quem administra). Faltam também política de dados, exclusão de conta e limite de tentativas no cadastro. Não há integração bancária: tudo é lançado à mão.
+- **Em aberto:** o app não envia emails, então não há confirmação de email nem recuperação de senha (a senha é redefinida por quem administra). Faltam também política de dados, exclusão de conta e limite de tentativas no cadastro. Não há integração bancária: fora o que passa pela Carteira do iPhone (atalho), tudo é lançado à mão.
 
 ## Brand Commitments
 
