@@ -40,7 +40,8 @@ O período não é o mês do calendário: vai **de um pagamento ao próximo**, c
 - Idioma e formato: português do Brasil, reais (BRL), fuso `America/Sao_Paulo`. Datas de calendário são guardadas em meia-noite UTC.
 - Stack: Next.js (App Router) + Prisma + Postgres (Supabase), Auth.js com email e senha, hospedado na Vercel. Os cálculos de dinheiro vivem em módulos puros e testados (`src/lib/period.ts`, `carry-over.ts`, `forecast.ts`, `loans.ts` e vizinhos).
 - O que entra no orçamento e como está documentado em `docs/superpowers/specs/2026-09-25-saldo-encadeado-design.md`; mudanças de regra são registradas lá.
-- **Em aberto:** não existe cadastro público — contas só nascem pelo seed. Abrir para outras pessoas ainda precisa decidir cadastro, recuperação de senha, primeiro uso (onboarding) e política de dados. Também não há integração bancária: tudo é lançado à mão.
+- Cadastro aberto com email e senha na tela de login, seguido de um primeiro uso curto em `/comecar` (renda obrigatória; saldo, contas fixas e cartão opcionais) que termina mostrando o número do dia.
+- **Em aberto:** o app não envia emails, então não há confirmação de email nem recuperação de senha (a senha é redefinida por quem administra). Faltam também política de dados, exclusão de conta e limite de tentativas no cadastro. Não há integração bancária: tudo é lançado à mão.
 
 ## Brand Commitments
 
