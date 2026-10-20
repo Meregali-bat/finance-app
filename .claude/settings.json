@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ ! -f \"${CLAUDE_PROJECT_DIR}/.claude/hooks/superpowers-session-start\" ] || bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/superpowers-session-start\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
