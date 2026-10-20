@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createCategory, updateCategory } from "@/lib/actions/category";
 import { iconButton } from "@/components/ui/icon-button";
+import { errorMessage } from "@/lib/error-message";
 
 type CategoryValues = {
   id: string;
@@ -38,7 +39,7 @@ export function CategoryFormDialog({ category }: { category?: CategoryValues }) 
         }
         setOpen(false);
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Erro ao salvar");
+        setError(errorMessage(e, "Erro ao salvar"));
       }
     });
   }

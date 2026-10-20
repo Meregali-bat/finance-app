@@ -41,6 +41,10 @@ model User {
   /// src/lib/purchase-simulation.ts — um @default aqui apagaria a diferença
   /// entre "não escolheu" e "escolheu 70", e a tela não teria como dizer qual.
   commitmentLimitPercent Int?
+  /// Quando terminou o passo a passo do primeiro uso (/comecar). Nulo = ainda
+  /// não terminou, e entrar no app leva para lá. Depois de preenchido, nunca
+  /// mais força: apagar a renda depois não manda a pessoa de volta.
+  onboardedAt            DateTime?
 }
 
 model Category {

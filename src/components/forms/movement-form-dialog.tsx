@@ -28,6 +28,7 @@ import { todayInputValue } from "@/lib/format";
 import type { MovementValues } from "@/lib/history-item";
 import { cn } from "@/lib/utils";
 import { LoanFields } from "@/components/forms/loan-fields";
+import { errorMessage } from "@/lib/error-message";
 
 const CASH = "__cash__";
 const NONE = "__none__";
@@ -83,7 +84,7 @@ export function MovementFormDialog({
         }
         handleOpenChange(false);
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Erro ao salvar");
+        setError(errorMessage(e, "Erro ao salvar"));
       }
     });
   }
@@ -99,7 +100,7 @@ export function MovementFormDialog({
         }
         setConfirmDelete(false);
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Erro ao excluir");
+        setError(errorMessage(e, "Erro ao excluir"));
       }
     });
   }

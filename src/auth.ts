@@ -18,7 +18,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const password = credentials?.password as string | undefined;
         if (!email || !password) return null;
 
-        const user = await prisma.user.findUnique({ where: { email } });
+        // Sem diferença de maiúsculas e espaços: "Fulano@Email.com " é a
+        // mesma conta que "fulano@email.com".
+        const user = await prisma.user.findFirst({
+          where: { email: { equals: email.trim(), mode: "insensitive" } },
+        });
         if (!user) return null;
 
         const valid = await bcrypt.compare(password, user.passwordHash);

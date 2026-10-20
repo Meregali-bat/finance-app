@@ -5,9 +5,7 @@ import { requireUserId } from "@/lib/auth-helpers";
 import { deferralTargetDate, fallsOnDay, type OpeningSource } from "@/lib/period";
 import { cumulativeDailySpending } from "@/lib/spending-trend";
 import { AreaTrend } from "@/components/charts/area-trend";
-import { forecastPeriods } from "@/lib/forecast";
-import { calculateCurrentBudget } from "@/lib/carry-over";
-import { accountBalanceOf, loadBudgetInputs, registeredMovementOf } from "@/lib/budget-inputs";
+import { loadBudgetInputs, registeredMovementOf } from "@/lib/budget-inputs";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SectionLabel } from "@/components/page-header";
@@ -27,6 +25,7 @@ import { HomeReminders, type HomeReminder } from "@/components/home-reminders";
 import { homeCard } from "@/components/home-card";
 import { HomeDebts } from "@/components/home-debts";
 import { loadDebts } from "@/lib/loans-data";
+import { todayBudget } from "@/lib/today-budget";
 
 /**
  * O que o período herdou, dito do jeito que a pessoa leria.
@@ -91,25 +90,9 @@ export default async function DashboardPage() {
   ]);
   const debts = await loadDebts(userId, today);
 
-  const accountBalance = accountBalanceOf(inputs, today);
+  const { accountBalance, budget, dailyAvailable, reservedForLater } = todayBudget(inputs, today);
   const registeredMovement = registeredMovementOf(inputs, today);
-
-  // Com o saldo em conta informado, o período sai do dinheiro real; sem ele, da
-  // corrente dos períodos anteriores. Nos dois casos o mês passado pesa neste.
-  const budget = calculateCurrentBudget({ ...inputs, accountBalance, today });
   const transactions = inputs.transactions.filter((t) => !t.fromPeriodClose);
-
-  // O "pode gastar hoje" é o livre do período corrente da Previsão: o saldo do
-  // período menos o que precisa ficar guardado para um ciclo à frente que não
-  // se paga. Sem renda não há ciclos, e vale o saldo do período dividido.
-  const [current] = forecastPeriods({
-    ...inputs,
-    openingBalance: budget.openingBalance,
-    today,
-    count: 0,
-  });
-  const dailyAvailable = current?.dailyAvailable ?? budget.dailyAvailable;
-  const reservedForLater = current?.reservedForLater ?? 0;
 
   const totalDays = differenceInCalendarDays(budget.periodEnd, budget.periodStart);
   const elapsedDays = totalDays - budget.daysRemaining + 1;

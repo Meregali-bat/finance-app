@@ -23,6 +23,7 @@ import { deleteTransaction } from "@/lib/actions/transaction";
 import { formatCurrency, todayInputValue } from "@/lib/format";
 import type { DebtView } from "@/lib/loans-data";
 import { cn } from "@/lib/utils";
+import { errorMessage } from "@/lib/error-message";
 
 const TOAST_MS = 4000;
 
@@ -169,7 +170,7 @@ function ReceiveDialog({
         setOpen(false);
         onReceived(transactionId, Number(formData.get("amount")));
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Erro ao salvar");
+        setError(errorMessage(e, "Erro ao salvar"));
       }
     });
   }

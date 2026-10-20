@@ -31,6 +31,7 @@ import {
 import { MAX_SIMULATION_INSTALLMENTS } from "@/lib/purchase-simulation";
 import { todayInputValue } from "@/lib/format";
 import { iconButton } from "@/components/ui/icon-button";
+import { errorMessage } from "@/lib/error-message";
 
 const NONE = "__none__";
 
@@ -77,7 +78,7 @@ export function PurchaseSimulationDialog({
         setResult(await runPurchaseSimulation(formData));
         setSubmitted(formData);
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Não deu para simular");
+        setError(errorMessage(e, "Não deu para simular"));
       }
     });
   }
@@ -102,7 +103,7 @@ export function PurchaseSimulationDialog({
         setOpen(false);
         reset();
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Erro ao salvar a compra");
+        setError(errorMessage(e, "Erro ao salvar a compra"));
       }
     });
   }
@@ -115,7 +116,7 @@ export function PurchaseSimulationDialog({
         setEditingLimit(false);
         if (submitted) run(submitted);
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Erro ao salvar o teto");
+        setError(errorMessage(e, "Erro ao salvar o teto"));
       }
     });
   }

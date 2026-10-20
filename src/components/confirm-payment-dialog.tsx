@@ -22,6 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { errorMessage } from "@/lib/error-message";
 
 const ACCOUNT = "__account__";
 
@@ -75,7 +76,7 @@ export function ConfirmPaymentDialog({
         setOpen(false);
         onDone?.({ ...result, settled });
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Erro ao salvar");
+        setError(errorMessage(e, "Erro ao salvar"));
       }
     });
   }

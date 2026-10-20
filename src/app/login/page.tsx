@@ -3,18 +3,20 @@ import { Check } from "lucide-react";
 import { Logo } from "@/components/logo";
 import { redirect } from "next/navigation";
 import { signIn } from "@/auth";
+import Link from "next/link";
 import { SubmitButton } from "./submit-button";
-
-/** Os campos do login: 46px, raio 14, fundo escuro e anel rosé no foco. */
-const FIELD =
-  "h-[46px] rounded-[14px] border border-input bg-(--field) px-3.5 text-[15px] text-foreground outline-none transition-[border-color,box-shadow] duration-150 placeholder:text-muted-foreground/60 focus:border-primary focus:shadow-[0_0_0_3px_rgb(242_169_159/0.2)]";
+import { FIELD } from "./field";
+import { PasswordInput } from "./password-input";
+import { SignUpForm } from "./sign-up-form";
+import { cn } from "@/lib/utils";
 
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; modo?: string }>;
 }) {
-  const { error } = await searchParams;
+  const { error, modo } = await searchParams;
+  const creating = modo === "criar";
 
   async function authenticate(formData: FormData) {
     "use server";
@@ -62,40 +64,73 @@ export default async function LoginPage({
           </ul>
         </div>
 
-        <form
-          action={authenticate}
-          className="rise-in flex flex-[0_1_380px] flex-col gap-4 rounded-3xl bg-card-elevated p-7 shadow-(--shadow-panel)"
+        <div
+          className="rise-in flex flex-[0_1_380px] flex-col gap-5 rounded-3xl bg-card-elevated p-7 shadow-(--shadow-panel)"
           style={{ "--rise-delay": "150ms" } as React.CSSProperties}
         >
-          <h2 className="font-heading text-[26px] font-bold tracking-[-0.03em]">Entrar</h2>
-          <label className="flex flex-col gap-2 text-[13.5px] font-medium">
-            Email
-            <input
-              name="email"
-              type="email"
-              autoComplete="email"
-              placeholder="voce@email.com"
-              required
-              className={FIELD}
-            />
-          </label>
-          <label className="flex flex-col gap-2 text-[13.5px] font-medium">
-            Senha
-            <input
-              name="password"
-              type="password"
-              autoComplete="current-password"
-              required
-              className={FIELD}
-            />
-          </label>
-          {error && (
-            <p role="alert" className="text-sm text-negative">
-              Email ou senha inválidos.
-            </p>
+          {/* Entrar e criar conta no mesmo cartão: a pessoa não precisa achar
+              outra página, e o link é compartilhável (?modo=criar). */}
+          <nav
+            aria-label="Entrar ou criar conta"
+            className="grid grid-cols-2 rounded-[14px] bg-card p-1 shadow-[inset_0_0_0_1px_var(--hairline)]"
+          >
+            {[
+              { href: "/login", label: "Entrar", active: !creating },
+              { href: "/login?modo=criar", label: "Criar conta", active: creating },
+            ].map((tab) => (
+              <Link
+                key={tab.href}
+                href={tab.href}
+                aria-current={tab.active ? "page" : undefined}
+                className={cn(
+                  "flex h-[38px] items-center justify-center rounded-[10px] text-[13.5px] font-semibold transition-colors",
+                  tab.active
+                    ? "bg-secondary text-foreground"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {tab.label}
+              </Link>
+            ))}
+          </nav>
+
+          <h2 className="font-heading text-[26px] leading-tight font-bold tracking-[-0.03em]">
+            {creating ? "Criar conta" : "Entrar"}
+          </h2>
+
+          {creating ? (
+            <SignUpForm />
+          ) : (
+            <form action={authenticate} className="flex flex-col gap-4">
+              <label className="flex flex-col gap-2 text-[13.5px] font-medium">
+                Email
+                <input
+                  name="email"
+                  type="email"
+                  autoComplete="email"
+                  inputMode="email"
+                  placeholder="voce@email.com"
+                  required
+                  className={FIELD}
+                />
+              </label>
+              <label className="flex flex-col gap-2 text-[13.5px] font-medium">
+                Senha
+                <PasswordInput autoComplete="current-password" invalid={!!error} />
+              </label>
+              {error && (
+                <p role="alert" className="text-sm text-negative">
+                  Email ou senha não conferem.
+                </p>
+              )}
+              <SubmitButton />
+              {/* Sem envio de email ainda: a senha só é redefinida à mão. */}
+              <p className="text-center text-[13px] text-muted-foreground">
+                Esqueceu a senha? Peça para quem administra o app redefinir.
+              </p>
+            </form>
           )}
-          <SubmitButton />
-        </form>
+        </div>
       </div>
     </div>
   );

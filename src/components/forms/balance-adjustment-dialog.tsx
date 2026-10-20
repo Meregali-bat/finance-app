@@ -17,6 +17,7 @@ import { setAccountBalance } from "@/lib/actions/account-balance";
 import { formatCurrency } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { iconButton } from "@/components/ui/icon-button";
+import { errorMessage } from "@/lib/error-message";
 
 /**
  * O campo abre preenchido com o valor que o app calculou, exceto quando esse
@@ -49,7 +50,7 @@ export function BalanceAdjustmentDialog({
         await setAccountBalance(formData);
         setOpen(false);
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Erro ao salvar");
+        setError(errorMessage(e, "Erro ao salvar"));
       }
     });
   }

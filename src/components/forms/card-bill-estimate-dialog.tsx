@@ -23,6 +23,7 @@ import {
 import { CurrencyInput } from "@/components/currency-input";
 import { createCardBillEstimate } from "@/lib/actions/card-bill-estimate";
 import { iconButton } from "@/components/ui/icon-button";
+import { errorMessage } from "@/lib/error-message";
 
 /** Um vencimento oferecido no seletor: valor em ISO, rótulo já formatado. */
 export type DueDateOption = { value: string; label: string };
@@ -47,7 +48,7 @@ export function CardBillEstimateDialog({
         setOpen(false);
         setDueDate(dueDates[0]?.value ?? "");
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Erro ao salvar");
+        setError(errorMessage(e, "Erro ao salvar"));
       }
     });
   }
