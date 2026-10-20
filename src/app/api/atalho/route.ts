@@ -1,6 +1,10 @@
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { formatCurrency } from "@/lib/format";
+import { loadBudgetInputs } from "@/lib/budget-inputs";
+import { overspendAlert } from "@/lib/alerts";
+import { sendAlerts } from "@/lib/push";
 import {
   calendarToday,
   hashShortcutToken,
@@ -63,6 +67,18 @@ export async function POST(request: Request) {
   }
   revalidatePath("/");
   revalidatePath("/historico");
+
+  // Depois da resposta, para o atalho não esperar: se a compra passou do
+  // limite de hoje, avisa no celular.
+  const userId = user.id;
+  after(async () => {
+    try {
+      const alert = overspendAlert(await loadBudgetInputs(userId), new Date());
+      if (alert) await sendAlerts(userId, [alert]);
+    } catch (error) {
+      console.error("Aviso de limite falhou", error);
+    }
+  });
 
   return reply(201, `${description} · ${formatCurrency(amount)}${card ? ` no ${card.name}` : ""}`);
 }
