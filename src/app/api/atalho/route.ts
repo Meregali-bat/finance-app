@@ -9,8 +9,10 @@ import {
   calendarToday,
   hashShortcutToken,
   matchCard,
+  normalizeName,
   parseShortcutAmount,
   shortcutDescription,
+  walletCardText,
 } from "@/lib/shortcut";
 
 /**
@@ -49,7 +51,27 @@ export async function POST(request: Request) {
     where: { userId: user.id, deletedAt: null, active: true },
     select: { id: true, name: true },
   });
-  const card = matchCard(body.cartao, cards);
+  const walletName = walletCardText(body.cartao);
+  const normalized = walletName ? normalizeName(walletName) : "";
+  // A escolha da pessoa em Cartões vale mais que o palpite pelo nome.
+  const alias = normalized
+    ? await prisma.walletCardAlias.findUnique({
+        where: { userId_normalized: { userId: user.id, normalized } },
+        select: { cardId: true, asAccount: true },
+      })
+    : null;
+  const card = alias?.asAccount
+    ? null
+    : (cards.find((c) => c.id === alias?.cardId) ?? matchCard(walletName, cards));
+  // Sem cartão e sem resposta ainda: guarda o nome para Cartões perguntar.
+  const unknownCard = !card && !alias?.asAccount && walletName !== null && normalized !== "";
+  if (unknownCard && !alias) {
+    await prisma.walletCardAlias.upsert({
+      where: { userId_normalized: { userId: user.id, normalized } },
+      create: { userId: user.id, walletName, normalized },
+      update: {},
+    });
+  }
   const description = shortcutDescription(body.loja, card?.name ?? null);
   const categoryId = await categoryFromHistory(user.id, description);
   const date = calendarToday(new Date());
@@ -62,8 +84,16 @@ export async function POST(request: Request) {
     revalidatePath("/cartoes");
   } else {
     await prisma.transaction.create({
-      data: { userId: user.id, amount, description, date, categoryId },
+      data: {
+        userId: user.id,
+        amount,
+        description,
+        date,
+        categoryId,
+        walletCardName: unknownCard ? walletName : null,
+      },
     });
+    if (unknownCard) revalidatePath("/cartoes");
   }
   revalidatePath("/");
   revalidatePath("/historico");
@@ -80,7 +110,14 @@ export async function POST(request: Request) {
     }
   });
 
-  return reply(201, `${description} · ${formatCurrency(amount)}${card ? ` no ${card.name}` : ""}`);
+  const where = card
+    ? ` no ${card.name}`
+    : unknownCard
+      ? `. Cartão “${walletName}” não reconhecido: entrou como gasto da conta; escolha o cartão em Cartões`
+      : !walletName
+        ? ". O atalho não mandou o nome do cartão: entrou como gasto da conta"
+        : "";
+  return reply(201, `${description} · ${formatCurrency(amount)}${where}`);
 }
 
 /** A categoria do último lançamento com a mesma descrição, se houver. */

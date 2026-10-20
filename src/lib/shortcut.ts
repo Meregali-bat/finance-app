@@ -88,3 +88,17 @@ export function shortcutDescription(merchant: unknown, cardName: string | null):
 export function calendarToday(now: Date): Date {
   return new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
 }
+
+/**
+ * O nome do cartão como texto, seja lá como o Atalhos mandou: texto, número
+ * ou, se a variável foi sem conversão, um objeto. Vazio vira nulo.
+ */
+export function walletCardText(raw: unknown): string | null {
+  let text: string;
+  if (typeof raw === "string") text = raw;
+  else if (typeof raw === "number" || typeof raw === "boolean") text = String(raw);
+  else if (raw && typeof raw === "object") text = JSON.stringify(raw);
+  else return null;
+  text = text.trim().replace(/\s+/g, " ");
+  return text ? text.slice(0, 80) : null;
+}

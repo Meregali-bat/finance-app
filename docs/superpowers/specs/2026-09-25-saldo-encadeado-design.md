@@ -121,7 +121,7 @@ Até terminar o primeiro uso (`User.onboardedAt` nulo), o app leva para `/comeca
 O iPhone não deixa ler as notificações de outros apps, então o caminho é a automação **Carteira** do app Atalhos ("Transação" no iOS 17), que dispara a cada pagamento por aproximação pela Carteira. Ela manda `{ valor, loja, cartao }` em JSON para `POST /api/atalho`, com a chave pessoal no cabeçalho `Authorization` (com ou sem "Bearer ").
 
 - **Chave:** gerada em Cartões, mostrada uma única vez; o banco guarda só o SHA-256 (`User.shortcutTokenHash`). Gerar outra invalida a anterior; dá para desligar.
-- **Cartão:** casado pelo nome — o da Carteira contém o do app ("Nubank Ultravioleta" → "Nubank"), ou o contrário, palavra inteira, sem acento nem caixa; havendo mais de um, o nome mais longo. Sem cartão reconhecido, entra como gasto comum da conta.
+- **Cartão:** casado pelo nome — o da Carteira contém o do app ("Nubank Ultravioleta" → "Nubank"), ou o contrário, palavra inteira, sem acento nem caixa; havendo mais de um, o nome mais longo. Sem cartão reconhecido, entra como gasto comum da conta guardando o nome que veio (`Transaction.walletCardName`), e Cartões pergunta uma vez "de qual cartão é?" (`WalletCardAlias`): escolhido o cartão, as compras daquele nome já lançadas vão para a fatura e as próximas vão direto; "é débito" deixa na conta e não pergunta mais. A resposta da pessoa vale antes do palpite pelo nome.
 - **Categoria:** a do último lançamento com a mesma descrição (loja), se houver.
 - **Data:** o dia de hoje, à vista. Parcelado e "emprestado" se acertam editando depois.
 - Fica de fora o que não passa pela Carteira: cartão físico, Pix, débito automático.
