@@ -26,6 +26,7 @@ import { homeCard } from "@/components/home-card";
 import { HomeDebts } from "@/components/home-debts";
 import { loadDebts } from "@/lib/loans-data";
 import { todayBudget } from "@/lib/today-budget";
+import { PushSetup } from "@/components/push-setup";
 
 /**
  * O que o período herdou, dito do jeito que a pessoa leria.
@@ -458,6 +459,8 @@ export default async function DashboardPage() {
               </ul>
             </div>
           )}
+
+          {process.env.VAPID_PUBLIC_KEY && <PushSetup publicKey={process.env.VAPID_PUBLIC_KEY} />}
         </div>
       </div>
     </div>

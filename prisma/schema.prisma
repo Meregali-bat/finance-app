@@ -32,6 +32,7 @@ model User {
   people             Person[]
   loans              Loan[]
   loanRepayments     LoanRepayment[]
+  pushSubscriptions  PushSubscription[]
   createdAt          DateTime            @default(now())
 
   /// Quanto da renda o usuário aceita ver comprometido com despesa fixa e fatura
@@ -465,4 +466,18 @@ model LoanRepayment {
   transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
 
   @@index([personId])
+}
+
+/// Um aparelho que aceitou receber avisos (Web Push). O mesmo usuário pode ter
+/// vários; o endereço é único porque o navegador o gera por aparelho.
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }

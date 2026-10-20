@@ -127,3 +127,12 @@ O iPhone não deixa ler as notificações de outros apps, então o caminho é a 
 - Fica de fora o que não passa pela Carteira: cartão físico, Pix, débito automático.
 
 As regras puras (valor em "R$ 1.234,56", casamento de cartão) estão em `src/lib/shortcut.ts`.
+
+## Avisos no celular (21/10)
+
+Web Push no app instalado na tela de início (iOS 16.4+). A pessoa liga em **Avisos no celular**, no fim da Início; cada aparelho vira um `PushSubscription`, e um endereço que o serviço de push diz não existir mais (404/410) sai sozinho. Só existe aviso quando há algo a fazer — nunca "está tudo bem".
+
+- **Pela manhã** (agendador da Vercel, `vercel.json`, 11h UTC = 8h em Brasília; `GET /api/avisos/diario` com `CRON_SECRET`): conta fixa que vence amanhã e não foi paga; fatura que vence hoje e não foi paga; fatura que fecha hoje (dia de fechamento, ou o último dia de um mês mais curto); renda prevista para hoje ainda não confirmada.
+- **Na hora**, quando uma compra chega pelo atalho e o gasto do dia (lançamentos + compras no cartão com a data de hoje) passa do "quanto posso gastar hoje" do começo do dia — o mesmo `todayBudget`, recalculado sem os gastos de hoje. Um aviso por dia, substituído a cada compra.
+
+As regras estão em `src/lib/alerts.ts`; o envio, em `src/lib/push.ts`. Sem `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY` no ambiente, o bloco não aparece e nada é enviado.

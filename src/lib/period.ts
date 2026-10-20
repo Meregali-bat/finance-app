@@ -1093,7 +1093,7 @@ export interface BudgetInput {
  * despesa fixa avulsa e as faturas que vencem nele, cada uma com o pagamento
  * que a quitou, se houver.
  */
-function obligationsInRange(
+export function obligationsInRange(
   input: BudgetInput,
   start: Date,
   end: Date,
