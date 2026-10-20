@@ -137,7 +137,7 @@ export function PushSetup({ publicKey }: { publicKey: string }) {
       action: false,
     },
     denied: {
-      text: "Os avisos estão bloqueados. Libere em Ajustes → Notificações → Finanças e volte aqui.",
+      text: "Os avisos estão bloqueados. Libere em Ajustes → Notificações → Leeway e volte aqui.",
       action: false,
     },
     off: {

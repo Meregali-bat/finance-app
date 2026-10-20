@@ -11,8 +11,8 @@ import type { MetadataRoute } from "next";
  */
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Finanças",
-    short_name: "Finanças",
+    name: "Leeway",
+    short_name: "Leeway",
     description: "Quanto você pode gastar hoje até receber de novo.",
     lang: "pt-BR",
     start_url: "/",

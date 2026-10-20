@@ -25,12 +25,12 @@ const plexMono = IBM_Plex_Mono({
 export async function generateMetadata(): Promise<Metadata> {
   const theme = await currentTheme();
   return {
-    title: "Finanças",
+    title: "Leeway",
     description: "Quanto você pode gastar hoje até receber de novo.",
     // Aberto da tela de início do iPhone: em tela cheia, com este nome.
     appleWebApp: {
       capable: true,
-      title: "Finanças",
+      title: "Leeway",
       // No escuro, a barra de status fica transparente sobre o fundo (o
       // conteúdo desce pelo safe-area); no claro, a barra branca padrão —
       // o relógio branco do "translucent" sumiria no fundo creme.
