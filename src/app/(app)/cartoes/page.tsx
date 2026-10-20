@@ -12,6 +12,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/page-header";
 import { CardFormDialog } from "@/components/forms/card-form-dialog";
 import { ShortcutSetup } from "@/components/shortcut-setup";
+import { shortcutLanguage } from "@/lib/shortcut-language";
 
 export default async function CardsPage() {
   const userId = await requireUserId();
@@ -187,7 +188,11 @@ export default async function CardsPage() {
       )}
 
       <div className="rise-in" style={stagger(cards.length, 160)}>
-        <ShortcutSetup active={Boolean(user?.shortcutTokenHash)} endpoint={shortcutEndpoint} />
+        <ShortcutSetup
+          active={Boolean(user?.shortcutTokenHash)}
+          endpoint={shortcutEndpoint}
+          deviceLanguage={shortcutLanguage(requestHeaders.get("accept-language"))}
+        />
       </div>
     </div>
   );
