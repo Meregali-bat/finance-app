@@ -97,7 +97,7 @@ export function Logo({
           size === "lg" ? "text-[26px]" : size === "md" ? "text-[22px]" : "text-[19px]",
         )}
       >
-        finanças
+        leeway
       </span>
     </span>
   );

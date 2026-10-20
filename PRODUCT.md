@@ -45,7 +45,7 @@ O período não é o mês do calendário: vai **de um pagamento ao próximo**, c
 
 ## Brand Commitments
 
-- Nome: **Finanças** (wordmark "finanças", em minúsculas).
+- Nome: **Leeway** (wordmark "leeway", em minúsculas) — a folga, a margem que ainda dá para gastar. Até 21/10 se chamava "Finanças". O texto do app continua em português; só o nome é em inglês.
 - Logo "o anel do ciclo": o anel é o período entre pagamentos, a abertura é o que falta e o ponto é hoje (`src/components/logo.tsx`, ícones em `src/app/icon.svg`, `apple-icon.png`, `public/icons/`).
 - Voz: português direto e em segunda pessoa ("Você pode gastar hoje", "Vai faltar ao fim do período"), números sempre com o contexto do que significam.
 

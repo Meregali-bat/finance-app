@@ -15,7 +15,7 @@ let configured = false;
 function configure() {
   if (configured) return;
   webpush.setVapidDetails(
-    process.env.VAPID_SUBJECT || "mailto:avisos@financas.app",
+    process.env.VAPID_SUBJECT || "mailto:avisos@leeway.app",
     process.env.VAPID_PUBLIC_KEY!,
     process.env.VAPID_PRIVATE_KEY!,
   );
