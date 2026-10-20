@@ -115,3 +115,15 @@ A Início mostra **A receber**: uma linha por pessoa com o total em aberto e a p
 Cadastro aberto na tela de login ("Criar conta": email e senha, mínimo 8 caracteres), sem envio de email — recuperar senha é pedir a quem administra. Email comparado sem diferença de maiúsculas, no cadastro e no login. Conta nova nasce com as categorias padrão (`src/lib/default-categories.ts`).
 
 Até terminar o primeiro uso (`User.onboardedAt` nulo), o app leva para `/comecar`: renda (obrigatória) → saldo em conta → contas fixas → cartão (os três opcionais), cada passo gravando na hora com as actions de sempre, e o resultado mostra o "quanto posso gastar hoje" calculado por `todayBudget` — a mesma função da Início. Quem já existia ficou marcado como concluído na migration.
+
+## Lançamento automático pelo iPhone (21/10)
+
+O iPhone não deixa ler as notificações de outros apps, então o caminho é a automação **Transação** do app Atalhos, que dispara a cada pagamento por aproximação pela Carteira. Ela manda `{ valor, loja, cartao }` em JSON para `POST /api/atalho`, com a chave pessoal no cabeçalho `Authorization` (com ou sem "Bearer ").
+
+- **Chave:** gerada em Cartões, mostrada uma única vez; o banco guarda só o SHA-256 (`User.shortcutTokenHash`). Gerar outra invalida a anterior; dá para desligar.
+- **Cartão:** casado pelo nome — o da Carteira contém o do app ("Nubank Ultravioleta" → "Nubank"), ou o contrário, palavra inteira, sem acento nem caixa; havendo mais de um, o nome mais longo. Sem cartão reconhecido, entra como gasto comum da conta.
+- **Categoria:** a do último lançamento com a mesma descrição (loja), se houver.
+- **Data:** o dia de hoje, à vista. Parcelado e "emprestado" se acertam editando depois.
+- Fica de fora o que não passa pela Carteira: cartão físico, Pix, débito automático.
+
+As regras puras (valor em "R$ 1.234,56", casamento de cartão) estão em `src/lib/shortcut.ts`.

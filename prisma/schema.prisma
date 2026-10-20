@@ -45,6 +45,9 @@ model User {
   /// não terminou, e entrar no app leva para lá. Depois de preenchido, nunca
   /// mais força: apagar a renda depois não manda a pessoa de volta.
   onboardedAt            DateTime?
+  /// SHA-256 da chave do atalho do iPhone (src/app/api/atalho). A chave em si
+  /// só aparece uma vez, quando é gerada; trocar a chave invalida a anterior.
+  shortcutTokenHash      String?   @unique
 }
 
 model Category {
@@ -98,36 +101,36 @@ model IncomeReceipt {
 }
 
 model FixedExpense {
-  id         String           @id @default(cuid())
-  userId     String
-  label      String
-  amount     Decimal
-  dueDay     Int?
+  id               String              @id @default(cuid())
+  userId           String
+  label            String
+  amount           Decimal
+  dueDay           Int?
   /// Quantas cobranças faltam, contadas a partir do primeiro vencimento depois
   /// do cadastro. Nulo = não termina (aluguel, assinatura). É o que dá sentido
   /// a adiar uma parcela "para depois da última". Só para despesa avulsa: no
   /// cartão, o parcelamento é da compra.
   installmentCount Int?
-  active     Boolean          @default(true)
+  active           Boolean             @default(true)
   /// Quando a despesa deixou de ser cobrada — ao ser pausada ou apagada. É por
   /// esta data que se sabe onde cortar: os ciclos que fecharam antes dela
   /// continuam cobrando a despesa, e é isso que impede um encerramento de
   /// apagar retroativamente dinheiro que de fato saiu. Nulo = ainda vigente.
   /// Ver isExpenseOccurrenceValid em src/lib/period.ts.
-  endedAt    DateTime?
+  endedAt          DateTime?
   /// Apagada pelo usuário: some das listas de Fixos, mas a linha continua no
   /// banco para o Histórico dos meses em que ela foi cobrada seguir de pé.
   /// Sem volta pela interface, ao contrário de `active`.
-  deletedAt  DateTime?
-  createdAt  DateTime         @default(now())
-  cardId     String?
-  categoryId String?
-  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  card       CreditCard?      @relation(fields: [cardId], references: [id], onDelete: SetNull)
-  category   Category?        @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  payments   ExpensePayment[]
-  pauses     FixedExpensePause[]
-  deferrals  ExpenseDeferral[]
+  deletedAt        DateTime?
+  createdAt        DateTime            @default(now())
+  cardId           String?
+  categoryId       String?
+  user             User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  card             CreditCard?         @relation(fields: [cardId], references: [id], onDelete: SetNull)
+  category         Category?           @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  payments         ExpensePayment[]
+  pauses           FixedExpensePause[]
+  deferrals        ExpenseDeferral[]
 
   @@index([userId])
   @@index([cardId])
@@ -223,24 +226,24 @@ model ExpensePayment {
 }
 
 model Transaction {
-  id              String    @id @default(cuid())
+  id              String         @id @default(cuid())
   userId          String
   amount          Decimal
   description     String
-  date            DateTime  @default(now())
+  date            DateTime       @default(now())
   /// Quando o lançamento foi cadastrado — é daqui que sai a hora exibida.
   /// `date` é um dia do calendário (meia-noite UTC) e não carrega horário.
   /// Nulo nos lançamentos anteriores a esta coluna, que então só mostram o dia.
-  createdAt       DateTime? @default(now())
+  createdAt       DateTime?      @default(now())
   /// Linha que o fechamento de período antigo criava para devolver a sobra ao
   /// orçamento seguinte. Não é criada mais: o saldo passa de um período ao
   /// outro sozinho (src/lib/carry-over.ts). As que existem ficam de fora de
   /// tudo — orçamento, previsão, saldo em conta e Histórico —, porque contá-las
   /// levaria a mesma sobra duas vezes.
-  fromPeriodClose Boolean   @default(false)
+  fromPeriodClose Boolean        @default(false)
   categoryId      String?
-  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  category        Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category        Category?      @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   /// Esta despesa foi emprestada para alguém (ver Loan).
   loan            Loan?
   /// Esta receita é dinheiro que alguém devolveu (ver LoanRepayment).

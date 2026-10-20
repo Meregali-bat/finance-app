@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { headers } from "next/headers";
 import { ChevronRight, CreditCard as CardIcon } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/auth-helpers";
@@ -10,6 +11,7 @@ import { cardGradient } from "@/lib/card-look";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/page-header";
 import { CardFormDialog } from "@/components/forms/card-form-dialog";
+import { ShortcutSetup } from "@/components/shortcut-setup";
 
 export default async function CardsPage() {
   const userId = await requireUserId();
@@ -25,6 +27,15 @@ export default async function CardsPage() {
       payments: true,
     },
   });
+
+  const [user, requestHeaders] = await Promise.all([
+    prisma.user.findUnique({ where: { id: userId }, select: { shortcutTokenHash: true } }),
+    headers(),
+  ]);
+  // O endereço que o atalho chama, no domínio de onde a tela foi aberta.
+  const host = requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host");
+  const protocol = requestHeaders.get("x-forwarded-proto") ?? "https";
+  const shortcutEndpoint = `${protocol}://${host}/api/atalho`;
 
   const today = new Date();
   const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
@@ -174,6 +185,10 @@ export default async function CardsPage() {
           })}
         </div>
       )}
+
+      <div className="rise-in" style={stagger(cards.length, 160)}>
+        <ShortcutSetup active={Boolean(user?.shortcutTokenHash)} endpoint={shortcutEndpoint} />
+      </div>
     </div>
   );
 }
