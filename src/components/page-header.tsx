@@ -49,13 +49,28 @@ export function PageHeader({
 }
 
 /**
- * Rótulo de uma seção dentro da tela. Texto pequeno pede tracking positivo —
- * o oposto do `<h1>`.
+ * O título de uma seção dentro da tela, em caixa normal: lê como título, e não
+ * como etiqueta gritada em maiúsculas.
  */
 export function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <h2 className="text-[0.6875rem] font-semibold tracking-[0.08em] text-muted-foreground uppercase">
+    <h2 className="font-heading text-[15px] leading-tight font-semibold tracking-[-0.01em]">
       {children}
     </h2>
+  );
+}
+
+/** O rótulo de um número dentro de um card: diz o que o número é, sem competir com ele. */
+export function StatLabel({
+  children,
+  className,
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <p className={`text-[12.5px] font-medium text-muted-foreground ${className ?? ""}`}>
+      {children}
+    </p>
   );
 }

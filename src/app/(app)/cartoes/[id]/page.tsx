@@ -7,7 +7,7 @@ import { toFixedExpenseInput } from "@/lib/budget-inputs";
 import { buildCardBillSeries, findNextOpenBill, getCardLimitUsage } from "@/lib/period";
 import { stagger } from "@/components/list-row";
 import { EmptyState } from "@/components/ui/empty-state";
-import { PageHeader, SectionLabel } from "@/components/page-header";
+import { PageHeader, SectionLabel, StatLabel } from "@/components/page-header";
 import { CardFormDialog } from "@/components/forms/card-form-dialog";
 import { CardPurchaseFormDialog } from "@/components/forms/card-purchase-form-dialog";
 import { CardBillEstimateDialog } from "@/components/forms/card-bill-estimate-dialog";
@@ -158,7 +158,7 @@ export default async function CardDetailPage({ params }: { params: Promise<{ id:
         style={{ "--rise-delay": "80ms" } as React.CSSProperties}
       >
         <div className="flex min-w-0 flex-col gap-1 rounded-[20px] bg-muted p-4 shadow-(--shadow-card) lg:p-5">
-          <SectionLabel>Próxima fatura</SectionLabel>
+          <StatLabel>Próxima fatura</StatLabel>
           {nextBill ? (
             <>
               <p className="truncate font-heading text-[23px] leading-tight font-bold tracking-[-0.03em] text-negative tabular-nums lg:text-[28px]">
@@ -176,7 +176,7 @@ export default async function CardDetailPage({ params }: { params: Promise<{ id:
         </div>
 
         <div className="flex min-w-0 flex-col gap-1 rounded-[20px] bg-muted p-4 shadow-(--shadow-card) lg:p-5">
-          <SectionLabel>Limite usado</SectionLabel>
+          <StatLabel>Limite usado</StatLabel>
           {limitUsage ? (
             <>
               {/* Neutro, não text-negative: dinheiro comprometido não é

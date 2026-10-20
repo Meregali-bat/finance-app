@@ -53,7 +53,7 @@ export default async function FixedPage() {
             incomes.length === 0 ? (
               <EmptyState
                 text="Nenhuma renda cadastrada ainda."
-                hint="Toque no + para cadastrar."
+                hint="Use o + para cadastrar."
               />
             ) : (
               <ul className="grid gap-2 xl:grid-cols-2">
@@ -93,7 +93,7 @@ export default async function FixedPage() {
             expenses.length === 0 ? (
               <EmptyState
                 text="Nenhuma despesa fixa cadastrada ainda."
-                hint="Toque no + para cadastrar."
+                hint="Use o + para cadastrar."
               />
             ) : (
               <ul className="grid items-start gap-2 xl:grid-cols-2">
@@ -167,7 +167,7 @@ export default async function FixedPage() {
             categories.length === 0 ? (
               <EmptyState
                 text="Nenhuma categoria cadastrada ainda."
-                hint="Toque no + para cadastrar."
+                hint="Use o + para cadastrar."
               />
             ) : (
               <ul className="grid gap-2 xl:grid-cols-2">

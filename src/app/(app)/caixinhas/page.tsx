@@ -25,7 +25,7 @@ export default async function JarsPage() {
         <EmptyState
           icon={PiggyBank}
           text="Nenhuma caixinha criada ainda."
-          hint="Toque no + para criar uma e guardar o que sobrar no fim do período."
+          hint="Use o + para criar uma e guardar o que sobrar no fim do período."
         />
       ) : (
         // Decimal não atravessa para o cliente: o saldo vai como número.

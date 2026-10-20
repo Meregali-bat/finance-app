@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { PiggyBank } from "lucide-react";
-import { SectionLabel } from "@/components/page-header";
+import { StatLabel } from "@/components/page-header";
 import { CountUpCurrency } from "@/components/ui/animated-number";
 import { JarDepositDialog } from "@/components/forms/jar-deposit-dialog";
 import { DeleteIconButton } from "@/components/delete-icon-button";
@@ -65,7 +65,7 @@ export function JarsGrid({ jars }: { jars: JarView[] }) {
         className="rise-in flex flex-col gap-1"
         style={{ "--rise-delay": "60ms" } as React.CSSProperties}
       >
-        <SectionLabel>Total guardado</SectionLabel>
+        <StatLabel>Total guardado</StatLabel>
         <CountUpCurrency
           value={total}
           duration={1.2}

@@ -125,7 +125,7 @@ export default async function CardsPage() {
                   <div className="flex flex-col gap-0.5">
                     {/* Cores fixas, e não os tokens do tema: o fundo é a cor do cartão,
                         escura nos dois temas. */}
-                    <span className="text-[11px] font-semibold tracking-[0.08em] text-white/70 uppercase">
+                    <span className="text-[12.5px] font-medium text-white/75">
                       {overdue ? "Fatura vencida" : "Próxima fatura"}
                     </span>
                     <p

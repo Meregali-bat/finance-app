@@ -7,7 +7,13 @@ import {
   CircleCheck,
   PiggyBank,
 } from "lucide-react";
-import { IconSquare, ListRow, listRowSurface, type IconTone } from "@/components/list-row";
+import {
+  IconSquare,
+  ListRow,
+  listRowSurface,
+  SubtitleParts,
+  type IconTone,
+} from "@/components/list-row";
 import { DeleteIconButton } from "@/components/delete-icon-button";
 import { MovementFormDialog } from "@/components/forms/movement-form-dialog";
 import { unmarkExpensePayment } from "@/lib/actions/expense-payment";
@@ -55,7 +61,11 @@ export function MovementRow({
         <IconSquare tone={tone}>{icon}</IconSquare>
         <div className="min-w-0 flex-1">
           <p className="truncate text-[14.5px] font-semibold">{movement.description}</p>
-          {subtitle && <p className="text-[12.5px] text-muted-foreground">{subtitle}</p>}
+          {subtitle && (
+            <p className="text-[12.5px] text-muted-foreground">
+              <SubtitleParts text={subtitle} />
+            </p>
+          )}
         </div>
         <span
           className={`shrink-0 text-[14.5px] font-semibold tabular-nums ${
@@ -142,7 +152,8 @@ export function HistoryRow({ item, cards, categories }: Options & { item: Histor
   ) : (
     <Receipt />
   );
-  const tone: IconTone = isConfirmation ? "accent" : "neutral";
+  // Recebimento em turquesa, como o valor dele; pagamento no tom da marca.
+  const tone: IconTone = isReceipt ? "positive" : isConfirmation ? "accent" : "neutral";
 
   if (isDerived) {
     return (

@@ -79,7 +79,11 @@ export function ListRow({
         {icon && <IconSquare tone={tone}>{icon}</IconSquare>}
         <div className={cn("min-w-0 flex-1 transition-opacity", dim && "opacity-50")}>
           <p className="truncate text-[14.5px] font-semibold">{title}</p>
-          {subtitle && <p className="text-[12.5px] text-muted-foreground">{subtitle}</p>}
+          {subtitle && (
+            <p className="text-[12.5px] text-muted-foreground">
+              {typeof subtitle === "string" ? <SubtitleParts text={subtitle} /> : subtitle}
+            </p>
+          )}
         </div>
         {value !== undefined && (
           <span className={cn("shrink-0 text-[14.5px] font-semibold tabular-nums", valueClassName)}>
@@ -96,4 +100,18 @@ export function ListRow({
 /** O atraso de entrada de um item de lista, lido pelo `.rise-in`. */
 export function stagger(index: number, base = 80, step = 45) {
   return { "--rise-delay": `${base + index * step}ms` } as React.CSSProperties;
+}
+
+/**
+ * "12/08/26 · 3x de R$ 400,00" quebrando só entre as partes: cada uma fica
+ * inteira numa linha, e a quebra nunca separa "de" do valor.
+ */
+export function SubtitleParts({ text }: { text: string }) {
+  return text.split(" · ").map((part, i) => (
+    <span key={i}>
+      {i > 0 && " · "}
+      {/* Parte longa demais para uma linha estreita quebra normalmente. */}
+      <span className={part.length <= 24 ? "whitespace-nowrap" : undefined}>{part}</span>
+    </span>
+  ));
 }

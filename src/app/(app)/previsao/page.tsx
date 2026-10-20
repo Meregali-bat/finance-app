@@ -263,7 +263,7 @@ export default async function ForecastPage({
                   >
                     {chip.icon}
                     <div className="flex min-w-0 flex-col gap-0.5">
-                      <span className="truncate text-[11px] font-semibold tracking-[0.08em] text-(--hero-faint) uppercase">
+                      <span className="truncate text-[12.5px] font-medium text-(--hero-muted)">
                         {chip.label}
                       </span>
                       <span className="truncate text-[15px] font-semibold tabular-nums">
