@@ -2,7 +2,14 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { AlertTriangle, ArrowDownLeft, Check, CircleCheck, Clock } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowDownLeft,
+  CalendarClock,
+  Check,
+  CircleCheck,
+  Clock,
+} from "lucide-react";
 import { SectionLabel } from "@/components/page-header";
 import { UndoToast } from "@/components/undo-toast";
 import { ConfirmPaymentDialog } from "@/components/confirm-payment-dialog";
@@ -19,6 +26,8 @@ type Base = {
   label: string;
   amount: number;
   dueDate: Date;
+  /** Já passou do vencimento: só esse leva o alerta em coral. */
+  overdue: boolean;
   /**
    * "R$ 1.800,00 · vence em 18 de out.", montado no servidor: formatada aqui,
    * a data sairia no fuso do browser e poderia discordar do HTML.
@@ -98,9 +107,7 @@ export function HomeReminders({ reminders }: { reminders: HomeReminder[] }) {
   function partial(key: string, text: string, undo: () => Promise<void>) {
     // No setTimeout, como em `finish`: chamar Date.now() direto no handler
     // a regra de pureza do React não aceita.
-    timers.current.push(
-      window.setTimeout(() => setToast({ id: Date.now(), key, text, undo }), 0),
-    );
+    timers.current.push(window.setTimeout(() => setToast({ id: Date.now(), key, text, undo }), 0));
   }
 
   function undo() {
@@ -224,6 +231,7 @@ function ReminderCard({
   onDeferred: () => void;
 }) {
   const isIncome = reminder.kind === "income";
+  const overdue = !isIncome && reminder.overdue;
   const payLabel = isIncome ? "Marcar como recebida" : "Marcar como paga";
   const payTrigger = {
     label: payLabel,
@@ -241,20 +249,41 @@ function ReminderCard({
       <div
         className={cn(
           "flex size-[38px] shrink-0 items-center justify-center rounded-xl",
-          isIncome ? "bg-positive/12 text-positive" : "bg-negative/12 text-negative",
+          isIncome
+            ? "bg-positive/12 text-positive"
+            : overdue
+              ? "bg-negative/12 text-negative"
+              : "bg-muted text-primary",
         )}
       >
         {isIncome ? (
           <ArrowDownLeft className="size-[18px]" aria-hidden="true" />
-        ) : (
+        ) : overdue ? (
           <AlertTriangle className="size-[18px]" aria-hidden="true" />
+        ) : (
+          <CalendarClock className="size-[18px]" aria-hidden="true" />
         )}
       </div>
       <div className="min-w-0 flex-1">
         <p className="truncate text-[15px] font-semibold">{reminder.label}</p>
         {/* Sem `truncate`: quebrar numa segunda linha preserva a data, que era
-            o que o "…" comia. */}
-        <p className="text-[13px] text-muted-foreground tabular-nums">{reminder.detail}</p>
+            o que o "…" comia. Cada parte inteira numa linha só — a quebra cai
+            entre o valor e a data, nunca no meio de "10 de ago.". */}
+        <p className="text-[13px] text-muted-foreground tabular-nums">
+          {reminder.detail.split(" · ").map((part, i) => (
+            <span key={i}>
+              {i > 0 && " · "}
+              <span
+                className={cn(
+                  part.length <= 24 && "whitespace-nowrap",
+                  overdue && part.startsWith("venceu") && "text-negative",
+                )}
+              >
+                {part}
+              </span>
+            </span>
+          ))}
+        </p>
       </div>
       <div className="flex shrink-0 items-center gap-1.5">
         {reminder.kind === "due" && reminder.defer && (

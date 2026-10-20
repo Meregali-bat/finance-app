@@ -1,5 +1,5 @@
 import { formatDate } from "@/lib/format";
-import { SectionLabel } from "@/components/page-header";
+import { StatLabel } from "@/components/page-header";
 import { CountUpCurrency } from "@/components/ui/animated-number";
 import { BalanceAdjustmentDialog } from "@/components/forms/balance-adjustment-dialog";
 import { homeCard } from "@/components/home-card";
@@ -21,7 +21,7 @@ export function AccountBalanceCard({
   return (
     <div className={homeCard("flex items-center justify-between gap-4")}>
       <div className="flex min-w-0 flex-col gap-1.5">
-        <SectionLabel>Saldo em conta</SectionLabel>
+        <StatLabel>Saldo em conta</StatLabel>
         {balance == null ? (
           <p className="text-sm text-muted-foreground">
             Informe o saldo da sua conta para acompanhar quanto você tem agora.

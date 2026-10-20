@@ -109,6 +109,8 @@ export function CardBillProjection({
                 </span>
               }
               valueClassName={bill.amount === 0 ? "text-muted-foreground" : undefined}
+              // Fatura futura ainda vazia: contexto, não algo a pagar.
+              dim={bill.amount === 0 && !bill.paid}
             />
           </div>
         ))}

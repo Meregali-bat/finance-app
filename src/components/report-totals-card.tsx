@@ -1,4 +1,4 @@
-import { SectionLabel } from "@/components/page-header";
+import { StatLabel } from "@/components/page-header";
 import { formatCurrency } from "@/lib/format";
 import type { ReportTotals } from "@/lib/report-totals";
 import { cn } from "@/lib/utils";
@@ -32,7 +32,7 @@ export function ReportTotalsCard({ totals }: { totals: ReportTotals }) {
             key={figure.label}
             className="flex flex-col gap-1 px-4 py-3.5 shadow-[-1px_-1px_0_0_var(--hairline)] lg:px-5 lg:py-4"
           >
-            <SectionLabel>{figure.label}</SectionLabel>
+            <StatLabel>{figure.label}</StatLabel>
             <p
               className={cn(
                 "font-heading text-xl leading-tight font-bold tracking-[-0.03em] tabular-nums",

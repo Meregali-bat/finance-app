@@ -192,6 +192,12 @@ export default async function DashboardPage() {
       incomeId: inc.incomeId,
     })),
   ]
+    // `overdue` do cálculo marca o que ficou de um período anterior; para a
+    // tela, uma conta deste período com a data já passada também venceu.
+    .map((r) => ({
+      ...r,
+      overdue: r.kind === "due" && (r.overdue || differenceInCalendarDays(today, r.dueDate) > 0),
+    }))
     .map((r) => ({
       ...r,
       detail: [
@@ -341,7 +347,7 @@ export default async function DashboardPage() {
                     key={chip.label}
                     className="flex min-w-0 flex-col gap-0.5 rounded-[14px] bg-(--hero-chip) px-3.5 py-2.5 ring-1 ring-(--hero-line) sm:rounded-2xl sm:px-4"
                   >
-                    <span className="truncate text-[11px] font-semibold tracking-[0.08em] text-(--hero-faint) uppercase">
+                    <span className="truncate text-[12.5px] font-medium text-(--hero-muted)">
                       {chip.label}
                     </span>
                     <span className="truncate text-[15px] font-semibold tabular-nums">
@@ -437,7 +443,7 @@ export default async function DashboardPage() {
               <EmptyState
                 icon={Receipt}
                 text="Nenhuma movimentação lançada hoje ainda."
-                hint="Toque no + para lançar a primeira."
+                hint="Use o + para lançar a primeira."
               />
             ) : (
               <ul className="flex flex-col gap-2.5">{movementRows(todaysTransactions, 520)}</ul>

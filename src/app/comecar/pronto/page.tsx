@@ -71,7 +71,7 @@ export default async function OnboardingDonePage() {
         style={{ "--rise-delay": "200ms" } as React.CSSProperties}
       >
         <p className="text-[15px] leading-relaxed text-muted-foreground">
-          O número muda conforme você lança gastos e confirma o que recebe e o que paga. Toque no +
+          O número muda conforme você lança gastos e confirma o que recebe e o que paga. Use o +
           para lançar o primeiro.
         </p>
         <Link
