@@ -43,8 +43,9 @@ const COPY = {
       <>
         No app <b>Atalhos</b>, abra <b>Automação</b>, toque em <b>+</b> e, em Apps, escolha{" "}
         <b>Carteira</b> (“Quando eu tocar num cartão ou passe da Carteira”; no iOS 17 se chama{" "}
-        <b>Transação</b>). Marque os seus cartões, escolha <b>Executar Imediatamente</b> e siga para
-        criar um atalho novo.
+        <b>Transação</b>). Marque os seus cartões e deixe <b>Automação</b> ligado e <b>Notificar</b>{" "}
+        desligado (em versões anteriores: <b>Executar Imediatamente</b>). As ações se adicionam pela
+        busca, embaixo.
       </>
     ),
     step3: "Mande a compra para o app",
@@ -97,8 +98,9 @@ const COPY = {
       <>
         In the <b>Shortcuts</b> app, open <b>Automation</b>, tap <b>+</b> and, under Apps, choose{" "}
         <b>Wallet</b> (“When I tap a Wallet Card or Pass”; on iOS 17 it was called{" "}
-        <b>Transaction</b>). Select your cards, choose <b>Run Immediately</b> and go on to create a
-        new shortcut.
+        <b>Transaction</b>). Select your cards and leave <b>Automation</b> on and <b>Notify</b> off
+        (on older versions: <b>Run Immediately</b>). Actions are added from the search bar at the
+        bottom.
       </>
     ),
     step3: "Send the purchase to the app",
