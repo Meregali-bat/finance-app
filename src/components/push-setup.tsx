@@ -11,6 +11,7 @@ type State =
   | "loading"
   | "hidden" // navegador sem avisos e sem nada a ensinar
   | "install" // iPhone fora do app da tela de início: lá os avisos não existem
+  | "unsupported" // iPhone no app, mas num iOS sem avisos (antes do 16.4)
   | "denied"
   | "off"
   | "on";
@@ -32,13 +33,14 @@ export function PushSetup({ publicKey }: { publicKey: string }) {
         window.matchMedia("(display-mode: standalone)").matches ||
         (navigator as Navigator & { standalone?: boolean }).standalone === true;
       if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
-        return ios && !standalone ? "install" : "hidden";
+        if (!ios) return "hidden";
+        return standalone ? "unsupported" : "install";
       }
       if (Notification.permission === "denied") return "denied";
-      const registration = await navigator.serviceWorker.register("/sw.js", {
-        scope: "/",
-        updateViaCache: "none",
-      });
+      const registration = await withTimeout(
+        navigator.serviceWorker.register("/sw.js", { scope: "/", updateViaCache: "none" }),
+        8000,
+      );
       const subscription = await registration.pushManager.getSubscription();
       if (subscription) {
         // Mantém o servidor em dia com este aparelho (o endereço pode ter mudado).
@@ -49,7 +51,13 @@ export function PushSetup({ publicKey }: { publicKey: string }) {
     }
     detect()
       .then((next) => !cancelled && setState(next))
-      .catch(() => !cancelled && setState("hidden"));
+      // Um erro aqui não esconde o bloco: ele aparece com o motivo, e o
+      // "Ligar avisos" tenta de novo do zero.
+      .catch((e) => {
+        if (cancelled) return;
+        setError(`Não deu para preparar os avisos (${errorMessage(e, "erro desconhecido")}).`);
+        setState("off");
+      });
     return () => {
       cancelled = true;
     };
@@ -124,6 +132,10 @@ export function PushSetup({ publicKey }: { publicKey: string }) {
       text: "Para receber avisos, abra o app pelo ícone na tela de início. No Safari, toque em Compartilhar → Adicionar à Tela de Início.",
       action: false,
     },
+    unsupported: {
+      text: "Este iPhone não recebe avisos de apps da tela de início. Atualize o iOS (16.4 ou mais novo) e volte aqui.",
+      action: false,
+    },
     denied: {
       text: "Os avisos estão bloqueados. Libere em Ajustes → Notificações → Finanças e volte aqui.",
       action: false,
@@ -170,4 +182,14 @@ function base64UrlToBytes(value: string): Uint8Array<ArrayBuffer> {
   const bytes = new Uint8Array(new ArrayBuffer(raw.length));
   for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
   return bytes;
+}
+
+/** Uma promessa que desiste depois de `ms`, para o bloco nunca ficar preso carregando. */
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      window.setTimeout(() => reject(new Error("demorou demais para responder")), ms),
+    ),
+  ]);
 }
