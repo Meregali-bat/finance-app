@@ -10,7 +10,7 @@ import {
 } from "@/lib/shortcut";
 
 /**
- * Recebe uma compra do atalho do iPhone. A automação "Transação" do app
+ * Recebe uma compra do atalho do iPhone. A automação "Carteira" (antes "Transação") do app
  * Atalhos dispara a cada pagamento por aproximação e manda, em JSON,
  * `{ valor, loja, cartao }`, com a chave pessoal no cabeçalho
  * `Authorization: <chave>` (com ou sem o "Bearer " na frente).

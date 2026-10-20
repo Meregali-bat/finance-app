@@ -118,7 +118,7 @@ Até terminar o primeiro uso (`User.onboardedAt` nulo), o app leva para `/comeca
 
 ## Lançamento automático pelo iPhone (21/10)
 
-O iPhone não deixa ler as notificações de outros apps, então o caminho é a automação **Transação** do app Atalhos, que dispara a cada pagamento por aproximação pela Carteira. Ela manda `{ valor, loja, cartao }` em JSON para `POST /api/atalho`, com a chave pessoal no cabeçalho `Authorization` (com ou sem "Bearer ").
+O iPhone não deixa ler as notificações de outros apps, então o caminho é a automação **Carteira** do app Atalhos ("Transação" no iOS 17), que dispara a cada pagamento por aproximação pela Carteira. Ela manda `{ valor, loja, cartao }` em JSON para `POST /api/atalho`, com a chave pessoal no cabeçalho `Authorization` (com ou sem "Bearer ").
 
 - **Chave:** gerada em Cartões, mostrada uma única vez; o banco guarda só o SHA-256 (`User.shortcutTokenHash`). Gerar outra invalida a anterior; dá para desligar.
 - **Cartão:** casado pelo nome — o da Carteira contém o do app ("Nubank Ultravioleta" → "Nubank"), ou o contrário, palavra inteira, sem acento nem caixa; havendo mais de um, o nome mais longo. Sem cartão reconhecido, entra como gasto comum da conta.
