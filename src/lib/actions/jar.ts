@@ -79,18 +79,27 @@ export async function withdrawFromJar(jarId: string, formData: FormData) {
 
   const jar = await prisma.jar.findUnique({ where: { id: jarId, userId } });
   if (!jar) throw new Error("Caixinha não encontrada");
-  if (data.amount > Number(jar.balance) + 0.005) {
-    throw new Error("O valor é maior que o saldo da caixinha");
-  }
+  // Pode passar do saldo: a caixinha rende (CDB), e o que vier a mais é o
+  // rendimento. O saldo vai a zero, nunca negativo; o valor inteiro volta
+  // para o disponível.
+  const balance = Math.max(0, Number(jar.balance));
+  const decrement = Math.min(data.amount, balance);
+  const overdraw = data.amount - decrement > 0.005;
 
   const [deposit] = await prisma.$transaction([
     prisma.jarDeposit.create({
-      data: { amount: -data.amount, note: data.note ?? "Resgate", jarId, userId },
+      data: {
+        amount: -data.amount,
+        note: data.note ?? (overdraw ? "Resgate com rendimento" : "Resgate"),
+        ...(overdraw ? { balanceChange: -decrement } : {}),
+        jarId,
+        userId,
+      },
       select: { id: true },
     }),
     prisma.jar.update({
       where: { id: jarId, userId },
-      data: { balance: { decrement: data.amount } },
+      data: { balance: { decrement } },
     }),
   ]);
 
@@ -103,9 +112,7 @@ export async function withdrawFromJar(jarId: string, formData: FormData) {
 
 /**
  * O "Desfazer" de um guardar ou resgatar: apaga o movimento e devolve o saldo
- * da caixinha ao que era. Recusa se, no meio tempo, o saldo já não comporta a
- * volta — desfazer um depósito depois de resgatar tudo deixaria a caixinha
- * negativa.
+ * da caixinha ao que era.
  */
 export async function undoJarDeposit(depositId: string) {
   const userId = await requireUserId();
@@ -114,16 +121,18 @@ export async function undoJarDeposit(depositId: string) {
     include: { jar: { select: { balance: true } } },
   });
   if (!deposit) return;
-  const amount = Number(deposit.amount);
-  if (Number(deposit.jar.balance) - amount < -0.005) {
-    throw new Error("A caixinha já não tem saldo para desfazer este depósito");
-  }
+  // O quanto o saldo mudou, que num resgate com rendimento é menos que o
+  // valor. Desfazer um depósito depois de já ter resgatado tudo zera a
+  // caixinha em vez de deixá-la negativa.
+  const change = Number(deposit.balanceChange ?? deposit.amount);
+  const balance = Number(deposit.jar.balance);
+  const nextBalance = Math.max(0, balance - change);
 
   await prisma.$transaction([
     prisma.jarDeposit.delete({ where: { id: deposit.id } }),
     prisma.jar.update({
       where: { id: deposit.jarId, userId },
-      data: { balance: { decrement: amount } },
+      data: { balance: nextBalance },
     }),
   ]);
 

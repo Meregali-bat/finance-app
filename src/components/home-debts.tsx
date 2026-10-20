@@ -195,7 +195,7 @@ function ReceiveDialog({
         <form action={handleSubmit} className="flex flex-col gap-4">
           <p className="text-sm text-muted-foreground tabular-nums">
             Ainda deve {formatCurrency(debt.remaining)}. O que entrar abate os empréstimos mais
-            antigos primeiro.
+            antigos primeiro; se vier a mais, entra todo como receita.
           </p>
           <div className="grid grid-cols-2 gap-3">
             <div className="flex flex-col gap-2">
