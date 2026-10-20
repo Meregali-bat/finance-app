@@ -6,6 +6,7 @@ import {
   newShortcutToken,
   parseShortcutAmount,
   shortcutDescription,
+  walletCardText,
 } from "./shortcut";
 
 describe("parseShortcutAmount", () => {
@@ -88,5 +89,16 @@ describe("calendarToday", () => {
     expect(calendarToday(new Date(2026, 9, 20, 23, 30)).toISOString()).toBe(
       "2026-10-20T00:00:00.000Z",
     );
+  });
+});
+
+describe("walletCardText", () => {
+  it("texto, número e objeto viram texto; vazio vira nulo", () => {
+    expect(walletCardText("  Sicoob   Visa ")).toBe("Sicoob Visa");
+    expect(walletCardText(2455)).toBe("2455");
+    expect(walletCardText({ name: "Sicoob" })).toBe('{"name":"Sicoob"}');
+    expect(walletCardText("")).toBeNull();
+    expect(walletCardText(undefined)).toBeNull();
+    expect(walletCardText("x".repeat(100))).toHaveLength(80);
   });
 });

@@ -33,6 +33,7 @@ model User {
   loans              Loan[]
   loanRepayments     LoanRepayment[]
   pushSubscriptions  PushSubscription[]
+  walletCardAliases  WalletCardAlias[]
   createdAt          DateTime            @default(now())
 
   /// Quanto da renda o usuário aceita ver comprometido com despesa fixa e fatura
@@ -249,6 +250,10 @@ model Transaction {
   loan            Loan?
   /// Esta receita é dinheiro que alguém devolveu (ver LoanRepayment).
   loanRepayment   LoanRepayment?
+  /// O nome do cartão que a Carteira mandou pelo atalho, quando o app não o
+  /// reconheceu e lançou como gasto da conta. Ligar esse nome a um cartão
+  /// (WalletCardAlias) move estes lançamentos para o cartão.
+  walletCardName  String?
 
   @@index([userId, date])
   @@index([categoryId])
@@ -277,6 +282,7 @@ model CreditCard {
   createdAt     DateTime           @default(now())
   user          User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   purchases     CardPurchase[]
+  walletAliases WalletCardAlias[]
   fixedExpenses FixedExpense[]
   payments      ExpensePayment[]
   billEstimates CardBillEstimate[]
@@ -480,4 +486,24 @@ model PushSubscription {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+}
+
+/// O nome de um cartão como a Carteira do iPhone manda pelo atalho, ligado ao
+/// cartão do app que a pessoa escolheu. `cardId` nulo e `asAccount` falso =
+/// ainda sem resposta, e a tela Cartões pergunta. `asAccount` = é débito: as
+/// compras com esse nome ficam como gasto da conta, sem perguntar de novo.
+model WalletCardAlias {
+  id         String      @id @default(cuid())
+  userId     String
+  /// Como chegou, para mostrar ("Sicoob Visa").
+  walletName String
+  /// Normalizado (src/lib/shortcut.ts), para comparar.
+  normalized String
+  cardId     String?
+  asAccount  Boolean     @default(false)
+  createdAt  DateTime    @default(now())
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  card       CreditCard? @relation(fields: [cardId], references: [id], onDelete: SetNull)
+
+  @@unique([userId, normalized])
 }

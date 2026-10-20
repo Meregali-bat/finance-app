@@ -12,6 +12,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/page-header";
 import { CardFormDialog } from "@/components/forms/card-form-dialog";
 import { ShortcutSetup } from "@/components/shortcut-setup";
+import { WalletCardQuestion } from "@/components/wallet-card-question";
 import { shortcutLanguage } from "@/lib/shortcut-language";
 
 export default async function CardsPage() {
@@ -29,10 +30,28 @@ export default async function CardsPage() {
     },
   });
 
-  const [user, requestHeaders] = await Promise.all([
+  const [user, requestHeaders, unansweredWalletCards, strandedPurchases] = await Promise.all([
     prisma.user.findUnique({ where: { id: userId }, select: { shortcutTokenHash: true } }),
     headers(),
+    // Nomes de cartão que a Carteira mandou e ninguém respondeu ainda.
+    prisma.walletCardAlias.findMany({
+      where: { userId, cardId: null, asAccount: false },
+      orderBy: { createdAt: "asc" },
+      select: { id: true, walletName: true },
+    }),
+    prisma.transaction.findMany({
+      where: { userId, walletCardName: { not: null } },
+      select: { walletCardName: true, amount: true },
+    }),
   ]);
+  const pendingWalletCards = unansweredWalletCards.map((alias) => {
+    const purchases = strandedPurchases.filter((t) => t.walletCardName === alias.walletName);
+    return {
+      ...alias,
+      count: purchases.length,
+      total: purchases.reduce((sum, t) => sum + Number(t.amount), 0),
+    };
+  });
   // O endereço que o atalho chama, no domínio de onde a tela foi aberta.
   const host = requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host");
   const protocol = requestHeaders.get("x-forwarded-proto") ?? "https";
@@ -44,6 +63,15 @@ export default async function CardsPage() {
   return (
     <div className="flex flex-col gap-5 lg:gap-6">
       <PageHeader title="Cartões" action={<CardFormDialog />} />
+
+      {cards.length > 0 &&
+        pendingWalletCards.map((pending) => (
+          <WalletCardQuestion
+            key={pending.id}
+            pending={pending}
+            cards={cards.map((c) => ({ id: c.id, name: c.name }))}
+          />
+        ))}
 
       {cards.length === 0 ? (
         <EmptyState
