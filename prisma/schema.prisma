@@ -356,6 +356,11 @@ model JarDeposit {
   /// tira o dinheiro do disponível, como qualquer depósito. Os antigos seguem
   /// fora do saldo em conta, que foi informado contando com eles assim.
   fromPeriodClose Boolean  @default(false)
+  /// Quanto o saldo da caixinha mudou com este movimento, quando difere de
+  /// `amount`: um resgate maior que o saldo (o rendimento do CDB) zera a
+  /// caixinha, mas o valor inteiro volta para o disponível. O "Desfazer" usa
+  /// isto para devolver o saldo de antes. Nulo = igual a `amount`.
+  balanceChange   Decimal?
   jar             Jar      @relation(fields: [jarId], references: [id], onDelete: Cascade)
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 

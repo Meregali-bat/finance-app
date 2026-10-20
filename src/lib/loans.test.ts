@@ -22,6 +22,15 @@ describe("summarizeDebts", () => {
     expect(joao.since).toEqual(new Date(2026, 9, 10));
   });
 
+  it("some quem devolveu mais do que devia, sem sobra negativa nos empréstimos", () => {
+    const debts = summarizeDebts({
+      loans: [{ id: "a", personId: "mae", amount: 133.49, date: today, installments: 1 }],
+      repayments: [{ personId: "mae", amount: 134 }],
+      today,
+    });
+    expect(debts).toEqual([]);
+  });
+
   it("some quem já devolveu tudo", () => {
     const debts = summarizeDebts({
       loans: [{ id: "a", personId: "ana", amount: 50, date: today, installments: 1 }],

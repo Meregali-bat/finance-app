@@ -62,19 +62,10 @@ export async function receiveLoanPayment(personId: string, formData: FormData) {
     date: formData.get("date"),
   });
 
-  const person = await prisma.person.findFirst({
-    where: { id: personId, userId },
-    include: {
-      loans: { select: { amount: true } },
-      repayments: { include: { transaction: { select: { amount: true } } } },
-    },
-  });
+  const person = await prisma.person.findFirst({ where: { id: personId, userId } });
   if (!person) throw new Error("Pessoa não encontrada");
-  const owed = person.loans.reduce((sum, l) => sum + Number(l.amount), 0);
-  const paid = person.repayments.reduce((sum, r) => sum - Number(r.transaction.amount), 0);
-  if (data.amount > owed - paid + 0.005) {
-    throw new Error("O valor passa do que a pessoa ainda deve");
-  }
+  // Pode passar do que a pessoa devia (arredondou para cima, pagou com
+  // juros): o valor inteiro entra como receita, e a dívida fica quitada.
 
   const transaction = await prisma.$transaction(async (tx) => {
     const created = await tx.transaction.create({
