@@ -14,6 +14,7 @@ import { Label } from "@/components/ui/label";
 import { CurrencyInput } from "@/components/currency-input";
 import { markIncomeReceived } from "@/lib/actions/income-receipt";
 import type { IconTrigger } from "@/components/ui/icon-button";
+import { errorMessage } from "@/lib/error-message";
 
 export function MarkIncomeReceivedDialog({
   incomeId,
@@ -43,7 +44,7 @@ export function MarkIncomeReceivedDialog({
         setOpen(false);
         onDone?.(result);
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Erro ao salvar");
+        setError(errorMessage(e, "Erro ao salvar"));
       }
     });
   }

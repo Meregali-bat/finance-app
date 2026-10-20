@@ -16,6 +16,7 @@ import { Label } from "@/components/ui/label";
 import { CurrencyInput } from "@/components/currency-input";
 import { depositToJar, withdrawFromJar } from "@/lib/actions/jar";
 import { iconButton } from "@/components/ui/icon-button";
+import { errorMessage } from "@/lib/error-message";
 
 /**
  * Guardar e resgatar são o mesmo formulário com a direção trocada: o resgate
@@ -48,7 +49,7 @@ export function JarDepositDialog({
         setOpen(false);
         onDone?.({ depositId: result.depositId, amount: Number(formData.get("amount")) });
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Erro ao salvar");
+        setError(errorMessage(e, "Erro ao salvar"));
       }
     });
   }

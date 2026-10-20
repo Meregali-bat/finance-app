@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createJar } from "@/lib/actions/jar";
 import { iconButton } from "@/components/ui/icon-button";
+import { errorMessage } from "@/lib/error-message";
 
 export function JarFormDialog() {
   const [open, setOpen] = useState(false);
@@ -28,7 +29,7 @@ export function JarFormDialog() {
         await createJar(formData);
         setOpen(false);
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Erro ao salvar");
+        setError(errorMessage(e, "Erro ao salvar"));
       }
     });
   }

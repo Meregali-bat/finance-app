@@ -16,6 +16,7 @@ import { Label } from "@/components/ui/label";
 import { CurrencyInput } from "@/components/currency-input";
 import { createIncome, updateIncome } from "@/lib/actions/income";
 import { iconButton } from "@/components/ui/icon-button";
+import { errorMessage } from "@/lib/error-message";
 
 type IncomeValues = {
   id: string;
@@ -41,7 +42,7 @@ export function IncomeFormDialog({ income }: { income?: IncomeValues }) {
         }
         setOpen(false);
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Erro ao salvar");
+        setError(errorMessage(e, "Erro ao salvar"));
       }
     });
   }

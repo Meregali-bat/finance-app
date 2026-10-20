@@ -25,6 +25,7 @@ import { createCreditCard, updateCreditCard } from "@/lib/actions/card";
 import { CARD_BANKS, cardGradient, cardStyleOption } from "@/lib/card-look";
 import { cn } from "@/lib/utils";
 import { iconButton } from "@/components/ui/icon-button";
+import { errorMessage } from "@/lib/error-message";
 
 type CardValues = {
   id: string;
@@ -59,7 +60,7 @@ export function CardFormDialog({ card }: { card?: CardValues }) {
         }
         setOpen(false);
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Erro ao salvar");
+        setError(errorMessage(e, "Erro ao salvar"));
       }
     });
   }

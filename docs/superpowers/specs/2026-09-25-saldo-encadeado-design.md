@@ -109,3 +109,9 @@ Uma despesa (lançamento ou compra no cartão) pode ser marcada como **emprestad
 O que volta é uma **receita comum** ("Recebido de João", `Transaction` negativa) com um `LoanRepayment` dizendo de quem veio — por isso entra no saldo, no orçamento do dia em que chegou e no Histórico sem regra nova. Abate os empréstimos da pessoa do mais antigo para o mais novo (`src/lib/loans.ts`). Apagar a receita desfaz o recebimento.
 
 A Início mostra **A receber**: uma linha por pessoa com o total em aberto e a próxima parcela (ou "desde"), e o "Recebi". A Previsão não conta com o que te devem. No Histórico, a despesa emprestada diz "emprestado a João" e vai para o balde **Emprestado** em "Por categoria".
+
+## Cadastro e primeiro uso (20/10)
+
+Cadastro aberto na tela de login ("Criar conta": email e senha, mínimo 8 caracteres), sem envio de email — recuperar senha é pedir a quem administra. Email comparado sem diferença de maiúsculas, no cadastro e no login. Conta nova nasce com as categorias padrão (`src/lib/default-categories.ts`).
+
+Até terminar o primeiro uso (`User.onboardedAt` nulo), o app leva para `/comecar`: renda (obrigatória) → saldo em conta → contas fixas → cartão (os três opcionais), cada passo gravando na hora com as actions de sempre, e o resultado mostra o "quanto posso gastar hoje" calculado por `todayBudget` — a mesma função da Início. Quem já existia ficou marcado como concluído na migration.

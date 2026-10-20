@@ -10,6 +10,7 @@ import { UndoToast, type UndoToastState } from "@/components/undo-toast";
 import { deleteJar, undoJarDeposit } from "@/lib/actions/jar";
 import { formatCurrency } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { errorMessage } from "@/lib/error-message";
 
 export type JarView = { id: string; name: string; balance: number };
 
@@ -53,7 +54,7 @@ export function JarsGrid({ jars }: { jars: JarView[] }) {
       try {
         await undoJarDeposit(depositId);
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Não deu para desfazer");
+        setError(errorMessage(e, "Não deu para desfazer"));
       }
     });
   }

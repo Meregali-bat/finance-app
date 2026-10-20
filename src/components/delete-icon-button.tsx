@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { Trash2 } from "lucide-react";
 import { iconButton } from "@/components/ui/icon-button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { errorMessage } from "@/lib/error-message";
 
 export function DeleteIconButton({
   action,
@@ -49,7 +50,7 @@ export function DeleteIconButton({
               await action();
               setOpen(false);
             } catch (e) {
-              setError(e instanceof Error ? e.message : "Erro ao excluir");
+              setError(errorMessage(e, "Erro ao excluir"));
             }
           });
         }}

@@ -24,6 +24,7 @@ import { CurrencyInput } from "@/components/currency-input";
 import { createCardPurchase } from "@/lib/actions/card";
 import { todayInputValue } from "@/lib/format";
 import { LoanFields } from "@/components/forms/loan-fields";
+import { errorMessage } from "@/lib/error-message";
 
 const NONE = "__none__";
 
@@ -47,7 +48,7 @@ export function CardPurchaseFormDialog({
         setOpen(false);
         setCategoryId(NONE);
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Erro ao salvar");
+        setError(errorMessage(e, "Erro ao salvar"));
       }
     });
   }

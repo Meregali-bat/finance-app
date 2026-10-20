@@ -15,6 +15,7 @@ import { CurrencyInput } from "@/components/currency-input";
 import { formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { IconTrigger } from "@/components/ui/icon-button";
+import { errorMessage } from "@/lib/error-message";
 
 type Mode = "nextMonth" | "end";
 
@@ -60,7 +61,7 @@ export function DeferExpenseDialog({
         setOpen(false);
         onDone?.();
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Erro ao adiar");
+        setError(errorMessage(e, "Erro ao adiar"));
       }
     });
   }

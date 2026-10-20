@@ -23,6 +23,7 @@ import {
 import { CurrencyInput } from "@/components/currency-input";
 import { createFixedExpense, updateFixedExpense } from "@/lib/actions/expense";
 import { iconButton } from "@/components/ui/icon-button";
+import { errorMessage } from "@/lib/error-message";
 
 const NONE = "__none__";
 
@@ -64,7 +65,7 @@ export function ExpenseFormDialog({
         }
         setOpen(false);
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Erro ao salvar");
+        setError(errorMessage(e, "Erro ao salvar"));
       }
     });
   }
