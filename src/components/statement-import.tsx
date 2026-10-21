@@ -10,7 +10,6 @@ import {
   analyzeStatement,
   applyStatementDecisions,
   type StatementAnalysis,
-  type StatementDifference,
 } from "@/lib/actions/statement";
 import { errorMessage } from "@/lib/error-message";
 import { formatCurrency } from "@/lib/format";
@@ -18,6 +17,45 @@ import { cn } from "@/lib/utils";
 
 type Decision = "add" | "ignore";
 type Ready = Extract<StatementAnalysis, { ok: true }>;
+type AccountReady = Extract<Ready, { mode: "account" }>;
+type CardReady = Extract<Ready, { mode: "card" }>;
+
+/** Uma linha da lista, igual para extrato e fatura. */
+interface Row {
+  fingerprint: string;
+  title: string;
+  sub: string;
+  amount: string;
+  positive: boolean;
+}
+
+function rowsOf(analysis: Ready, categoryName: Map<string, string>): Row[] {
+  const category = (id: string | null) =>
+    id && categoryName.get(id) ? ` · ${categoryName.get(id)}` : "";
+  if (analysis.mode === "card") {
+    return analysis.differences.map((d) => ({
+      fingerprint: d.fingerprint,
+      title: d.description,
+      sub:
+        `${shortDay(d.date)}` +
+        (d.installment
+          ? ` · parcela ${d.installment.current}/${d.installment.total} · entra ${d.purchase.installments}x`
+          : d.fee
+            ? " · tarifa do banco"
+            : "") +
+        category(d.categoryId),
+      amount: formatCurrency(d.amount),
+      positive: false,
+    }));
+  }
+  return analysis.differences.map((d) => ({
+    fingerprint: d.fingerprint,
+    title: d.description,
+    sub: `${shortDay(d.date)} · ${d.direction === "in" ? "entrada" : "saída"}${category(d.categoryId)}`,
+    amount: d.direction === "in" ? `+${formatCurrency(d.amount)}` : formatCurrency(d.amount),
+    positive: d.direction === "in",
+  }));
+}
 
 /** "2026-10-07" → "07 out" — lido como dia de calendário, sem fuso. */
 function shortDay(iso: string) {
@@ -27,11 +65,14 @@ function shortDay(iso: string) {
 }
 
 /**
- * Importar o extrato do Nubank: escolher o PDF, ver o que não está no app e
- * decidir linha a linha. Nada é gravado antes de "Confirmar".
+ * Importar extrato (Nubank, Sicoob) ou fatura do cartão (Sicoob): escolher o
+ * PDF, ver o que não está no app e decidir linha a linha. Nada é gravado
+ * antes de "Confirmar".
  */
 export function StatementImport({ categories }: { categories: { id: string; name: string }[] }) {
   const [analysis, setAnalysis] = useState<Ready | null>(null);
+  // Guardado para conferir de novo contra outro cartão, sem escolher o arquivo de novo.
+  const [file, setFile] = useState<File | null>(null);
   const [decisions, setDecisions] = useState<Record<string, Decision>>({});
   const [done, setDone] = useState<{ added: number; ignored: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -39,11 +80,13 @@ export function StatementImport({ categories }: { categories: { id: string; name
   const [saving, startSaving] = useTransition();
   const categoryName = new Map(categories.map((c) => [c.id, c.name]));
 
-  function read(file: File) {
+  function read(chosen: File, cardId?: string) {
     setError(null);
     setDone(null);
+    setFile(chosen);
     const data = new FormData();
-    data.set("file", file);
+    data.set("file", chosen);
+    if (cardId) data.set("cardId", cardId);
     startReading(async () => {
       try {
         const result = await analyzeStatement(data);
@@ -66,15 +109,25 @@ export function StatementImport({ categories }: { categories: { id: string; name
 
   function confirm() {
     if (!analysis) return;
-    const pick = (decision: Decision) =>
-      analysis.differences.filter((d) => decisions[d.fingerprint] === decision);
+    const chosen = (decision: Decision) => (d: { fingerprint: string }) =>
+      decisions[d.fingerprint] === decision;
+    const ignore = analysis.differences.filter(chosen("ignore")).map((d) => d.fingerprint);
+    const payload =
+      analysis.mode === "card"
+        ? {
+            add: [],
+            ignore,
+            cardAdd: analysis.differences.filter(chosen("add")).map((d) => ({
+              cardId: analysis.cardId,
+              ...d.purchase,
+              categoryId: d.categoryId,
+            })),
+          }
+        : { add: analysis.differences.filter(chosen("add")), ignore };
     setError(null);
     startSaving(async () => {
       try {
-        const result = await applyStatementDecisions({
-          add: pick("add"),
-          ignore: pick("ignore").map((d) => d.fingerprint),
-        });
+        const result = await applyStatementDecisions(payload);
         setDone(result);
         setAnalysis(null);
         setDecisions({});
@@ -106,7 +159,8 @@ export function StatementImport({ categories }: { categories: { id: string; name
               : "Escolher o PDF do extrato"}
         </span>
         <span className="text-[13px] text-muted-foreground">
-          O PDF do extrato da conta do Nubank ou do Sicoob, como o app do banco exporta.
+          O PDF do extrato da conta (Nubank ou Sicoob) ou da fatura do cartão Sicoob, como o app do
+          banco exporta.
         </span>
         <input
           type="file"
@@ -148,37 +202,53 @@ export function StatementImport({ categories }: { categories: { id: string; name
 
       {analysis && (
         <>
-          <Summary analysis={analysis} />
+          {analysis.mode === "card" ? (
+            <CardSummary
+              analysis={analysis}
+              disabled={reading}
+              onCardChange={(cardId) => file && read(file, cardId)}
+            />
+          ) : (
+            <Summary analysis={analysis} />
+          )}
 
-          {analysis.unmatchedBills.map((bill) => (
-            <div
-              key={`${bill.date}-${bill.amount}`}
-              className="flex items-start gap-3 rounded-[18px] bg-negative/8 px-4 py-3 text-[13px] ring-1 ring-negative/20"
-            >
-              <AlertTriangle className="mt-0.5 size-4 shrink-0 text-negative" aria-hidden="true" />
-              <p>
-                Pagamento de fatura de <b className="tabular-nums">{formatCurrency(bill.amount)}</b>{" "}
-                em {shortDay(bill.date)} não está marcado no app. Confira em{" "}
-                <Link href="/cartoes" className="font-medium underline underline-offset-4">
-                  Cartões
-                </Link>
-                .
-              </p>
-            </div>
-          ))}
+          {analysis.mode === "account" &&
+            analysis.unmatchedBills.map((bill) => (
+              <div
+                key={`${bill.date}-${bill.amount}`}
+                className="flex items-start gap-3 rounded-[18px] bg-negative/8 px-4 py-3 text-[13px] ring-1 ring-negative/20"
+              >
+                <AlertTriangle
+                  className="mt-0.5 size-4 shrink-0 text-negative"
+                  aria-hidden="true"
+                />
+                <p>
+                  Pagamento de fatura de{" "}
+                  <b className="tabular-nums">{formatCurrency(bill.amount)}</b> em{" "}
+                  {shortDay(bill.date)} não está marcado no app. Confira em{" "}
+                  <Link href="/cartoes" className="font-medium underline underline-offset-4">
+                    Cartões
+                  </Link>
+                  .
+                </p>
+              </div>
+            ))}
 
           {analysis.differences.length === 0 ? (
             <div className={homeCard("flex items-center gap-3")}>
               <CircleCheck className="size-6 shrink-0 text-positive" aria-hidden="true" />
-              <p className="text-sm">Tudo do extrato já está no app. Nenhuma diferença.</p>
+              <p className="text-sm">
+                Tudo {analysis.mode === "card" ? "da fatura" : "do extrato"} já está no app. Nenhuma
+                diferença.
+              </p>
             </div>
           ) : (
             <div className="flex flex-col gap-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <SectionLabel>
                   {analysis.differences.length === 1
-                    ? "1 movimentação que não está no app"
-                    : `${analysis.differences.length} movimentações que não estão no app`}
+                    ? `1 ${analysis.mode === "card" ? "lançamento" : "movimentação"} que não está no app`
+                    : `${analysis.differences.length} ${analysis.mode === "card" ? "lançamentos" : "movimentações"} que não estão no app`}
                 </SectionLabel>
                 <div className="flex gap-1">
                   <Button type="button" variant="ghost" size="sm" onClick={() => decideAll("add")}>
@@ -195,11 +265,10 @@ export function StatementImport({ categories }: { categories: { id: string; name
                 </div>
               </div>
               <ul className="flex flex-col gap-2">
-                {analysis.differences.map((d) => (
+                {rowsOf(analysis, categoryName).map((d) => (
                   <DifferenceRow
                     key={d.fingerprint}
-                    difference={d}
-                    category={d.categoryId ? categoryName.get(d.categoryId) : undefined}
+                    row={d}
                     decision={decisions[d.fingerprint]}
                     onDecide={(decision) =>
                       setDecisions((current) => ({ ...current, [d.fingerprint]: decision }))
@@ -229,7 +298,73 @@ export function StatementImport({ categories }: { categories: { id: string; name
   );
 }
 
-function Summary({ analysis }: { analysis: Ready }) {
+function CardSummary({
+  analysis,
+  disabled,
+  onCardChange,
+}: {
+  analysis: CardReady;
+  disabled: boolean;
+  onCardChange: (cardId: string) => void;
+}) {
+  const gap =
+    analysis.bankTotal !== null
+      ? Math.round((analysis.bankTotal - analysis.appTotal) * 100) / 100
+      : null;
+  return (
+    <div className={homeCard("flex flex-col gap-3")}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="font-heading text-[15px] font-semibold">
+          Fatura{analysis.dueDate ? ` que vence em ${shortDay(analysis.dueDate)}` : ""}
+        </p>
+        {analysis.cards.length > 1 && (
+          <label className="flex items-center gap-2 text-[13px] text-muted-foreground">
+            Cartão no app
+            <select
+              value={analysis.cardId}
+              disabled={disabled}
+              onChange={(e) => onCardChange(e.target.value)}
+              className="rounded-full bg-(--field) px-3 py-1.5 text-[13px] font-medium text-foreground ring-1 ring-(--hairline)"
+            >
+              {analysis.cards.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+      </div>
+      <dl className="grid grid-cols-2 gap-3 text-sm">
+        <div>
+          <dt className="text-[12.5px] text-muted-foreground">No banco</dt>
+          <dd className="font-heading text-lg font-bold tabular-nums">
+            {analysis.bankTotal !== null ? formatCurrency(analysis.bankTotal) : "—"}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-[12.5px] text-muted-foreground">No app</dt>
+          <dd className="font-heading text-lg font-bold tabular-nums">
+            {formatCurrency(analysis.appTotal)}
+          </dd>
+        </div>
+      </dl>
+      <p className="text-[13px] text-muted-foreground">
+        {analysis.lineCount} lançamentos · {analysis.matched}{" "}
+        {analysis.matched === 1 ? "já estava" : "já estavam"} no app
+        {analysis.alreadyIgnored > 0 ? ` · ${analysis.alreadyIgnored} ignorados antes` : ""}
+        {gap !== null && Math.abs(gap) >= 0.01
+          ? ` · faltam ${formatCurrency(Math.abs(gap))} ${gap > 0 ? "no app" : "no banco"}`
+          : gap !== null
+            ? " · os totais batem"
+            : ""}
+        .
+      </p>
+    </div>
+  );
+}
+
+function Summary({ analysis }: { analysis: AccountReady }) {
   const parts = [
     `${analysis.matched} já ${analysis.matched === 1 ? "estava" : "estavam"} no app`,
     analysis.ownTransfers > 0 && `${analysis.ownTransfers} entre suas contas`,
@@ -248,17 +383,14 @@ function Summary({ analysis }: { analysis: Ready }) {
 }
 
 function DifferenceRow({
-  difference: d,
-  category,
+  row,
   decision,
   onDecide,
 }: {
-  difference: StatementDifference;
-  category?: string;
+  row: Row;
   decision?: Decision;
   onDecide: (decision: Decision) => void;
 }) {
-  const incoming = d.direction === "in";
   return (
     <li
       className={homeCard(
@@ -269,23 +401,20 @@ function DifferenceRow({
       )}
     >
       <div className="min-w-[10rem] flex-1">
-        <p className="truncate text-[15px] font-semibold">{d.description}</p>
-        <p className="text-[13px] text-muted-foreground">
-          {shortDay(d.date)} · {incoming ? "entrada" : "saída"}
-          {category ? ` · ${category}` : ""}
-        </p>
+        <p className="truncate text-[15px] font-semibold">{row.title}</p>
+        <p className="text-[13px] text-muted-foreground">{row.sub}</p>
       </div>
       <span
         className={cn(
           "shrink-0 text-[15px] font-semibold tabular-nums",
-          incoming && "text-positive",
+          row.positive && "text-positive",
         )}
       >
-        {incoming ? `+${formatCurrency(d.amount)}` : formatCurrency(d.amount)}
+        {row.amount}
       </span>
       <div
         role="group"
-        aria-label={`O que fazer com ${d.description}`}
+        aria-label={`O que fazer com ${row.title}`}
         className="flex rounded-full bg-muted p-0.5"
       >
         {(

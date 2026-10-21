@@ -29,9 +29,21 @@ O extrato de conta corrente do Sicoob (SISBR) também é lido (`src/lib/statemen
 
 Conferido com o extrato real: entradas menos saídas, depois dos estornos, batem com a variação do saldo do período.
 
+## Fatura do cartão Sicoob (21/10)
+
+O mesmo "Importar extrato" reconhece a fatura do Sicoobcard (`src/lib/statement/sicoob-card.ts`) e confere com o **cartão escolhido no app** (sugere o que tem "Sicoob" no nome).
+
+- Os lançamentos ficam em duas colunas; cada um é lido a partir da sua data, juntando a faixa logo abaixo dela (a parcela "05/08" e as linhas de dólar e cotação de uma compra internacional).
+- O pagamento da fatura anterior (valor negativo) fica de fora; IOF e proteção entram como tarifa.
+- Conferência (`card-reconcile.ts`) contra o que o app cobra **nesta fatura**: as parcelas das compras do cartão e as assinaturas. Mesmo valor (um centavo de folga); à vista, até 3 dias de diferença na data; parcelada ou assinatura, sem olhar data.
+- **Adicionar uma parcelada cria só o que falta** (decisão do usuário): na parcela 5 de 8, uma compra de 4x da parcela, datada no fechamento desta fatura — a primeira das quatro cai aqui e as faturas antigas, já pagas, não mudam. A descrição leva "(parcelas 5 a 8 de 8)".
+- No topo, o total da fatura no banco e no app, e quanto falta.
+
+Conferido com a fatura real: os 59 lançamentos somam o total da fatura.
+
 ## Fora desta versão
 
-Extrato de cartão de crédito.
+Fatura do cartão do Nubank.
 
 ## Decisões do construtor
 
