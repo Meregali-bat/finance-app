@@ -17,9 +17,21 @@ Em **Histórico → Importar extrato**, escolhe o PDF. O app lê, confere com o 
 - **O resto** (Pix para lojas e pessoas, débito, boleto, Pix recebido): conferido com o que saiu ou entrou na conta pelo app — lançamentos, pagamentos de conta fixa e de fatura, caixinhas, rendas — pelo **mesmo valor com até 2 dias de diferença** (rendas: até 3). Cada registro do app confere uma linha só.
 - O adicionado vira lançamento comum (gasto ou receita), com descrição limpa ("Pix para Posto Roda Mais", "Spotify") e a categoria do último lançamento com a mesma descrição. Com data anterior à última correção do saldo, não mexe no saldo — a regra de `alreadyInReading` já cuida disso.
 
+## Sicoob (21/10)
+
+O extrato de conta corrente do Sicoob (SISBR) também é lido (`src/lib/statement/sicoob.ts`): uma linha "DD/MM HISTÓRICO VALOR C/D" por movimento, com detalhes embaixo; o ano vem do período no cabeçalho. Particularidades:
+
+- **Estornos** ("EST.COMP VISA ELECT", "EST.DÉB.EMPRÉSTIMO", "EST.DÉB. CONV. SEGU") anulam o original de mesmo valor e DOC — o do mesmo dia primeiro, senão o mais próximo — e os dois somem.
+- **"PIX.EMIT.OUT IF-MSM"** (mesma titularidade) e Pix recebido do próprio titular são transferências entre contas.
+- **"DÉB.PGTO.BOLETO INT" com "Pagamento de cartão de crédito"** é pagamento de fatura.
+- **Quem está do outro lado**: o favorecido ("FAV.:") na transferência, a loja na compra no débito, o nome (ou o CNPJ, quando é só ele) no Pix.
+- Históricos mudos viram nomes legíveis: "Parcela de empréstimo", "Seguro", "Juros do cheque especial", "IOF".
+
+Conferido com o extrato real: entradas menos saídas, depois dos estornos, batem com a variação do saldo do período.
+
 ## Fora desta versão
 
-Extrato do Sicoob (outro formato). Extrato de cartão de crédito.
+Extrato de cartão de crédito.
 
 ## Decisões do construtor
 

@@ -13,7 +13,7 @@ export default async function ImportStatementPage() {
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-5 lg:gap-6">
       <PageHeader
         title="Importar extrato"
-        subtitle="Confere o extrato com o app e mostra o que falta"
+        subtitle="Nubank ou Sicoob, conferido com o app"
         backHref="/historico"
         backLabel="Voltar ao Histórico"
       />

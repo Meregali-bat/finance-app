@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/auth-helpers";
 import { categoryFromHistory } from "@/lib/category-from-history";
 import { pdfTextItems } from "@/lib/statement/pdf";
-import { parseNubankStatement } from "@/lib/statement/nubank";
+import { parseStatement } from "@/lib/statement/parse";
 import { localDay, reconcile, utcDay, type AppMovement } from "@/lib/statement/reconcile";
 
 export interface StatementDifference {
@@ -52,14 +52,15 @@ export async function analyzeStatement(formData: FormData): Promise<StatementAna
 
   let parsed;
   try {
-    parsed = parseNubankStatement(await pdfTextItems(new Uint8Array(await file.arrayBuffer())));
+    parsed = parseStatement(await pdfTextItems(new Uint8Array(await file.arrayBuffer())));
   } catch {
     return { ok: false, error: "Não deu para abrir esse PDF." };
   }
   if (parsed.lines.length === 0) {
     return {
       ok: false,
-      error: "Não reconheci movimentações nesse PDF. Ele precisa ser o extrato da conta do Nubank.",
+      error:
+        "Não reconheci movimentações nesse PDF. Ele precisa ser o extrato da conta do Nubank ou do Sicoob.",
     };
   }
 

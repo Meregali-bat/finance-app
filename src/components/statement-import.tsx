@@ -106,7 +106,7 @@ export function StatementImport({ categories }: { categories: { id: string; name
               : "Escolher o PDF do extrato"}
         </span>
         <span className="text-[13px] text-muted-foreground">
-          No app do Nubank: Extrato → Exportar extrato → PDF. Por enquanto, só a conta do Nubank.
+          O PDF do extrato da conta do Nubank ou do Sicoob, como o app do banco exporta.
         </span>
         <input
           type="file"
