@@ -8,7 +8,7 @@ import { LineChart } from "@/components/charts/line-chart";
 import { homeCard } from "@/components/home-card";
 import { stagger } from "@/components/list-row";
 import { SectionLabel } from "@/components/page-header";
-import { formatCurrency, formatDate } from "@/lib/format";
+import { formatCurrency, formatDate, todayInputValue } from "@/lib/format";
 import { PeriodPicker } from "@/components/period-picker";
 import { ReportTotalsCard } from "@/components/report-totals-card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -21,6 +21,8 @@ import { loadHistoryItems } from "@/lib/history-items";
 import { prisma } from "@/lib/prisma";
 import { parseSlices, sliceOfCategory } from "@/lib/slices";
 import { TransactionsTable } from "@/components/transactions-table";
+import { SpendingCalendarCard } from "@/components/spending-calendar-card";
+import { spendingCalendar } from "@/lib/spending-calendar";
 
 const UNCATEGORIZED = "__none__";
 const LENT = "__lent__";
@@ -75,6 +77,38 @@ export default async function HistoryPage({
     }))
     .sort((a, b) => b.amount - a.amount);
 
+  // O calendário troca a linha diária: num período de dias, ele mostra o mesmo
+  // ritmo e ainda diz o que saiu em cada dia. Só o dia a dia entra nele — os
+  // lançamentos e as compras no cartão no dia em que foram feitas.
+  const daily = buckets.length > 1 && buckets[0].unit === "day";
+  const today = todayInputValue();
+  const calendar = daily
+    ? spendingCalendar({
+        firstDay: range.firstDay,
+        lastDay: range.lastDay,
+        today,
+        entries: [
+          ...items
+            .filter((i) => i.kind === "transaction" && i.amount > 0)
+            .map((i) => ({
+              date: i.date,
+              amount: i.amount,
+              description: i.description,
+            })),
+          ...creditCards.flatMap((card) =>
+            card.purchases
+              .filter((p) => p.date >= utcRangeStart && p.date < utcRangeEnd)
+              .map((p) => ({
+                date: p.date,
+                amount: Number(p.amount),
+                description: p.description,
+                cardName: card.name,
+              })),
+          ),
+        ],
+      })
+    : null;
+
   const categoryOptions = categories.map((c) => ({ id: c.id, name: c.name }));
   const cardOptions = creditCards.filter((c) => c.active).map((c) => ({ id: c.id, name: c.name }));
 
@@ -102,7 +136,16 @@ export default async function HistoryPage({
 
       {/* O gasto do período no tempo: uma série só, em rosé, sem legenda — o
           título diz o que é. As colunas somam o "Gasto" do resumo. */}
-      {buckets.length > 1 && (
+      {calendar && (
+        <SpendingCalendarCard
+          calendar={calendar}
+          initialDay={
+            today >= range.firstDay && today <= range.lastDay ? today : (calendar.peak?.key ?? null)
+          }
+        />
+      )}
+
+      {buckets.length > 1 && !daily && (
         <div
           className={homeCard("rise-in flex flex-col gap-4")}
           style={{ "--rise-delay": "140ms" } as React.CSSProperties}
@@ -128,9 +171,10 @@ export default async function HistoryPage({
               valueLabel: formatCurrency(bucket.total),
               detail:
                 bucket.unit === "month"
-                  ? new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric" }).format(
-                      bucket.start,
-                    )
+                  ? new Intl.DateTimeFormat("pt-BR", {
+                      month: "long",
+                      year: "numeric",
+                    }).format(bucket.start)
                   : formatDate(bucket.start),
               selected:
                 bucket.total === Math.max(...buckets.map((b) => b.total)) && bucket.total > 0,
