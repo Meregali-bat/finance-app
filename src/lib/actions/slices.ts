@@ -63,3 +63,55 @@ export async function setItemCategory(input: unknown) {
   }
   revalidatePath("/", "layout");
 }
+
+const refSchema = z.object({ kind: z.enum(["transaction", "card"]), id: z.string().min(1) });
+
+/** Troca a fatia de um lançamento só; `null` volta a seguir a categoria. */
+export async function setItemSlice(input: unknown) {
+  const userId = await requireUserId();
+  const { kind, id, slice } = refSchema.extend({ slice: sliceKey.nullable() }).parse(input);
+  if (kind === "transaction") {
+    await prisma.transaction.updateMany({ where: { id, userId }, data: { slice } });
+  } else {
+    await prisma.cardPurchase.updateMany({ where: { id, userId }, data: { slice } });
+  }
+  revalidatePath("/", "layout");
+}
+
+const bulkSchema = z.object({ items: z.array(refSchema).min(1).max(500) });
+
+/** A mesma categoria para vários lançamentos de uma vez. */
+export async function bulkSetCategory(input: unknown) {
+  const userId = await requireUserId();
+  const { items, categoryId } = bulkSchema.extend({ categoryId: z.string().min(1) }).parse(input);
+  await prisma.category.findFirstOrThrow({ where: { id: categoryId, userId } });
+  const ids = (kind: "transaction" | "card") =>
+    items.filter((i) => i.kind === kind).map((i) => i.id);
+  await prisma.$transaction([
+    prisma.transaction.updateMany({
+      where: { userId, id: { in: ids("transaction") } },
+      data: { categoryId },
+    }),
+    prisma.cardPurchase.updateMany({
+      where: { userId, id: { in: ids("card") } },
+      data: { categoryId },
+    }),
+  ]);
+  revalidatePath("/", "layout");
+}
+
+/**
+ * Apaga vários lançamentos de uma vez. Um empréstimo ligado a eles vai junto,
+ * como ao apagar um só.
+ */
+export async function bulkDelete(input: unknown) {
+  const userId = await requireUserId();
+  const { items } = bulkSchema.parse(input);
+  const ids = (kind: "transaction" | "card") =>
+    items.filter((i) => i.kind === kind).map((i) => i.id);
+  await prisma.$transaction([
+    prisma.transaction.deleteMany({ where: { userId, id: { in: ids("transaction") } } }),
+    prisma.cardPurchase.deleteMany({ where: { userId, id: { in: ids("card") } } }),
+  ]);
+  revalidatePath("/", "layout");
+}

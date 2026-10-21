@@ -46,10 +46,13 @@ export async function loadSlicesOverview(userId: string, today: Date) {
 
   // O emprestado fica de fora: é dinheiro que volta, não gasto seu.
   const spendingItems = items.filter((i) => countsAsSpending(i) && !i.lentTo);
+  // A fatia trocada no lançamento vale mais que a da categoria — e conta
+  // mesmo sem categoria.
+  const chosen = (i: { slice?: string | null }) => (isSliceKey(i.slice) ? i.slice : null);
   const spending = spendingItems
-    .filter((i) => i.categoryId)
-    .map((i) => ({ slice: sliceOf(i.categoryId!), amount: i.amount }));
-  const uncategorized = spendingItems.filter((i) => !i.categoryId);
+    .filter((i) => chosen(i) || i.categoryId)
+    .map((i) => ({ slice: chosen(i) ?? sliceOf(i.categoryId!), amount: i.amount }));
+  const uncategorized = spendingItems.filter((i) => !i.categoryId && !chosen(i));
 
   // A conta fixa do período que ainda não foi paga também já é da fatia dela:
   // o dinheiro está comprometido, e o orçamento já o desconta. O que um

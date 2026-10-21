@@ -149,3 +149,10 @@ A renda do período (a confirmada, de um pagamento ao próximo) é dividida em s
 - Sem fatias configuradas (`User.budgetSlices` nulo), nada muda no número do dia.
 
 Regras em `src/lib/slices.ts`; dados em `src/lib/slices-data.ts`; telas em `/metas` e `/metas/ajustar`.
+
+## Listagem de transações (22/10)
+
+A aba Lançamentos do Histórico vira uma listagem para arrumar o período: busca por descrição; filtros de entrada/saída, categoria (inclusive "sem categoria") e conta ou cartão; ordem por data, descrição ou valor; totais do que está filtrado; 25 por página. No computador é uma tabela; no celular, linhas com os menus embaixo.
+
+- Categoria e **fatia** se trocam na própria linha, só em lançamentos e compras no cartão (o resto vem de outras telas e só aparece). A fatia de um lançamento (`Transaction.slice`, `CardPurchase.slice`) vale mais que a da categoria — decisão do usuário —, e "Pela categoria" volta a seguir a categoria.
+- Seleção de vários para dar a mesma categoria ou apagar de uma vez (apagar leva junto o empréstimo ligado, como apagar um só).

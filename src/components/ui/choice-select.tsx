@@ -22,6 +22,7 @@ export function ChoiceSelect({
   placeholder,
   disabled,
   className,
+  display,
 }: {
   value: string | null;
   onChange: (value: string) => void;
@@ -31,6 +32,8 @@ export function ChoiceSelect({
   placeholder?: string;
   disabled?: boolean;
   className?: string;
+  /** O que o campo mostra no lugar do rótulo da opção (uma versão curta, ou um "herdado" em cinza). */
+  display?: React.ReactNode;
 }) {
   return (
     <Select
@@ -43,15 +46,18 @@ export function ChoiceSelect({
       <SelectTrigger
         size="sm"
         aria-label={label}
-        className={cn("min-w-36 justify-between", className)}
+        className={cn("min-w-0 justify-between", className)}
       >
         <SelectValue placeholder={placeholder}>
           {(current: string | null) =>
-            options.find((o) => o.value === current)?.label ?? placeholder ?? ""
+            display ?? options.find((o) => o.value === current)?.label ?? placeholder ?? ""
           }
         </SelectValue>
       </SelectTrigger>
-      <SelectContent>
+      {/* Abaixo do campo, e não por cima dele alinhado à opção escolhida: numa
+          tabela, o menu por cima esconde a linha e a última opção ficava sob a
+          seta de rolagem. */}
+      <SelectContent alignItemWithTrigger={false} align="start">
         {options.map((option) => (
           <SelectItem key={option.value} value={option.value}>
             {option.label}
