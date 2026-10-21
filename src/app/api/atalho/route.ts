@@ -6,6 +6,9 @@ import { loadBudgetInputs } from "@/lib/budget-inputs";
 import { overspendAlert } from "@/lib/alerts";
 import { sendAlerts } from "@/lib/push";
 import { categoryFromHistory } from "@/lib/category-from-history";
+import { loadSlicesOverview } from "@/lib/slices-data";
+import { SLICES, crossedNinety, sliceOfCategory } from "@/lib/slices";
+
 import {
   calendarToday,
   hashShortcutToken,
@@ -106,6 +109,26 @@ export async function POST(request: Request) {
     try {
       const alert = overspendAlert(await loadBudgetInputs(userId), new Date());
       if (alert) await sendAlerts(userId, [alert]);
+      // A compra levou a fatia dela para além de 90% do previsto?
+      if (categoryId) {
+        const [overview, category] = await Promise.all([
+          loadSlicesOverview(userId, new Date()),
+          prisma.category.findUnique({ where: { id: categoryId } }),
+        ]);
+        const key = category ? sliceOfCategory(category) : null;
+        const usage = overview.usage.find((u) => u.key === key);
+        const slice = SLICES.find((s) => s.key === key);
+        if (usage && slice && !slice.saving && crossedNinety(usage, amount)) {
+          await sendAlerts(userId, [
+            {
+              title: `${slice.name} chegou a ${Math.round(usage.percentUsed)}% do previsto`,
+              body: `${formatCurrency(usage.used)} de ${formatCurrency(usage.limit)} neste período.`,
+              url: "/metas",
+              tag: `slice-${slice.key}-${overview.periodStart.toISOString()}`,
+            },
+          ]);
+        }
+      }
     } catch (error) {
       console.error("Aviso de limite falhou", error);
     }

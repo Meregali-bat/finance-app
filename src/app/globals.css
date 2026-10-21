@@ -144,6 +144,14 @@
   --chart-3: #ea5d4f;
   --chart-4: #8f7370;
   --chart-5: var(--rich-mahogany-3);
+  /* As fatias da renda (src/lib/slices.ts): tons médios, legíveis como ponto
+     e barra tanto no fundo escuro quanto no claro. */
+  --slice-freedom: #8b7cf0;
+  --slice-fixed: #3b8ff0;
+  --slice-comfort: #e8609f;
+  --slice-goals: #a35ad0;
+  --slice-pleasure: #ee8233;
+  --slice-knowledge: #d9a621;
   --radius: 0.875rem;
   /* Tons do handoff que não estão na paleta original. */
   --brand-light: #7a0907;
@@ -643,4 +651,57 @@
   .grow-right {
     animation: none;
   }
+}
+
+/* O controle deslizante das fatias: trilho com a parte preenchida na cor da
+   fatia, e o botão como um anel da mesma cor. */
+.slice-range {
+  appearance: none;
+  height: 1.25rem;
+  background: transparent;
+  cursor: pointer;
+}
+.slice-range::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    var(--slice-color) var(--slice-fill),
+    var(--track) var(--slice-fill)
+  );
+}
+.slice-range::-moz-range-track {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--track);
+}
+.slice-range::-moz-range-progress {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--slice-color);
+}
+.slice-range::-webkit-slider-thumb {
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  margin-top: -6px;
+  border-radius: 999px;
+  background: var(--card);
+  box-shadow: inset 0 0 0 3px var(--slice-color), 0 1px 3px rgb(0 0 0 / 0.25);
+  transition: transform 150ms var(--ease-out-quint);
+}
+.slice-range::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border: 3px solid var(--slice-color);
+  border-radius: 999px;
+  background: var(--card);
+}
+.slice-range:active::-webkit-slider-thumb {
+  transform: scale(1.15);
+}
+.slice-range:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  border-radius: 999px;
 }

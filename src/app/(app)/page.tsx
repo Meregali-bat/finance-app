@@ -28,6 +28,8 @@ import { HomeDebts } from "@/components/home-debts";
 import { loadDebts } from "@/lib/loans-data";
 import { todayBudget } from "@/lib/today-budget";
 import { PushSetup } from "@/components/push-setup";
+import { HomeSlicesCard } from "@/components/home-slices-card";
+import { loadSlicesOverview } from "@/lib/slices-data";
 
 /**
  * O que o período herdou, dito do jeito que a pessoa leria.
@@ -95,7 +97,7 @@ export default async function DashboardPage() {
   // mostrar (as entradas do orçamento só guardam valor e data). Datas de
   // calendário ficam em meia-noite UTC: a janela vai de hoje a depois de amanhã.
   const todayUtc = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate());
-  const [debts, recentCardPurchases] = await Promise.all([
+  const [debts, recentCardPurchases, slicesOverview] = await Promise.all([
     loadDebts(userId, today),
     prisma.cardPurchase.findMany({
       where: {
@@ -114,9 +116,13 @@ export default async function DashboardPage() {
         cardId: true,
       },
     }),
+    loadSlicesOverview(userId, today),
   ]);
 
-  const { accountBalance, budget, dailyAvailable, reservedForLater } = todayBudget(inputs, today);
+  const { accountBalance, budget, dailyAvailable, reservedForLater, savings } = todayBudget(
+    inputs,
+    today,
+  );
   const registeredMovement = registeredMovementOf(inputs, today);
   const transactions = inputs.transactions.filter((t) => !t.fromPeriodClose);
 
@@ -410,12 +416,21 @@ export default async function DashboardPage() {
                   </div>
                 ))}
               </div>
-              {(caption || reservedForLater > 0.005) && (
+              {(caption || reservedForLater > 0.005 || savings) && (
                 <div className="flex flex-col gap-0.5 text-xs text-(--hero-muted)">
                   {caption && <p>{caption}</p>}
                   {reservedForLater > 0.005 && (
                     <p>
                       já contando {formatCurrency(reservedForLater)} que vão faltar mais à frente
+                    </p>
+                  )}
+                  {savings && savings.applied > 0.005 && (
+                    <p>separando {formatCurrency(savings.applied)} para guardar nas caixinhas</p>
+                  )}
+                  {savings && savings.shortfall > 0.005 && (
+                    <p>
+                      este período não fecha com tudo guardado: faltam{" "}
+                      {formatCurrency(savings.shortfall)}
                     </p>
                   )}
                 </div>
@@ -478,6 +493,12 @@ export default async function DashboardPage() {
             <PurchaseSimulationDialog cards={cardOptions} categories={categoryOptions} />
           </div>
         )}
+
+        <HomeSlicesCard
+          configured={slicesOverview.configured}
+          usage={slicesOverview.usage}
+          savings={slicesOverview.savings}
+        />
       </div>
 
       {/* As duas listas lado a lado quando cabem 340px cada; `items-start`

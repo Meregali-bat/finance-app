@@ -51,6 +51,10 @@ model User {
   /// SHA-256 da chave do atalho do iPhone (src/app/api/atalho). A chave em si
   /// só aparece uma vez, quando é gerada; trocar a chave invalida a anterior.
   shortcutTokenHash      String?   @unique
+  /// As fatias da renda (src/lib/slices.ts): { freedom, fixed, comfort, goals,
+  /// pleasure, knowledge } em porcentagem inteira, somando 100. Nulo = ainda
+  /// não configuradas, e o número do dia não reserva nada para guardar.
+  budgetSlices           Json?
 }
 
 model Category {
@@ -58,6 +62,8 @@ model Category {
   userId        String
   name          String
   active        Boolean        @default(true)
+  /// A fatia da renda em que o gasto desta categoria entra. Nulo = palpite pelo nome.
+  slice         String?
   createdAt     DateTime       @default(now())
   user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   transactions  Transaction[]
@@ -344,6 +350,9 @@ model CardBillEstimate {
 
 model Jar {
   id        String       @id @default(cuid())
+  /// "goals" (Metas) ou "freedom" (Liberdade financeira): a fatia que o
+  /// guardado nesta caixinha cumpre. Nulo = Liberdade financeira.
+  slice     String?
   userId    String
   name      String
   color     String?

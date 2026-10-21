@@ -24,6 +24,7 @@ function inputs(overrides: Partial<BudgetInputs> = {}): BudgetInputs {
     expensePayments: [],
     transactions: [],
     jarDeposits: [],
+    slices: null,
     account: { credits: [], debits: [] },
     ...overrides,
   };
