@@ -156,3 +156,10 @@ A aba Lançamentos do Histórico vira uma listagem para arrumar o período: busc
 
 - Categoria e **fatia** se trocam na própria linha, só em lançamentos e compras no cartão (o resto vem de outras telas e só aparece). A fatia de um lançamento (`Transaction.slice`, `CardPurchase.slice`) vale mais que a da categoria — decisão do usuário —, e "Pela categoria" volta a seguir a categoria.
 - Seleção de vários para dar a mesma categoria ou apagar de uma vez (apagar leva junto o empréstimo ligado, como apagar um só).
+
+## Calendário de gastos (22/10)
+
+Num período de dias (semana, mês, intervalo até 62 dias), o Histórico troca a linha "Gasto por dia" por um calendário: cada dia pintado pelo quanto saiu nele, em quatro tons de rosé graduados em raiz quadrada do dia mais pesado (um dia de viagem não apaga o resto do mês). Tocar um dia mostra o que foi gasto nele; abre em hoje, ou no dia mais pesado de um período passado.
+
+- Só o **dia a dia** entra: lançamentos de saída e compras no cartão **no dia em que foram feitas**, com o valor inteiro da compra (`src/lib/spending-calendar.ts`). Contas fixas e faturas ficam de fora — são o planejado, e pintariam o dia do aluguel todo mês. Por isso o total do calendário não é o "Gasto" do resumo, e o texto do card diz isso.
+- Períodos de mais de dois meses continuam com a linha por mês.
