@@ -1,12 +1,12 @@
 import { differenceInCalendarDays } from "date-fns";
-import { ChevronRight, Receipt } from "lucide-react";
+import { ChevronRight, CreditCard, Receipt } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/auth-helpers";
 import { deferralTargetDate, fallsOnDay, type OpeningSource } from "@/lib/period";
 import { cumulativeDailySpending } from "@/lib/spending-trend";
 import { AreaTrend } from "@/components/charts/area-trend";
 import { loadBudgetInputs, registeredMovementOf } from "@/lib/budget-inputs";
-import { formatCurrency, formatDate } from "@/lib/format";
+import { formatCurrency, formatDate, installmentLabel } from "@/lib/format";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SectionLabel } from "@/components/page-header";
 import { CountUpCurrency } from "@/components/ui/animated-number";
@@ -23,6 +23,7 @@ import { AccountBalanceCard } from "@/components/account-balance-card";
 import { PurchaseSimulationDialog } from "@/components/forms/purchase-simulation-dialog";
 import { HomeReminders, type HomeReminder } from "@/components/home-reminders";
 import { homeCard } from "@/components/home-card";
+import { SubtitleParts } from "@/components/list-row";
 import { HomeDebts } from "@/components/home-debts";
 import { loadDebts } from "@/lib/loans-data";
 import { todayBudget } from "@/lib/today-budget";
@@ -89,7 +90,31 @@ export default async function DashboardPage() {
     }),
     currentTheme(),
   ]);
-  const debts = await loadDebts(userId, today);
+  const tomorrow = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+  // As compras no cartão de hoje e de amanhã, com o que a lista precisa
+  // mostrar (as entradas do orçamento só guardam valor e data). Datas de
+  // calendário ficam em meia-noite UTC: a janela vai de hoje a depois de amanhã.
+  const todayUtc = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate());
+  const [debts, recentCardPurchases] = await Promise.all([
+    loadDebts(userId, today),
+    prisma.cardPurchase.findMany({
+      where: {
+        userId,
+        card: { deletedAt: null },
+        date: { gte: new Date(todayUtc), lt: new Date(todayUtc + 2 * 86_400_000) },
+      },
+      select: {
+        id: true,
+        description: true,
+        amount: true,
+        date: true,
+        createdAt: true,
+        installments: true,
+        categoryId: true,
+        cardId: true,
+      },
+    }),
+  ]);
 
   const { accountBalance, budget, dailyAvailable, reservedForLater } = todayBudget(inputs, today);
   const registeredMovement = registeredMovementOf(inputs, today);
@@ -109,17 +134,36 @@ export default async function DashboardPage() {
     valueLabel: formatCurrency(point.total),
   }));
 
-  const tomorrow = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
-
   // `fallsOnDay`, e não uma comparação de meia-noite local dos dois lados:
   // `Transaction.date` guarda um dia de calendário na parte UTC, e lê-lo no
   // fuso local trazia o lançamento de amanhã para "hoje" e escondia o de hoje.
   // O card de resumo acima já lia certo, então as duas metades da tela
   // discordavam.
-  const todaysTransactions = transactions.filter((t) => fallsOnDay(t.date, today));
-  const tomorrowsTransactions = transactions
-    .filter((t) => fallsOnDay(t.date, tomorrow))
-    .sort((a, b) => a.date.getTime() - b.date.getTime());
+  //
+  // O dia junta os lançamentos da conta e as compras no cartão, do mais
+  // recente para o mais antigo: é o "o que eu fiz hoje", não o que saiu do
+  // saldo — a compra no cartão vai para a fatura, e o resumo diz isso.
+  const dayItems = (day: Date): DayItem[] =>
+    [
+      ...transactions
+        .filter((t) => fallsOnDay(t.date, day))
+        .map((t) => ({ ...t, kind: "transaction" as const })),
+      ...recentCardPurchases
+        .filter((p) => fallsOnDay(p.date, day))
+        .map((p) => ({ ...p, amount: Number(p.amount), kind: "card" as const })),
+    ].sort((a, b) => (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0));
+  const todaysItems = dayItems(today);
+  const tomorrowsItems = dayItems(tomorrow);
+  const todaySummary = [
+    {
+      label: "na conta",
+      total: sumWhere(todaysItems, (i) => i.kind === "transaction" && i.amount > 0),
+    },
+    { label: "no cartão", total: sumWhere(todaysItems, (i) => i.kind === "card") },
+  ]
+    .filter((part) => part.total >= 0.005)
+    .map((part) => `${formatCurrency(part.total)} ${part.label}`)
+    .join(" · ");
 
   const isOverBudget = dailyAvailable < 0;
 
@@ -215,17 +259,18 @@ export default async function DashboardPage() {
     }))
     .sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime());
 
-  const movementRows = (list: typeof transactions, baseDelay: number) =>
+  const movementRows = (list: DayItem[], baseDelay: number) =>
     list.map((t, i) => (
-      <li key={t.id} className="rise-in" style={rise(baseDelay + i * 90)}>
+      <li key={`${t.kind}-${t.id}`} className="rise-in" style={rise(baseDelay + i * 90)}>
         <MovementFormDialog
           movement={toMovementValues({
             id: t.id,
-            kind: "transaction",
+            kind: t.kind,
             description: t.description,
             amount: t.amount,
             date: t.date,
             categoryId: t.categoryId,
+            ...(t.kind === "card" ? { cardId: t.cardId, installments: t.installments } : {}),
           })}
           cards={cardOptions}
           categories={categoryOptions}
@@ -236,17 +281,25 @@ export default async function DashboardPage() {
             )}
           >
             <div className="flex size-[38px] shrink-0 items-center justify-center rounded-xl bg-muted text-primary">
-              <Receipt className="size-[18px]" aria-hidden="true" />
+              {t.kind === "card" ? (
+                <CreditCard className="size-[18px]" aria-hidden="true" />
+              ) : (
+                <Receipt className="size-[18px]" aria-hidden="true" />
+              )}
             </div>
             <div className="min-w-0 flex-1">
               <p className="truncate text-[15px] font-semibold">{t.description}</p>
-              <p className="truncate text-[13px] text-muted-foreground">
-                {[
-                  t.createdAt && clock.format(t.createdAt),
-                  (t.categoryId && categoryNameById.get(t.categoryId)) || "Sem categoria",
-                ]
-                  .filter(Boolean)
-                  .join(" · ")}
+              <p className="text-[13px] text-muted-foreground">
+                <SubtitleParts
+                  text={[
+                    t.createdAt && clock.format(t.createdAt),
+                    t.kind === "card" && `no ${cardNameById.get(t.cardId) ?? "cartão"}`,
+                    t.kind === "card" && installmentLabel(t.amount, t.installments),
+                    (t.categoryId && categoryNameById.get(t.categoryId)) || "Sem categoria",
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
+                />
               </p>
             </div>
             {/* Receita é negativa no banco; na tela, positiva e em turquesa. */}
@@ -439,23 +492,28 @@ export default async function DashboardPage() {
 
         <div className="rise-in flex flex-col gap-6" style={rise(380)}>
           <div className="flex flex-col gap-3">
-            <SectionLabel>Movimentações de hoje</SectionLabel>
-            {todaysTransactions.length === 0 ? (
+            <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+              <SectionLabel>Movimentações de hoje</SectionLabel>
+              {todaySummary && (
+                <p className="text-[13px] text-muted-foreground tabular-nums">{todaySummary}</p>
+              )}
+            </div>
+            {todaysItems.length === 0 ? (
               <EmptyState
                 icon={Receipt}
                 text="Nenhuma movimentação lançada hoje ainda."
                 hint="Use o + para lançar a primeira."
               />
             ) : (
-              <ul className="flex flex-col gap-2.5">{movementRows(todaysTransactions, 520)}</ul>
+              <ul className="flex flex-col gap-2.5">{movementRows(todaysItems, 520)}</ul>
             )}
           </div>
 
-          {tomorrowsTransactions.length > 0 && (
+          {tomorrowsItems.length > 0 && (
             <div className="flex flex-col gap-3">
               <SectionLabel>Amanhã</SectionLabel>
               <ul className="flex flex-col gap-2.5">
-                {movementRows(tomorrowsTransactions, 520 + todaysTransactions.length * 90)}
+                {movementRows(tomorrowsItems, 520 + todaysItems.length * 90)}
               </ul>
             </div>
           )}
@@ -465,4 +523,18 @@ export default async function DashboardPage() {
       </div>
     </div>
   );
+}
+
+/** Uma linha do dia: um lançamento da conta ou uma compra no cartão. */
+type DayItem = {
+  id: string;
+  description: string;
+  amount: number;
+  date: Date;
+  createdAt: Date | null;
+  categoryId: string | null;
+} & ({ kind: "transaction" } | { kind: "card"; cardId: string; installments: number });
+
+function sumWhere(items: DayItem[], keep: (item: DayItem) => boolean): number {
+  return items.filter(keep).reduce((sum, item) => sum + item.amount, 0);
 }
