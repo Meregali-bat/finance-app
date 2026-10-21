@@ -81,7 +81,7 @@ export function SlicesEditor({
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
         <div className={homeCard("flex flex-col items-center gap-5")}>
           <SliceDonut
             size={196}
@@ -175,12 +175,15 @@ export function SlicesEditor({
       {categories.length > 0 && (
         <div className="flex flex-col gap-3">
           <SectionLabel>Em que fatia cada categoria entra</SectionLabel>
-          <div className={homeCard("grid gap-x-6 gap-y-3 sm:grid-cols-2")}>
+          <div
+            className={homeCard("grid grid-cols-[minmax(0,1fr)] gap-x-6 gap-y-3 sm:grid-cols-2")}
+          >
             {categories.map((category) => (
               <div key={category.id} className="flex items-center justify-between gap-3 text-sm">
-                <span className="truncate font-medium">{category.name}</span>
+                <span className="min-w-0 truncate font-medium">{category.name}</span>
                 <ChoiceSelect
                   label={`Fatia de ${category.name}`}
+                  className="w-40 shrink-0"
                   value={category.slice}
                   onChange={(value) =>
                     setCategories((current) =>
@@ -203,12 +206,15 @@ export function SlicesEditor({
       {jars.length > 0 && (
         <div className="flex flex-col gap-3">
           <SectionLabel>Para que serve cada caixinha</SectionLabel>
-          <div className={homeCard("grid gap-x-6 gap-y-3 sm:grid-cols-2")}>
+          <div
+            className={homeCard("grid grid-cols-[minmax(0,1fr)] gap-x-6 gap-y-3 sm:grid-cols-2")}
+          >
             {jars.map((jar) => (
               <div key={jar.id} className="flex items-center justify-between gap-3 text-sm">
-                <span className="truncate font-medium">{jar.name}</span>
+                <span className="min-w-0 truncate font-medium">{jar.name}</span>
                 <ChoiceSelect
                   label={`Fatia da caixinha ${jar.name}`}
+                  className="w-48 shrink-0"
                   value={jar.slice}
                   onChange={(value) =>
                     setJars((current) =>

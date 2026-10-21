@@ -72,7 +72,7 @@ export default async function SlicesPage() {
         }
       />
 
-      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)] lg:gap-4">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)] lg:gap-4">
         <div className={homeCard("rise-in flex items-center gap-5")} style={stagger(0, 60)}>
           <SliceDonut
             size={132}
