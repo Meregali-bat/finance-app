@@ -55,6 +55,8 @@ export type HistoryItem = {
   incomeId?: string;
   /** A despesa foi emprestada: o nome de quem vai devolver. */
   lentTo?: string;
+  /** A fatia escolhida para este lançamento; ausente = a da categoria. */
+  slice?: string | null;
 };
 
 /** Os valores que o formulário de edição espera. */

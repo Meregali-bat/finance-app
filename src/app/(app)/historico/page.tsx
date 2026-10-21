@@ -18,6 +18,9 @@ import { HistoryRow } from "@/components/movement-row";
 import { CategoryBreakdown, type CategoryGroup } from "@/components/category-breakdown";
 import { historyItemKey, type HistoryItem } from "@/lib/history-item";
 import { loadHistoryItems } from "@/lib/history-items";
+import { prisma } from "@/lib/prisma";
+import { parseSlices, sliceOfCategory } from "@/lib/slices";
+import { TransactionsTable } from "@/components/transactions-table";
 
 const UNCATEGORIZED = "__none__";
 const LENT = "__lent__";
@@ -34,10 +37,11 @@ export default async function HistoryPage({
   // do calendário em meia-noite UTC, confirmações guardam instantes locais.
   const { rangeStart, rangeEnd, utcRangeStart, utcRangeEnd } = range;
 
-  const { items, categories, creditCards, categoryNameById } = await loadHistoryItems(
-    userId,
-    range,
-  );
+  const [{ items, categories, creditCards, categoryNameById }, user] = await Promise.all([
+    loadHistoryItems(userId, range),
+    prisma.user.findUnique({ where: { id: userId }, select: { budgetSlices: true } }),
+  ]);
+  const slicesActive = parseSlices(user?.budgetSlices) !== null;
 
   const totals = calculateReportTotals({ items, rangeStart, rangeEnd, today: new Date() });
   const buckets = spendingBuckets({ items, rangeStart, rangeEnd });
@@ -149,21 +153,20 @@ export default async function HistoryPage({
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="lancamentos" className="grid gap-2 pt-4 xl:grid-cols-2">
+        <TabsContent value="lancamentos" className="pt-4">
           {items.length === 0 ? (
             <EmptyState text="Nenhum lançamento neste período." />
           ) : (
-            items.map((item, index) => (
-              // Escalonado só no começo da lista: num mês cheio, a centésima
-              // linha não pode esperar quatro segundos para aparecer.
-              <div
-                key={historyItemKey(item)}
-                className="rise-in"
-                style={stagger(Math.min(index, 12), 200, 45)}
-              >
-                <HistoryRow item={item} cards={cardOptions} categories={categoryOptions} />
-              </div>
-            ))
+            <TransactionsTable
+              items={items}
+              categories={categories.map((c) => ({
+                id: c.id,
+                name: c.name,
+                slice: sliceOfCategory(c),
+              }))}
+              cards={cardOptions}
+              slicesActive={slicesActive}
+            />
           )}
         </TabsContent>
 

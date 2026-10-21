@@ -261,6 +261,9 @@ model Transaction {
   /// reconheceu e lançou como gasto da conta. Ligar esse nome a um cartão
   /// (WalletCardAlias) move estes lançamentos para o cartão.
   walletCardName  String?
+  /// A fatia da renda deste lançamento, quando a pessoa a trocou na listagem.
+  /// Nulo = a fatia da categoria.
+  slice           String?
 
   @@index([userId, date])
   @@index([categoryId])
@@ -311,6 +314,8 @@ model CardPurchase {
   /// src/lib/period.ts, não gravada.
   installments   Int             @default(1)
   categoryId     String?
+  /// A fatia da renda desta compra, quando trocada; nulo = a da categoria.
+  slice          String?
   card           CreditCard      @relation(fields: [cardId], references: [id], onDelete: Cascade)
   user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   category       Category?       @relation(fields: [categoryId], references: [id], onDelete: SetNull)
