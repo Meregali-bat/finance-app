@@ -172,6 +172,9 @@ export default async function DashboardPage() {
     .join(" · ");
 
   const isOverBudget = dailyAvailable < 0;
+  // Zero porque a reserva de guardar levou o que sobrava, e não porque você
+  // gastou demais: a frase tem que dizer isso, senão parece bronca.
+  const allToSavings = !isOverBudget && dailyAvailable < 0.005 && (savings?.applied ?? 0) > 0.005;
 
   const cardOptions = inputs.creditCards
     .filter((c) => c.active)
@@ -367,7 +370,11 @@ export default async function DashboardPage() {
             <div className="flex flex-col gap-5 p-[18px] lg:p-5">
               <div className="flex flex-col gap-2">
                 <p className="text-sm font-medium text-(--hero-muted)">
-                  {isOverBudget ? "Você já estourou o orçamento de hoje" : "Você pode gastar hoje"}
+                  {isOverBudget
+                    ? "Você já estourou o orçamento de hoje"
+                    : allToSavings
+                      ? "Hoje, o que sobra vai para guardar"
+                      : "Você pode gastar hoje"}
                 </p>
                 <CountUpCurrency
                   value={dailyAvailable}

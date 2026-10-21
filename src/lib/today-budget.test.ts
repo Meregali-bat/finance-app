@@ -51,4 +51,28 @@ describe("todayBudget com as fatias da renda", () => {
     // 3.000 − 500 guardados − 700 que faltam guardar.
     expect(result.dailyAvailable).toBeCloseTo(1800 / 16);
   });
+
+  it("quando a reserva leva tudo, o dia fica em zero redondo, não em -0,00", () => {
+    // Sobram R$ 100,87 e faltam R$ 1.200 a guardar: a reserva come tudo. A
+    // conta em ponto flutuante dava -0,0000000001, e a Início dizia "Você já
+    // estourou o orçamento de hoje: -R$ 0,00".
+    const result = todayBudget(
+      inputs({
+        slices: DEFAULT_SLICES,
+        transactions: [
+          {
+            id: "gasto",
+            description: "Gastos",
+            amount: 2899.13,
+            date: day("2026-10-06"),
+            categoryId: null,
+            createdAt: null,
+          },
+        ],
+      }),
+      today,
+    );
+    expect(result.savings).toMatchObject({ applied: 100.87, shortfall: 1099.13 });
+    expect(Object.is(result.dailyAvailable, 0)).toBe(true);
+  });
 });

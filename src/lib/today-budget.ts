@@ -39,8 +39,13 @@ export function todayBudget(inputs: BudgetInputs, today: Date) {
   return {
     accountBalance,
     budget,
+    // A reserva nunca passa do que há, então o resto não fica negativo — mas a
+    // conta em ponto flutuante dá -0,0000000001 quando ela leva tudo, e a
+    // Início lia isso como orçamento estourado.
     dailyAvailable:
-      savings && days > 0 ? (beforeSavings * days - savings.applied) / days : beforeSavings,
+      savings && savings.applied > 0 && days > 0
+        ? Math.max(0, (beforeSavings * days - savings.applied) / days)
+        : beforeSavings,
     reservedForLater: current?.reservedForLater ?? 0,
     savings,
   };
