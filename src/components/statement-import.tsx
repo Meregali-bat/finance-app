@@ -5,6 +5,7 @@ import Link from "next/link";
 import { AlertTriangle, CircleCheck, FileUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { homeCard } from "@/components/home-card";
+import { ChoiceSelect } from "@/components/ui/choice-select";
 import { SectionLabel } from "@/components/page-header";
 import {
   analyzeStatement,
@@ -318,21 +319,16 @@ function CardSummary({
           Fatura{analysis.dueDate ? ` que vence em ${shortDay(analysis.dueDate)}` : ""}
         </p>
         {analysis.cards.length > 1 && (
-          <label className="flex items-center gap-2 text-[13px] text-muted-foreground">
-            Cartão no app
-            <select
+          <div className="flex items-center gap-2 text-[13px] text-muted-foreground">
+            <span aria-hidden="true">Cartão no app</span>
+            <ChoiceSelect
+              label="Cartão no app"
               value={analysis.cardId}
               disabled={disabled}
-              onChange={(e) => onCardChange(e.target.value)}
-              className="rounded-full bg-(--field) px-3 py-1.5 text-[13px] font-medium text-foreground ring-1 ring-(--hairline)"
-            >
-              {analysis.cards.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-          </label>
+              onChange={onCardChange}
+              options={analysis.cards.map((c) => ({ value: c.id, label: c.name }))}
+            />
+          </div>
         )}
       </div>
       <dl className="grid grid-cols-2 gap-3 text-sm">

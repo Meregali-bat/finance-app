@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { homeCard } from "@/components/home-card";
+import { ChoiceSelect } from "@/components/ui/choice-select";
 import { setItemCategory } from "@/lib/actions/slices";
 import { errorMessage } from "@/lib/error-message";
 import { formatCurrency } from "@/lib/format";
@@ -74,22 +75,14 @@ export function CategorizeList({
                 {formatCurrency(item.amount)}
               </span>
               {editable ? (
-                <select
-                  aria-label={`Categoria de ${item.description}`}
-                  defaultValue=""
+                <ChoiceSelect
+                  label={`Categoria de ${item.description}`}
+                  value={null}
+                  placeholder={savingId === item.id ? "Salvando..." : "Escolher categoria"}
                   disabled={savingId === item.id}
-                  onChange={(e) => e.target.value && choose(item, e.target.value)}
-                  className="h-9 rounded-full bg-(--field) px-3 text-[13px] font-medium text-foreground ring-1 ring-(--hairline) disabled:opacity-50"
-                >
-                  <option value="" disabled>
-                    {savingId === item.id ? "Salvando..." : "Escolher categoria"}
-                  </option>
-                  {categories.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(value) => choose(item, value)}
+                  options={categories.map((c) => ({ value: c.id, label: c.name }))}
+                />
               ) : (
                 <span className="text-xs text-muted-foreground">
                   {ELSEWHERE[item.kind] ?? "sem categoria"}
