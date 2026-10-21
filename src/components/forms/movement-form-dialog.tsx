@@ -250,11 +250,27 @@ export function MovementFormDialog({
               <div className="flex flex-col gap-1">
                 <Label>Como foi pago</Label>
                 <p className="text-sm text-muted-foreground">
-                  {cardName ?? "À vista"}
-                  {movement?.installments && movement.installments > 1
-                    ? ` · ${movement.installments}x`
-                    : ""}{" "}
-                  · para trocar, exclua e lance de novo
+                  {cardName ?? "À vista"} · para trocar, exclua e lance de novo
+                </p>
+              </div>
+            )}
+            {/* As parcelas, sim, se corrigem: a compra que chega pelo atalho vem
+                sempre 1x. E sem o campo o servidor leria "à vista", e salvar
+                qualquer outra mudança desfaria o parcelamento. */}
+            {isEdit && movement?.kind === "card" && (
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="installments">Parcelas</Label>
+                <Input
+                  id="installments"
+                  name="installments"
+                  type="number"
+                  inputMode="numeric"
+                  min="1"
+                  max="48"
+                  defaultValue={movement.installments ?? 1}
+                />
+                <p className="text-xs text-muted-foreground">
+                  O valor acima é o total da compra; ele é dividido nas faturas.
                 </p>
               </div>
             )}
