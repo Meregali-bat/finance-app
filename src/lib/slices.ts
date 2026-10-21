@@ -107,7 +107,12 @@ export function savingPercent(percents: SlicePercents): number {
 }
 
 const CATEGORY_DEFAULTS: [RegExp, SliceKey][] = [
-  [/moradia|aluguel|condominio|casa|luz|agua|energia|internet|celular|telefone|conta/, "fixed"],
+  [
+    /moradia|aluguel|apartamento|condominio|casa|luz|agua|energia|internet|celular|telefone|conta/,
+    "fixed",
+  ],
+  // Dívida também é custo fixo: parcela, cheque especial, fatura.
+  [/emprestimo|financiamento|cheque|cartao|fatura|parcela|juros|tarifa|assinatura/, "fixed"],
   [/saude|farmacia|medic|plano|seguro/, "fixed"],
   [/transporte|combustivel|gasolina|uber|onibus|carro/, "fixed"],
   [/educacao|curso|livro|estudo|faculdade|escola/, "knowledge"],

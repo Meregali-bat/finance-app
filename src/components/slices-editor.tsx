@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { homeCard } from "@/components/home-card";
 import { SectionLabel } from "@/components/page-header";
 import { SliceDonut } from "@/components/slice-donut";
+import { ChoiceSelect } from "@/components/ui/choice-select";
 import { disableSlices, saveSlices } from "@/lib/actions/slices";
 import { errorMessage } from "@/lib/error-message";
 import {
@@ -176,26 +177,24 @@ export function SlicesEditor({
           <SectionLabel>Em que fatia cada categoria entra</SectionLabel>
           <div className={homeCard("grid gap-x-6 gap-y-3 sm:grid-cols-2")}>
             {categories.map((category) => (
-              <label key={category.id} className="flex items-center justify-between gap-3 text-sm">
+              <div key={category.id} className="flex items-center justify-between gap-3 text-sm">
                 <span className="truncate font-medium">{category.name}</span>
-                <select
+                <ChoiceSelect
+                  label={`Fatia de ${category.name}`}
                   value={category.slice}
-                  onChange={(e) =>
+                  onChange={(value) =>
                     setCategories((current) =>
                       current.map((c) =>
-                        c.id === category.id ? { ...c, slice: e.target.value as SliceKey } : c,
+                        c.id === category.id ? { ...c, slice: value as SliceKey } : c,
                       ),
                     )
                   }
-                  className="h-9 rounded-full bg-(--field) px-3 text-[13px] font-medium ring-1 ring-(--hairline)"
-                >
-                  {SLICES.filter((s) => !s.saving).map((s) => (
-                    <option key={s.key} value={s.key}>
-                      {s.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                  options={SLICES.filter((s) => !s.saving).map((s) => ({
+                    value: s.key,
+                    label: s.name,
+                  }))}
+                />
+              </div>
             ))}
           </div>
         </div>
@@ -206,23 +205,24 @@ export function SlicesEditor({
           <SectionLabel>Para que serve cada caixinha</SectionLabel>
           <div className={homeCard("grid gap-x-6 gap-y-3 sm:grid-cols-2")}>
             {jars.map((jar) => (
-              <label key={jar.id} className="flex items-center justify-between gap-3 text-sm">
+              <div key={jar.id} className="flex items-center justify-between gap-3 text-sm">
                 <span className="truncate font-medium">{jar.name}</span>
-                <select
+                <ChoiceSelect
+                  label={`Fatia da caixinha ${jar.name}`}
                   value={jar.slice}
-                  onChange={(e) =>
+                  onChange={(value) =>
                     setJars((current) =>
                       current.map((j) =>
-                        j.id === jar.id ? { ...j, slice: e.target.value as SavingKey } : j,
+                        j.id === jar.id ? { ...j, slice: value as SavingKey } : j,
                       ),
                     )
                   }
-                  className="h-9 rounded-full bg-(--field) px-3 text-[13px] font-medium ring-1 ring-(--hairline)"
-                >
-                  <option value="freedom">Liberdade financeira</option>
-                  <option value="goals">Metas</option>
-                </select>
-              </label>
+                  options={[
+                    { value: "freedom", label: "Liberdade financeira" },
+                    { value: "goals", label: "Metas" },
+                  ]}
+                />
+              </div>
             ))}
           </div>
         </div>
