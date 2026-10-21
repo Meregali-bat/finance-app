@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { parseSlices, type SlicePercents } from "@/lib/slices";
 import { storedDay } from "@/lib/period";
 import type {
   CardBillEstimateInput,
@@ -48,6 +49,8 @@ export interface BudgetInputs {
   expensePayments: ExpensePaymentInput[];
   transactions: NamedTransactionInput[];
   jarDeposits: JarDepositInput[];
+  /** As fatias da renda, quando configuradas: as de guardar saem do número do dia. */
+  slices: SlicePercents | null;
   /** A matéria-prima do saldo em conta — ver `accountBalanceOf`. */
   account: {
     adjustment?: AccountBalanceAdjustmentInput;
@@ -78,6 +81,7 @@ export async function loadBudgetInputs(userId: string): Promise<BudgetInputs> {
     billEstimates,
     jarDeposits,
     adjustment,
+    user,
   ] = await Promise.all([
     prisma.income.findMany({ where: { userId } }),
     prisma.incomeReceipt.findMany({ where: { userId } }),
@@ -94,6 +98,7 @@ export async function loadBudgetInputs(userId: string): Promise<BudgetInputs> {
     prisma.cardBillEstimate.findMany({ where: { userId } }),
     prisma.jarDeposit.findMany({ where: { userId } }),
     prisma.balanceAdjustment.findFirst({ where: { userId }, orderBy: { createdAt: "desc" } }),
+    prisma.user.findUnique({ where: { id: userId }, select: { budgetSlices: true } }),
   ]);
 
   return {
@@ -156,6 +161,7 @@ export async function loadBudgetInputs(userId: string): Promise<BudgetInputs> {
       fromPeriodClose: t.fromPeriodClose,
     })),
     jarDeposits: jarDeposits.map((d) => ({ amount: Number(d.amount), date: d.createdAt })),
+    slices: parseSlices(user?.budgetSlices),
     account: {
       adjustment: adjustment
         ? { balance: Number(adjustment.balance), createdAt: adjustment.createdAt }

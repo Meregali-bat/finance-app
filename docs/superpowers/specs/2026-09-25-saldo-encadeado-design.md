@@ -136,3 +136,16 @@ Web Push no app instalado na tela de início (iOS 16.4+). A pessoa liga em **Avi
 - **Na hora**, quando uma compra chega pelo atalho e o gasto do dia (lançamentos + compras no cartão com a data de hoje) passa do "quanto posso gastar hoje" do começo do dia — o mesmo `todayBudget`, recalculado sem os gastos de hoje. Um aviso por dia, substituído a cada compra.
 
 As regras estão em `src/lib/alerts.ts`; o envio, em `src/lib/push.ts`. Sem `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY` no ambiente, o bloco não aparece e nada é enviado.
+
+## Fatias da renda (22/10)
+
+A renda do período (a confirmada, de um pagamento ao próximo) é dividida em seis fatias com porcentagem ajustável que soma 100% — padrão 30 Custos fixos · 15 Conforto · 15 Metas · 10 Prazeres · 5 Conhecimento · 25 Liberdade financeira. Decisões do usuário:
+
+- **As fatias de guardar (Metas e Liberdade financeira) saem do número do dia.** `todayBudget` reserva o que ainda falta guardar no período (`savingReserve`): a meta menos o que já foi para as caixinhas, que já saiu do saldo e não conta de novo. A reserva nunca deixa o número do dia negativo; o que não couber vira o aviso "este período não fecha com tudo guardado".
+- **O guardado é o das caixinhas**, cada uma marcada como Metas ou Liberdade financeira (padrão: Liberdade).
+- **Cada categoria pertence a uma fatia de gastar**, com palpite pelo nome (Moradia/Saúde/Transporte → Custos fixos, Alimentação → Conforto, Lazer → Prazeres, Educação → Conhecimento; o resto, Conforto). O gasto vem do mesmo `loadHistoryItems` do Histórico — lançamentos, parcelas por fatura, assinaturas e contas fixas pagas — mais as contas fixas do período ainda não pagas, que já estão comprometidas. O emprestado fica de fora.
+- Gasto sem categoria não entra em fatia nenhuma; a tela Metas lista e deixa categorizar ali mesmo.
+- Aviso no celular quando uma compra do atalho leva uma fatia de gastar além de 90% do previsto (só na travessia).
+- Sem fatias configuradas (`User.budgetSlices` nulo), nada muda no número do dia.
+
+Regras em `src/lib/slices.ts`; dados em `src/lib/slices-data.ts`; telas em `/metas` e `/metas/ajustar`.
