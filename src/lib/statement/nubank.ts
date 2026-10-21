@@ -29,6 +29,11 @@ export interface StatementLine {
   type: string;
   /** Os detalhes juntos numa linha: "POSTO RODA MAIS 6 LTDA - 54.312.342/0001-76 - …". */
   detail: string;
+  /**
+   * Quem está do outro lado, quando o leitor do banco sabe dizer (Sicoob). Sem
+   * isto, sai do começo de `detail` (Nubank).
+   */
+  counterparty?: string;
 }
 
 export interface ParsedStatement {
@@ -113,13 +118,7 @@ export function parseNubankStatement(pages: PdfTextItem[][]): ParsedStatement {
       // De cima para baixo; na mesma altura, da esquerda para a direita.
       .sort((a, b) => b.y - a.y || a.x - b.x);
 
-    const rows = new Map<number, PdfTextItem[]>();
-    for (const item of body) {
-      const key = [...rows.keys()].find((y) => Math.abs(y - item.y) <= 2) ?? item.y;
-      rows.set(key, [...(rows.get(key) ?? []), item]);
-    }
-
-    for (const row of rows.values()) {
+    for (const row of groupRows(body)) {
       const at = (min: number, max: number) =>
         row.filter((i) => i.x >= min && i.x < max).map((i) => i.str.trim());
       const dateText = at(0, 100).find((t) => DATE.test(t));
@@ -160,4 +159,16 @@ export function parseNubankStatement(pages: PdfTextItem[][]): ParsedStatement {
   }
 
   return { holder, period, lines };
+}
+
+/** Os pedaços na mesma altura (±2) viram uma linha, de cima para baixo, da esquerda para a direita. */
+export function groupRows(items: PdfTextItem[]): PdfTextItem[][] {
+  const sorted = [...items].sort((a, b) => b.y - a.y || a.x - b.x);
+  const rows: { y: number; items: PdfTextItem[] }[] = [];
+  for (const item of sorted) {
+    const row = rows.find((r) => Math.abs(r.y - item.y) <= 2);
+    if (row) row.items.push(item);
+    else rows.push({ y: item.y, items: [item] });
+  }
+  return rows.map((r) => r.items.sort((a, b) => a.x - b.x));
 }

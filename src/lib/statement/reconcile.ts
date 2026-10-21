@@ -22,10 +22,19 @@ export function counterparty(detail: string): string {
   return head.replace(/^[\d.]+\s+/, "").trim();
 }
 
+/** Quem está do outro lado: o que o leitor do banco disse, ou o começo dos detalhes. */
+function whoOf(line: StatementLine): string {
+  return line.counterparty ?? counterparty(line.detail);
+}
+
 export function classifyLine(line: StatementLine, holder: string | null): LineKind {
   if (/\bRDB\b/i.test(line.type)) return "investment";
   if (/^Pagamento de fatura/i.test(line.type)) return "billPayment";
-  if (holder && normalizeName(counterparty(line.detail)) === normalizeName(holder)) {
+  // Sicoob: o boleto da fatura sai como "DÉB.PGTO.BOLETO", com o detalhe dizendo de quê.
+  if (/PGTO\.BOLETO/i.test(line.type) && /cart[aã]o de cr[eé]dito/i.test(line.detail)) {
+    return "billPayment";
+  }
+  if (holder && normalizeName(whoOf(line)) === normalizeName(holder)) {
     return "ownTransfer";
   }
   return "movement";
@@ -44,8 +53,30 @@ function titleCase(text: string): string {
 }
 
 /** A descrição do lançamento que a linha viraria: curta e reconhecível. */
+/** Os históricos do Sicoob que não dizem nada sozinhos, em português de gente. */
+const SICOOB_NAMES: [RegExp, string][] = [
+  [/^D[EÉ]B\.EMPR[EÉ]STIMO/i, "Parcela de empréstimo"],
+  [/^D[EÉ]B\. ?CONV\. ?SEGUROS/i, "Seguro"],
+  [/^JUROS CHQ ESPECIAL/i, "Juros do cheque especial"],
+  [/^JUROS ADIANT/i, "Juros de adiantamento"],
+  [/^D[EÉ]B\.IOF/i, "IOF"],
+  [/^D[EÉ]B\.PGTO\.BOLETO/i, "Boleto"],
+];
+
 export function describeLine(line: StatementLine): string {
-  const who = counterparty(line.detail);
+  const who = whoOf(line);
+  // Sicoob.
+  if (/^PIX|^TRANSF\. PIX/i.test(line.type)) {
+    const name = /^[\d./-]+$/.test(who) ? who : titleCase(who);
+    return (name ? `${line.direction === "out" ? "Pix para" : "Pix de"} ${name}` : "Pix").slice(
+      0,
+      120,
+    );
+  }
+  if (/^COMP VISA/i.test(line.type) && who) return titleCase(who).slice(0, 120);
+  const named = SICOOB_NAMES.find(([pattern]) => pattern.test(line.type));
+  if (named) return named[1];
+  // Nubank.
   if (/^Transfer[eê]ncia (enviada|recebida)/i.test(line.type) && who) {
     return `${line.direction === "out" ? "Pix para" : "Pix de"} ${titleCase(who)}`.slice(0, 120);
   }
@@ -72,7 +103,7 @@ export function fingerprints(lines: StatementLine[]): string[] {
       line.date.toISOString().slice(0, 10),
       line.direction,
       Math.round(line.amount * 100),
-      normalizeName(`${line.type} ${counterparty(line.detail)}`),
+      normalizeName(`${line.type} ${whoOf(line)}`),
     ].join("|");
     const n = seen.get(base) ?? 0;
     seen.set(base, n + 1);
