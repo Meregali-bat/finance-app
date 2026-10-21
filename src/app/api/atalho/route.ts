@@ -5,6 +5,7 @@ import { formatCurrency } from "@/lib/format";
 import { loadBudgetInputs } from "@/lib/budget-inputs";
 import { overspendAlert } from "@/lib/alerts";
 import { sendAlerts } from "@/lib/push";
+import { categoryFromHistory } from "@/lib/category-from-history";
 import {
   calendarToday,
   hashShortcutToken,
@@ -118,34 +119,6 @@ export async function POST(request: Request) {
         ? ". O atalho não mandou o nome do cartão: entrou como gasto da conta"
         : "";
   return reply(201, `${description} · ${formatCurrency(amount)}${where}`);
-}
-
-/** A categoria do último lançamento com a mesma descrição, se houver. */
-async function categoryFromHistory(userId: string, description: string) {
-  const where = {
-    userId,
-    categoryId: { not: null },
-    description: { equals: description, mode: "insensitive" as const },
-  };
-  const [purchase, transaction] = await Promise.all([
-    prisma.cardPurchase.findFirst({
-      where,
-      orderBy: { date: "desc" },
-      select: { categoryId: true, date: true },
-    }),
-    prisma.transaction.findFirst({
-      where,
-      orderBy: { date: "desc" },
-      select: { categoryId: true, date: true },
-    }),
-  ]);
-  const latest =
-    purchase && transaction
-      ? purchase.date >= transaction.date
-        ? purchase
-        : transaction
-      : (purchase ?? transaction);
-  return latest?.categoryId ?? null;
 }
 
 function reply(status: number, message: string) {

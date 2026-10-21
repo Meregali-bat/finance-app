@@ -1,4 +1,7 @@
+import Link from "next/link";
+import { FileUp } from "lucide-react";
 import { prisma } from "@/lib/prisma";
+import { iconButton } from "@/components/ui/icon-button";
 import { requireUserId } from "@/lib/auth-helpers";
 import { resolveRange, type RangeParams } from "@/lib/date-range";
 import { calculateReportTotals, countsAsSpending, spendingBuckets } from "@/lib/report-totals";
@@ -282,7 +285,19 @@ export default async function HistoryPage({
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader title="Histórico" />
+      <PageHeader
+        title="Histórico"
+        action={
+          <Link
+            href="/historico/importar"
+            aria-label="Importar extrato"
+            title="Importar extrato"
+            className={iconButton({ tone: "outline", size: "lg" })}
+          >
+            <FileUp aria-hidden="true" />
+          </Link>
+        }
+      />
 
       {/* O seletor de período é o controle principal desta tela, então ele
           ganha uma superfície própria em vez de flutuar solto sobre o fundo. */}

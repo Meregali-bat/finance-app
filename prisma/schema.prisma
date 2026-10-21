@@ -34,6 +34,7 @@ model User {
   loanRepayments     LoanRepayment[]
   pushSubscriptions  PushSubscription[]
   walletCardAliases  WalletCardAlias[]
+  statementIgnores   StatementIgnore[]
   createdAt          DateTime            @default(now())
 
   /// Quanto da renda o usuário aceita ver comprometido com despesa fixa e fatura
@@ -506,4 +507,17 @@ model WalletCardAlias {
   card       CreditCard? @relation(fields: [cardId], references: [id], onDelete: SetNull)
 
   @@unique([userId, normalized])
+}
+
+/// Uma linha de extrato importado que a pessoa mandou ignorar: não volta a
+/// ser perguntada num extrato que cubra os mesmos dias. A impressão sai de
+/// `fingerprints` em src/lib/statement/reconcile.ts.
+model StatementIgnore {
+  id          String   @id @default(cuid())
+  userId      String
+  fingerprint String
+  createdAt   DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, fingerprint])
 }
