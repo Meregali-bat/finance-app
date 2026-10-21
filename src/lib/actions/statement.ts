@@ -8,6 +8,10 @@ import { categoryFromHistory } from "@/lib/category-from-history";
 import { pdfTextItems } from "@/lib/statement/pdf";
 import { parseStatement } from "@/lib/statement/parse";
 import { localDay, reconcile, utcDay, type AppMovement } from "@/lib/statement/reconcile";
+import { isSicoobCardBill } from "@/lib/statement/sicoob-card";
+import { analyzeCardBill, type CardBillAnalysis } from "@/lib/actions/card-bill-import";
+
+export type { CardBillAnalysis, CardBillDifference } from "@/lib/actions/card-bill-import";
 
 export interface StatementDifference {
   fingerprint: string;
@@ -21,8 +25,10 @@ export interface StatementDifference {
 
 export type StatementAnalysis =
   | { ok: false; error: string }
+  | CardBillAnalysis
   | {
       ok: true;
+      mode: "account";
       period: { start: string; end: string } | null;
       total: number;
       matched: number;
@@ -50,12 +56,18 @@ export async function analyzeStatement(formData: FormData): Promise<StatementAna
     return { ok: false, error: "O arquivo precisa ser o PDF do extrato." };
   }
 
-  let parsed;
+  let pages;
   try {
-    parsed = parseStatement(await pdfTextItems(new Uint8Array(await file.arrayBuffer())));
+    pages = await pdfTextItems(new Uint8Array(await file.arrayBuffer()));
   } catch {
     return { ok: false, error: "Não deu para abrir esse PDF." };
   }
+  // Fatura de cartão: outra conferência, contra as compras do cartão.
+  if (isSicoobCardBill(pages)) {
+    const cardId = formData.get("cardId");
+    return analyzeCardBill(userId, pages, typeof cardId === "string" ? cardId : null);
+  }
+  const parsed = parseStatement(pages);
   if (parsed.lines.length === 0) {
     return {
       ok: false,
@@ -130,6 +142,7 @@ export async function analyzeStatement(formData: FormData): Promise<StatementAna
 
   return {
     ok: true,
+    mode: "account",
     period: parsed.period && {
       start: parsed.period.start.toISOString().slice(0, 10),
       end: parsed.period.end.toISOString().slice(0, 10),
@@ -160,6 +173,20 @@ const decisionSchema = z.object({
     )
     .max(500),
   ignore: z.array(z.string().min(1).max(300)).max(500),
+  /** Compras de fatura de cartão: já com as parcelas que faltam. */
+  cardAdd: z
+    .array(
+      z.object({
+        cardId: z.string().min(1),
+        date: z.iso.date(),
+        amount: z.number().positive(),
+        installments: z.number().int().min(1).max(48),
+        description: z.string().trim().min(1).max(120),
+        categoryId: z.string().nullable(),
+      }),
+    )
+    .max(500)
+    .default([]),
 });
 
 /**
@@ -168,19 +195,45 @@ const decisionSchema = z.object({
  */
 export async function applyStatementDecisions(input: unknown) {
   const userId = await requireUserId();
-  const { add, ignore } = decisionSchema.parse(input);
+  const { add, ignore, cardAdd } = decisionSchema.parse(input);
 
   // Categoria só se for do próprio usuário.
   const categoryIds = new Set(
     (
       await prisma.category.findMany({
-        where: { userId, id: { in: add.flatMap((a) => (a.categoryId ? [a.categoryId] : [])) } },
+        where: {
+          userId,
+          id: { in: [...add, ...cardAdd].flatMap((a) => (a.categoryId ? [a.categoryId] : [])) },
+        },
+        select: { id: true },
+      })
+    ).map((c) => c.id),
+  );
+
+  // Cartão só se for do próprio usuário.
+  const cardIds = new Set(
+    (
+      await prisma.creditCard.findMany({
+        where: { userId, id: { in: cardAdd.map((c) => c.cardId) } },
         select: { id: true },
       })
     ).map((c) => c.id),
   );
 
   await prisma.$transaction([
+    prisma.cardPurchase.createMany({
+      data: cardAdd
+        .filter((c) => cardIds.has(c.cardId))
+        .map((c) => ({
+          userId,
+          cardId: c.cardId,
+          description: c.description,
+          amount: c.amount,
+          installments: c.installments,
+          date: new Date(`${c.date}T00:00:00.000Z`),
+          categoryId: c.categoryId && categoryIds.has(c.categoryId) ? c.categoryId : null,
+        })),
+    }),
     prisma.transaction.createMany({
       data: add.map((a) => ({
         userId,
@@ -198,5 +251,7 @@ export async function applyStatementDecisions(input: unknown) {
   ]);
   revalidatePath("/");
   revalidatePath("/historico");
-  return { added: add.length, ignored: ignore.length };
+  revalidatePath("/cartoes");
+  for (const id of cardIds) revalidatePath(`/cartoes/${id}`);
+  return { added: add.length + cardAdd.length, ignored: ignore.length };
 }
