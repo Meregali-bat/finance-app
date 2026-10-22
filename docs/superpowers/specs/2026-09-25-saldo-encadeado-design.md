@@ -168,3 +168,12 @@ Num período de dias (semana, mês, intervalo até 62 dias), o Histórico troca 
 
 - Só o **dia a dia** entra: lançamentos de saída e compras no cartão **no dia em que foram feitas**, com o valor inteiro da compra (`src/lib/spending-calendar.ts`). Contas fixas e faturas ficam de fora — são o planejado, e pintariam o dia do aluguel todo mês. Por isso o total do calendário não é o "Gasto" do resumo, e o texto do card diz isso.
 - Períodos de mais de dois meses continuam com a linha por mês.
+
+## Rendimento das caixinhas (23/10)
+
+Cada caixinha pode dizer quanto do CDI rende (`Jar.cdiPercent`, ex. 100). Com isso, "Quanto rende?" no card e o "Guardar" mostram o que um valor guardado hoje devolve na data do resgate — por padrão, o dia do próximo pagamento (`periodEnd` do orçamento):
+
+- O CDI vem do Banco Central (SGS 4389, taxa DI anualizada base 252), buscado no máximo a cada 12 horas; fora do ar, uma estimativa marcada como tal, num campo que a pessoa corrige (`src/lib/cdi.ts`).
+- Rende por dia útil: diária = (1 + CDI)^(1/252) − 1, vezes a % do CDI; conta os dias úteis de [hoje, resgate), sem fins de semana e feriados nacionais (os fixos, carnaval, Sexta-feira Santa e Corpus Christi pela Páscoa).
+- Do bruto saem o IOF regressivo (96% no 1º dia a 3% no 29º, zero a partir de 30) e o IR sobre o que sobra (22,5% até 180 dias, 20%, 17,5%, 15%). A tela mostra o que sai no dia, o ganho líquido e, com IOF, quanto daria esperar os 30 dias (`src/lib/jar-yield.ts`).
+- É simulação: não entra no orçamento nem no saldo. O rendimento de verdade continua entrando pelo resgate.

@@ -362,6 +362,9 @@ model Jar {
   name      String
   color     String?
   balance   Decimal      @default(0)
+  /// Quanto do CDI a caixinha rende, em % (100 = 100% do CDI). Nulo = não
+  /// informado: a caixinha não mostra simulação de rendimento.
+  cdiPercent Decimal?
   /// Apagada pelo usuário: some da lista, mas os depósitos continuam — foi
   /// dinheiro que saiu do disponível. Só dá para apagar uma caixinha vazia; o
   /// saldo dela sai antes por um resgate.

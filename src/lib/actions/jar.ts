@@ -22,6 +22,22 @@ export async function createJar(formData: FormData) {
   revalidatePath("/");
 }
 
+const yieldSchema = z.object({
+  // Vazio desliga: a caixinha volta a não mostrar rendimento.
+  cdiPercent: z.coerce.number().min(1).max(300).nullable(),
+});
+
+/** Quanto do CDI a caixinha rende: é o que a simulação de rendimento usa. */
+export async function setJarYield(jarId: string, formData: FormData) {
+  const userId = await requireUserId();
+  const raw = String(formData.get("cdiPercent") ?? "")
+    .replace(",", ".")
+    .trim();
+  const { cdiPercent } = yieldSchema.parse({ cdiPercent: raw === "" ? null : raw });
+  await prisma.jar.update({ where: { id: jarId, userId }, data: { cdiPercent } });
+  revalidatePath("/caixinhas");
+}
+
 /**
  * Só uma caixinha vazia pode ser apagada, e apagar só a esconde. Os depósitos
  * são dinheiro que saiu do disponível; apagá-los por cascade o devolveria ao
