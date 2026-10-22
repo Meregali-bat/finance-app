@@ -53,19 +53,22 @@ function titleCase(text: string): string {
 }
 
 /** A descrição do lançamento que a linha viraria: curta e reconhecível. */
-/** Os históricos do Sicoob que não dizem nada sozinhos, em português de gente. */
-const SICOOB_NAMES: [RegExp, string][] = [
+/** Os históricos do Sicoob e do Banrisul que não dizem nada sozinhos, em português de gente. */
+const BANK_NAMES: [RegExp, string][] = [
   [/^D[EÉ]B\.EMPR[EÉ]STIMO/i, "Parcela de empréstimo"],
   [/^D[EÉ]B\. ?CONV\. ?SEGUROS/i, "Seguro"],
   [/^JUROS CHQ ESPECIAL/i, "Juros do cheque especial"],
   [/^JUROS ADIANT/i, "Juros de adiantamento"],
   [/^D[EÉ]B\.IOF/i, "IOF"],
   [/^D[EÉ]B\.PGTO\.BOLETO/i, "Boleto"],
+  // Banrisul.
+  [/^IOF ADICIONAL/i, "IOF adicional"],
+  [/^IOF\b/i, "IOF"],
 ];
 
 export function describeLine(line: StatementLine): string {
   const who = whoOf(line);
-  // Sicoob.
+  // Sicoob e Banrisul.
   if (/^PIX|^TRANSF\. PIX/i.test(line.type)) {
     const name = /^[\d./-]+$/.test(who) ? who : titleCase(who);
     return (name ? `${line.direction === "out" ? "Pix para" : "Pix de"} ${name}` : "Pix").slice(
@@ -74,7 +77,7 @@ export function describeLine(line: StatementLine): string {
     );
   }
   if (/^COMP VISA/i.test(line.type) && who) return titleCase(who).slice(0, 120);
-  const named = SICOOB_NAMES.find(([pattern]) => pattern.test(line.type));
+  const named = BANK_NAMES.find(([pattern]) => pattern.test(line.type));
   if (named) return named[1];
   // Nubank.
   if (/^Transfer[eê]ncia (enviada|recebida)/i.test(line.type) && who) {
