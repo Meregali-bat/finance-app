@@ -72,7 +72,7 @@ export async function analyzeStatement(formData: FormData): Promise<StatementAna
     return {
       ok: false,
       error:
-        "Não reconheci movimentações nesse PDF. Ele precisa ser o extrato da conta do Nubank ou do Sicoob.",
+        "Não reconheci movimentações nesse PDF. Ele precisa ser o extrato da conta do Nubank, do Sicoob ou do Banrisul.",
     };
   }
 
