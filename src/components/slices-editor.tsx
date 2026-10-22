@@ -111,7 +111,7 @@ export function SlicesEditor({
           <button
             type="button"
             onClick={() => setPercents(DEFAULT_SLICES)}
-            className="text-[13px] font-medium text-primary underline-offset-4 hover:underline"
+            className="-my-3 py-3 text-[13px] font-medium text-primary underline-offset-4 hover:underline"
           >
             Voltar ao padrão (30 · 15 · 15 · 10 · 5 · 25)
           </button>
@@ -146,7 +146,7 @@ export function SlicesEditor({
                     max={100}
                     value={percents[slice.key]}
                     onChange={(e) => setPercent(slice.key, Number(e.target.value))}
-                    className="h-9 w-16 rounded-lg bg-(--field) px-2 text-right text-sm font-semibold tabular-nums ring-1 ring-(--hairline) outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="h-9 w-16 rounded-lg bg-(--field) px-2 text-right text-base font-semibold tabular-nums ring-1 ring-(--hairline) outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   />
                   <span className="text-xs text-muted-foreground">%</span>
                 </div>
@@ -246,7 +246,7 @@ export function SlicesEditor({
             type="button"
             onClick={turnOff}
             disabled={pending}
-            className="self-start text-[13px] font-medium text-negative underline-offset-4 hover:underline disabled:opacity-50"
+            className="-my-3 self-start py-3 text-[13px] font-medium text-negative underline-offset-4 hover:underline disabled:opacity-50"
           >
             Desligar as fatias
           </button>

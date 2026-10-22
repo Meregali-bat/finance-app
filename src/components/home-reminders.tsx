@@ -9,6 +9,7 @@ import {
   Check,
   CircleCheck,
   Clock,
+  ChevronDown,
 } from "lucide-react";
 import { SectionLabel } from "@/components/page-header";
 import { UndoToast } from "@/components/undo-toast";
@@ -62,6 +63,8 @@ type Toast = {
 /** O tempo do check turquesa antes de o card começar a sair. */
 const CONFIRM_MS = 380;
 const TOAST_MS = 4000;
+/** Quantos lembretes a Início mostra antes do "Mostrar mais". */
+const COLLAPSED_COUNT = 4;
 
 /**
  * Os lembretes da Início. Confirmar no diálogo não some com o card de
@@ -129,6 +132,11 @@ export function HomeReminders({ reminders }: { reminders: HomeReminder[] }) {
   }
 
   const visible = reminders.filter((r) => !gone.has(r.key));
+  // No celular, doze lembretes empurram o resto da Início para longe: os
+  // primeiros (os vencidos vêm na frente) ficam à vista, o resto abre num toque.
+  const [expanded, setExpanded] = useState(false);
+  const shown = expanded ? visible : visible.slice(0, COLLAPSED_COUNT);
+  const hiddenCount = visible.length - shown.length;
 
   return (
     <div className="flex flex-col gap-3">
@@ -154,7 +162,7 @@ export function HomeReminders({ reminders }: { reminders: HomeReminder[] }) {
       ) : (
         <ul className="flex flex-col">
           <AnimatePresence initial={false}>
-            {visible.map((reminder) => (
+            {shown.map((reminder) => (
               <motion.li
                 key={reminder.key}
                 // A saída em duas camadas, como no handoff: some primeiro, e
@@ -206,6 +214,21 @@ export function HomeReminders({ reminders }: { reminders: HomeReminder[] }) {
             ))}
           </AnimatePresence>
         </ul>
+      )}
+
+      {(hiddenCount > 0 || (expanded && visible.length > COLLAPSED_COUNT)) && (
+        <button
+          type="button"
+          onClick={() => setExpanded((e) => !e)}
+          aria-expanded={expanded}
+          className="flex h-11 items-center justify-center gap-1.5 rounded-[16px] text-[13.5px] font-medium text-muted-foreground ring-1 ring-(--hairline) transition-[color,background-color,transform] duration-150 hover:bg-card-hover hover:text-foreground active:scale-[0.98]"
+        >
+          {expanded ? "Mostrar menos" : `Mostrar mais ${hiddenCount}`}
+          <ChevronDown
+            className={cn("size-4 transition-transform duration-200", expanded && "rotate-180")}
+            aria-hidden="true"
+          />
+        </button>
       )}
 
       <UndoToast

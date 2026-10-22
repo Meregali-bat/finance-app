@@ -78,6 +78,7 @@ export function LineChart({
   const dense = n > 14;
   const showValue = (p: LinePoint) =>
     valueLabels === "all" || (valueLabels === "selected" && p.selected);
+  const crowded = crowdedLabels(points, y, valueLabels === "all");
   const activePoint = points.find((p) => p.key === active);
 
   return (
@@ -178,6 +179,9 @@ export function LineChart({
                     aria-hidden="true"
                     className={cn(
                       "absolute left-1/2 -translate-x-1/2 text-[11px] whitespace-nowrap tabular-nums",
+                      // No celular a coluna é mais estreita que "R$ 3,2 mil":
+                      // rótulos vizinhos na mesma altura se atropelavam.
+                      crowded.has(i) && "max-sm:hidden",
                       p.selected
                         ? "font-semibold text-foreground"
                         : "font-medium text-muted-foreground",
@@ -266,4 +270,32 @@ export function LineChart({
       </table>
     </figure>
   );
+}
+
+/**
+ * Os rótulos que somem no celular para os vizinhos não se atropelarem: um
+ * platô repete o mesmo valor ("R$ 3,2 mil" quatro vezes) e fica só o
+ * primeiro; e de dois vizinhos quase na mesma altura, fica o selecionado ou o
+ * que veio antes. Dois pontos de distância já cabem lado a lado.
+ */
+function crowdedLabels(
+  points: LinePoint[],
+  y: (v: number) => number,
+  enabled: boolean,
+): Set<number> {
+  const hidden = new Set<number>();
+  if (!enabled) return hidden;
+  const text = (p: LinePoint) => (p.selected ? p.valueLabel : (p.compactLabel ?? p.valueLabel));
+  const shown: number[] = points.flatMap((p, i) => (p.selected ? [i] : []));
+  points.forEach((p, i) => {
+    if (p.selected) return;
+    const clash = shown.some(
+      (j) =>
+        Math.abs(j - i) === 1 &&
+        (text(points[j]) === text(p) || Math.abs(y(points[j].value) - y(p.value)) < 18),
+    );
+    if (clash) hidden.add(i);
+    else shown.push(i);
+  });
+  return hidden;
 }

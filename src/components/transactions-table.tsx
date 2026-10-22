@@ -327,7 +327,7 @@ export function TransactionsTable({
             value={query}
             onChange={(e) => resetPage(setQuery)(e.target.value)}
             placeholder="Buscar por descrição"
-            className="h-11 w-full rounded-xl bg-(--field) pr-3 pl-10 text-sm ring-1 ring-(--hairline) outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
+            className="h-11 w-full rounded-xl bg-(--field) pr-3 pl-10 text-base ring-1 ring-(--hairline) outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
           />
         </label>
         <div className="grid grid-cols-3 gap-2 lg:flex">
@@ -351,6 +351,9 @@ export function TransactionsTable({
               { value: NONE, label: "Sem categoria" },
               ...categoryOptions,
             ]}
+            // Três menus lado a lado no celular: "Todas as categorias" não
+            // cabe e virava "Todas as cat".
+            display={category === ALL ? "Categorias" : undefined}
             className="w-full lg:w-auto"
           />
           <ChoiceSelect
@@ -362,6 +365,7 @@ export function TransactionsTable({
               { value: ACCOUNT, label: "Só a conta" },
               ...cards.map((c) => ({ value: c.id, label: c.name })),
             ]}
+            display={account === ALL ? "Contas" : undefined}
             className="w-full lg:w-auto"
           />
         </div>
@@ -530,13 +534,16 @@ export function TransactionsTable({
               >
                 <div className="flex items-start gap-3">
                   {editable(item) ? (
-                    <input
-                      type="checkbox"
-                      checked={selected.has(historyItemKey(item))}
-                      onChange={() => toggle(item)}
-                      aria-label={`Selecionar ${item.description}`}
-                      className="mt-1 size-4 shrink-0 accent-(--primary)"
-                    />
+                    // A caixinha tem 16px; o alvo do dedo, 44.
+                    <label className="-mx-3.5 -my-2.5 flex size-11 shrink-0 cursor-pointer items-start justify-center pt-3.5">
+                      <input
+                        type="checkbox"
+                        checked={selected.has(historyItemKey(item))}
+                        onChange={() => toggle(item)}
+                        aria-label={`Selecionar ${item.description}`}
+                        className="size-4 accent-(--primary)"
+                      />
+                    </label>
                   ) : (
                     <span className="w-4 shrink-0" />
                   )}
