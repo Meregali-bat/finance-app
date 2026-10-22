@@ -5,6 +5,9 @@
  * estacionado rendendo até o dia de usar. A Previsão e o orçamento contam com
  * ele de volta naquele dia, e as fatias não o contam como guardado.
  *
+ * Dinheiro que já estava na caixinha ganha data por um resgate agendado
+ * (`JarWithdrawalPlan`), que vale o mesmo que um depósito com data.
+ *
  * O que já voltou sai da conta sozinho: cada resgate de verdade da caixinha
  * abate os previstos, o de data mais próxima primeiro, entre os depósitos
  * feitos até o dia do resgate. Calculado na hora, e não gravado, para que
@@ -12,6 +15,8 @@
  */
 
 export interface JarMovement {
+  /** O id do depósito, para poder cancelar a data dele. */
+  id?: string;
   jarId: string;
   /** Positivo guardou, negativo resgatou. */
   amount: number;
@@ -21,7 +26,20 @@ export interface JarMovement {
   plannedWithdrawalAt?: Date | null;
 }
 
+/** Um resgate agendado para dinheiro que já estava na caixinha. */
+export interface ScheduledWithdrawal {
+  id: string;
+  jarId: string;
+  amount: number;
+  /** O dia previsto, meia-noite UTC. */
+  date: Date;
+  /** Quando foi agendado: só resgates depois disso o abatem. */
+  createdAt: Date;
+}
+
 export interface JarReturn {
+  /** De onde vem: um depósito com data, ou um resgate agendado. */
+  source: { kind: "deposit" | "schedule"; id: string };
   jarId: string;
   /** O que ainda falta voltar deste depósito. */
   amount: number;
@@ -40,15 +58,35 @@ function utcToday(today: Date) {
   return Date.UTC(today.getFullYear(), today.getMonth(), today.getDate());
 }
 
-export function jarReturns(movements: JarMovement[], today: Date): JarReturn[] {
+export function jarReturns(
+  movements: JarMovement[],
+  today: Date,
+  schedules: ScheduledWithdrawal[] = [],
+): JarReturn[] {
   const byJar = new Map<string, JarMovement[]>();
   for (const m of movements) byJar.set(m.jarId, [...(byJar.get(m.jarId) ?? []), m]);
+  for (const s of schedules) if (!byJar.has(s.jarId)) byJar.set(s.jarId, []);
 
   const result: JarReturn[] = [];
   for (const [jarId, list] of byJar) {
-    const plans = list
-      .filter((m) => m.amount > 0 && m.plannedWithdrawalAt)
-      .map((m) => ({ deposited: m.date, date: m.plannedWithdrawalAt!, left: m.amount }));
+    const plans = [
+      ...list
+        .filter((m) => m.amount > 0 && m.plannedWithdrawalAt)
+        .map((m) => ({
+          source: { kind: "deposit" as const, id: m.id ?? "" },
+          deposited: m.date,
+          date: m.plannedWithdrawalAt!,
+          left: m.amount,
+        })),
+      ...schedules
+        .filter((s) => s.jarId === jarId && s.amount > 0)
+        .map((s) => ({
+          source: { kind: "schedule" as const, id: s.id },
+          deposited: s.createdAt,
+          date: s.date,
+          left: s.amount,
+        })),
+    ];
     const withdrawals = list
       .filter((m) => m.amount < 0)
       .sort((a, b) => a.date.getTime() - b.date.getTime());
@@ -69,6 +107,7 @@ export function jarReturns(movements: JarMovement[], today: Date): JarReturn[] {
     for (const plan of plans) {
       if (plan.left <= 0.005) continue;
       result.push({
+        source: plan.source,
         jarId,
         amount: plan.left,
         date: plan.date,

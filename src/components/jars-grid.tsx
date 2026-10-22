@@ -6,6 +6,8 @@ import { StatLabel } from "@/components/page-header";
 import { CountUpCurrency } from "@/components/ui/animated-number";
 import { JarDepositDialog } from "@/components/forms/jar-deposit-dialog";
 import { JarYieldDialog } from "@/components/forms/jar-yield-dialog";
+import { JarScheduleDialog } from "@/components/forms/jar-schedule-dialog";
+import { X } from "lucide-react";
 import {
   dayFromKey,
   shortDay,
@@ -14,7 +16,7 @@ import {
 } from "@/components/jar-yield-preview";
 import { DeleteIconButton } from "@/components/delete-icon-button";
 import { UndoToast, type UndoToastState } from "@/components/undo-toast";
-import { deleteJar, undoJarDeposit } from "@/lib/actions/jar";
+import { cancelJarReturn, deleteJar, undoJarDeposit } from "@/lib/actions/jar";
 import { formatCurrency } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { errorMessage } from "@/lib/error-message";
@@ -27,7 +29,12 @@ export type JarView = {
   /** O saldo dividido pelas entradas que o formam, cada uma com a sua data. */
   lots: LotView[];
   /** O que foi guardado com data para voltar e ainda não voltou. */
-  returns: { amount: number; date: string; overdue: boolean }[];
+  returns: {
+    source: { kind: "deposit" | "schedule"; id: string };
+    amount: number;
+    date: string;
+    overdue: boolean;
+  }[];
 };
 
 const TOAST_MS = 4000;
@@ -59,6 +66,17 @@ export function JarsGrid({ jars, yieldContext }: { jars: JarView[]; yieldContext
       depositId,
       hasUndo: true,
       text: `${formatCurrency(amount)} ${withdraw ? "resgatados de" : "guardados em"} ${jar.name}`,
+    });
+  }
+
+  function cancel(source: { kind: "deposit" | "schedule"; id: string }) {
+    setError(null);
+    startUndo(async () => {
+      try {
+        await cancelJarReturn(source);
+      } catch (e) {
+        setError(errorMessage(e, "Não deu para cancelar"));
+      }
     });
   }
 
@@ -128,18 +146,46 @@ export function JarsGrid({ jars, yieldContext }: { jars: JarView[]; yieldContext
               />
             </div>
             {jar.returns.length > 0 && (
-              <ul className="-mt-1 flex flex-col gap-0.5 text-[12.5px] tabular-nums">
+              <ul className="-mt-1 flex flex-col text-[12.5px] tabular-nums">
                 {jar.returns.map((r) => (
                   <li
-                    key={`${r.date}-${r.amount}`}
-                    className={r.overdue ? "text-negative" : "text-muted-foreground"}
+                    key={`${r.source.kind}-${r.source.id}`}
+                    className={cn(
+                      "flex items-start justify-between gap-1",
+                      r.overdue ? "text-negative" : "text-muted-foreground",
+                    )}
                   >
-                    {r.overdue
-                      ? `${formatCurrency(r.amount)} era para voltar em ${shortDay(dayFromKey(r.date))}: resgate para contar`
-                      : `${formatCurrency(r.amount)} volta em ${shortDay(dayFromKey(r.date))}`}
+                    <span className="min-w-0 pt-1.5">
+                      {r.overdue
+                        ? `${formatCurrency(r.amount)} era para voltar em ${shortDay(dayFromKey(r.date))}: resgate para contar`
+                        : `${formatCurrency(r.amount)} volta em ${shortDay(dayFromKey(r.date))}`}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => cancel(r.source)}
+                      aria-label={`Cancelar a volta de ${formatCurrency(r.amount)}`}
+                      title="Cancelar a data"
+                      className="-mr-2 flex size-8 shrink-0 items-center justify-center rounded-full transition-colors duration-150 hover:bg-muted hover:text-foreground"
+                    >
+                      <X className="size-3.5" aria-hidden="true" />
+                    </button>
                   </li>
                 ))}
               </ul>
+            )}
+            {jar.balance - jar.returns.reduce((sum, r) => sum + r.amount, 0) > 0.005 && (
+              <JarScheduleDialog
+                jarId={jar.id}
+                jarName={jar.name}
+                available={
+                  Math.round(
+                    (jar.balance - jar.returns.reduce((sum, r) => sum + r.amount, 0)) * 100,
+                  ) / 100
+                }
+                lots={jar.lots}
+                cdiPercent={jar.cdiPercent}
+                context={yieldContext}
+              />
             )}
             <JarYieldDialog
               jarId={jar.id}

@@ -30,8 +30,10 @@ export default async function JarsPage() {
       where: { userId, deletedAt: null },
       orderBy: { createdAt: "asc" },
       include: {
+        jarWithdrawalPlans: true,
         deposits: {
           select: {
+            id: true,
             amount: true,
             balanceChange: true,
             createdAt: true,
@@ -122,13 +124,22 @@ export default async function JarsPage() {
             lots: lotsOf(jar),
             returns: jarReturns(
               jar.deposits.map((d) => ({
+                id: d.id,
                 jarId: jar.id,
                 amount: Number(d.balanceChange ?? d.amount),
                 date: d.createdAt,
                 plannedWithdrawalAt: d.plannedWithdrawalAt,
               })),
-              new Date(),
+              today,
+              jar.jarWithdrawalPlans.map((p) => ({
+                id: p.id,
+                jarId: jar.id,
+                amount: Number(p.amount),
+                date: p.date,
+                createdAt: p.createdAt,
+              })),
             ).map((r) => ({
+              source: r.source,
               amount: r.amount,
               date: r.date.toISOString().slice(0, 10),
               overdue: r.overdue,

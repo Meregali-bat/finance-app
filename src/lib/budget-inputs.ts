@@ -86,6 +86,7 @@ export async function loadBudgetInputs(userId: string): Promise<BudgetInputs> {
     jarDeposits,
     adjustment,
     user,
+    withdrawalPlans,
   ] = await Promise.all([
     prisma.income.findMany({ where: { userId } }),
     prisma.incomeReceipt.findMany({ where: { userId } }),
@@ -103,6 +104,10 @@ export async function loadBudgetInputs(userId: string): Promise<BudgetInputs> {
     prisma.jarDeposit.findMany({ where: { userId }, include: { jar: { select: { name: true } } } }),
     prisma.balanceAdjustment.findFirst({ where: { userId }, orderBy: { createdAt: "desc" } }),
     prisma.user.findUnique({ where: { id: userId }, select: { budgetSlices: true } }),
+    prisma.jarWithdrawalPlan.findMany({
+      where: { userId },
+      include: { jar: { select: { name: true } } },
+    }),
   ]);
 
   return {
@@ -179,12 +184,23 @@ export async function loadBudgetInputs(userId: string): Promise<BudgetInputs> {
         plannedWithdrawalAt: d.plannedWithdrawalAt,
       })),
       new Date(),
+      withdrawalPlans.map((p) => ({
+        id: p.id,
+        jarId: p.jarId,
+        amount: Number(p.amount),
+        date: p.date,
+        createdAt: p.createdAt,
+      })),
     )
       .filter((r) => !r.overdue)
       .map((r) => ({
         amount: r.amount,
         date: r.date,
-        label: `Resgate de ${jarDeposits.find((d) => d.jarId === r.jarId)?.jar.name ?? "caixinha"}`,
+        label: `Resgate de ${
+          jarDeposits.find((d) => d.jarId === r.jarId)?.jar.name ??
+          withdrawalPlans.find((p) => p.jarId === r.jarId)?.jar.name ??
+          "caixinha"
+        }`,
       })),
     slices: parseSlices(user?.budgetSlices),
     account: {
