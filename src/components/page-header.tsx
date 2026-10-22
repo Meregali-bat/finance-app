@@ -21,7 +21,9 @@ export function PageHeader({
 }) {
   return (
     <div
-      className="rise-in flex items-end gap-2"
+      // Sem subtítulo, o botão alinha pelo meio do título; pelo pé, ele
+      // ficava acima do título, como se fossem de linhas diferentes.
+      className={`rise-in flex gap-2 ${subtitle ? "items-end" : "items-center"}`}
       style={{ "--rise-delay": "0ms" } as React.CSSProperties}
     >
       {backHref && (

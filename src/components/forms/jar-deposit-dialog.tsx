@@ -64,14 +64,20 @@ export function JarDepositDialog({
             className={iconButton({
               tone: withdraw ? "outline" : "solid",
               size: "lg",
-              className: "h-10 w-auto flex-1 rounded-[14px]",
+              // Com o nome escrito: uma seta para baixo e outra para cima não
+              // dizem qual guarda e qual tira. No celular fica só o nome.
+              className:
+                "h-11 w-auto min-w-0 flex-1 gap-1.5 rounded-[14px] px-2 text-[13px] font-semibold [&_svg]:size-4",
             })}
-            aria-label={withdraw ? "Resgatar" : "Guardar"}
-            title={withdraw ? "Resgatar" : "Guardar"}
           />
         }
       >
-        {withdraw ? <ArrowUpFromLine aria-hidden="true" /> : <ArrowDownToLine aria-hidden="true" />}
+        {withdraw ? (
+          <ArrowUpFromLine aria-hidden="true" className="max-sm:hidden" />
+        ) : (
+          <ArrowDownToLine aria-hidden="true" className="max-sm:hidden" />
+        )}
+        {withdraw ? "Resgatar" : "Guardar"}
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
