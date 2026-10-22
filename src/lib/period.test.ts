@@ -13,6 +13,7 @@ import {
   cardBillFixedExpenses,
   fallsOnDay,
   isExpenseOccurrenceValid,
+  startAfterCurrentCharge,
   type CardBill,
 } from "./period";
 
@@ -1629,5 +1630,44 @@ describe("isExpenseOccurrenceValid — pausas", () => {
   it("não cobra nada depois de uma pausa ainda aberta", () => {
     const open = [{ start: new Date(2026, 6, 15) }];
     expect(isExpenseOccurrenceValid(new Date(2027, 0, 10), { pauses: open })).toBe(false);
+  });
+});
+
+describe("startAfterCurrentCharge", () => {
+  const today = new Date(2026, 9, 22, 15);
+
+  it("na conta, pula o vencimento deste mês que ainda vem", () => {
+    expect(startAfterCurrentCharge({ dueDay: 28 }, today)).toEqual(new Date(2026, 9, 29));
+  });
+
+  it("na conta, com o vencimento deste mês já passado, começa hoje", () => {
+    expect(startAfterCurrentCharge({ dueDay: 10 }, today)).toEqual(new Date(2026, 9, 22));
+  });
+
+  it("no cartão, pula a fatura aberta: começa depois do próximo fechamento", () => {
+    expect(startAfterCurrentCharge({ closingDay: 3 }, today)).toEqual(new Date(2026, 10, 4));
+    expect(startAfterCurrentCharge({ closingDay: 25 }, today)).toEqual(new Date(2026, 9, 26));
+  });
+
+  it("a assinatura cadastrada assim fica fora da fatura aberta e entra na seguinte", () => {
+    const card = { id: "nu", closingDay: 25, dueDay: 2 };
+    const expense = {
+      id: "spotify",
+      amount: 21.9,
+      cardId: "nu",
+      createdAt: startAfterCurrentCharge({ closingDay: 25 }, today),
+    };
+    const open = cardBillFixedExpenses({
+      card,
+      cardFixedExpenses: [expense],
+      dueDate: new Date(Date.UTC(2026, 10, 2)),
+    });
+    const next = cardBillFixedExpenses({
+      card,
+      cardFixedExpenses: [expense],
+      dueDate: new Date(Date.UTC(2026, 11, 2)),
+    });
+    expect(open).toHaveLength(0);
+    expect(next).toHaveLength(1);
   });
 });

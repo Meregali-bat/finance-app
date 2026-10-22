@@ -1474,3 +1474,36 @@ export function getNextPeriodBounds(
 ): { periodStart: Date; periodEnd: Date } {
   return getPeriodBounds(incomes, periodEnd, incomeReceipts);
 }
+
+/**
+ * O cadastro de uma despesa fixa cuja cobrança deste mês já foi lançada à mão:
+ * o `createdAt` que faz a despesa começar na cobrança seguinte, e não
+ * duplicar a que já está no app.
+ *
+ * - Na conta, com dia de vencimento: se o vencimento deste mês ainda não
+ *   passou, começa no dia seguinte a ele; se já passou, hoje já basta (o de
+ *   este mês nunca contaria).
+ * - No cartão: a assinatura entra em toda fatura cujo ciclo fecha a partir do
+ *   cadastro, então começa no dia seguinte ao próximo fechamento — a fatura
+ *   aberta, onde a cobrança lançada está, fica de fora.
+ */
+export function startAfterCurrentCharge(
+  input: { dueDay?: number | null; closingDay?: number | null },
+  today: Date,
+): Date {
+  const todayStart = startOfDay(today);
+  const dayAfter = (date: Date) =>
+    new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1);
+  if (input.closingDay != null) {
+    return dayAfter(earliestOccurrenceOnOrAfter(input.closingDay, todayStart));
+  }
+  if (input.dueDay != null) {
+    const thisMonth = dateForDayInMonth(
+      todayStart.getFullYear(),
+      todayStart.getMonth(),
+      input.dueDay,
+    );
+    return thisMonth.getTime() >= todayStart.getTime() ? dayAfter(thisMonth) : todayStart;
+  }
+  return todayStart;
+}

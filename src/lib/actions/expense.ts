@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/auth-helpers";
 import { toFixedExpenseInput } from "@/lib/budget-inputs";
-import { deferralTargetDate } from "@/lib/period";
+import { deferralTargetDate, startAfterCurrentCharge } from "@/lib/period";
 
 const expenseSchema = z
   .object({
@@ -39,9 +39,23 @@ export async function createFixedExpense(formData: FormData) {
     installmentCount: formData.get("installmentCount"),
   });
 
+  // A cobrança deste mês já foi lançada à mão: a despesa começa na seguinte,
+  // para não contar duas vezes (ver startAfterCurrentCharge).
+  let createdAt: Date | undefined;
+  if (formData.get("skipCurrent") === "1") {
+    const card = cardId
+      ? await prisma.creditCard.findFirst({ where: { id: cardId, userId } })
+      : null;
+    createdAt = startAfterCurrentCharge(
+      card ? { closingDay: card.closingDay } : { dueDay: dueDay ?? null },
+      new Date(),
+    );
+  }
+
   await prisma.fixedExpense.create({
     data: {
       ...data,
+      ...(createdAt ? { createdAt } : {}),
       dueDay: cardId ? null : (dueDay ?? null),
       // No cartão o parcelamento é da compra, não da despesa.
       installmentCount: cardId ? null : (installmentCount ?? null),
