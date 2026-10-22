@@ -51,6 +51,11 @@ Não carrega mais nada — isso é automático. Quando o período anterior deixo
 
 A régua da sobra passa a olhar o saldo encadeado, do período da primeira parcela até um mês depois da última: uma parcela pesa no ciclo em que cai e em todos os seguintes. A folga por parcela divide pelo número de parcelas **acumuladas** até o ciclo. O comprometimento usa a renda esperada (com a que aguarda confirmação), já que mede o peso das contas sobre o que se ganha.
 
+Revisão de 22/10:
+
+- **Horizonte:** a régua do saldo olha pelo menos os 12 ciclos da Previsão, não só até um mês depois da última parcela. Uma conta grande meses depois (IPVA, IPTU) é onde a sobra que a compra levou vai faltar.
+- **Fatias de guardar:** com as fatias ligadas, o saldo de cada ciclo precisa ficar acima do que ainda vai para as caixinhas, acumulado: no corrente, o que falta guardar exatamente como a Início calcula (`todayBudget().savings.remaining`); em cada ciclo seguinte, mais a parte de guardar da renda esperada dele. Abaixo disso o veredito é "Melhor não" com motivo próprio (`savingsReserve`): a parcela sairia do dinheiro de guardar, que a Início já tira do número do dia. A sugestão do que caberia desconta a mesma reserva.
+
 ## Livre para gastar e reserva (revisão de 25/09)
 
 O saldo acumulado (`balance`) supõe que nada além do comprometido é gasto, e por isso a sobra de um mês reaparecia em todos os seguintes — o "por dia" de março oferecia o mesmo dinheiro que setembro já tinha oferecido. O número que se gasta agora é outro:

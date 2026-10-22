@@ -12,7 +12,9 @@
  * Duas réguas decidem, e as duas precisam passar:
  *
  * 1. O saldo projetado continua não-negativo em todo período a partir da
- *    primeira parcela. O saldo é encadeado — cada ciclo abre com o fechamento
+ *    primeira parcela — e, com as fatias da renda ligadas, não desce abaixo do
+ *    que ainda precisa ir para as caixinhas, que a Início já tira do número do
+ *    dia: um SIM não pode pagar a parcela com o dinheiro de guardar. O saldo é encadeado — cada ciclo abre com o fechamento
  *    do anterior —, então uma parcela pesa no ciclo em que cai e em todos os
  *    seguintes, e a sobra de um mês bom pode cobrir a parcela de um mês justo.
  * 2. O comprometimento — despesas fixas mais faturas sobre a renda — fica
@@ -40,7 +42,13 @@ import {
   type CardLimitUsage,
   type CardPurchaseInput,
 } from "./period";
-import { forecastPeriods, type ForecastInput, type PeriodForecast } from "./forecast";
+import {
+  forecastPeriods,
+  MAX_FORECAST_OFFSET,
+  type ForecastInput,
+  type PeriodForecast,
+} from "./forecast";
+import { savingReserve, type SlicePercents } from "./slices";
 
 /** A compra hipotética. Os mesmos campos de uma CardPurchase de verdade. */
 export interface SimulatedPurchase {
@@ -106,11 +114,21 @@ export interface PeriodImpact {
   dailyAfter: number;
   /** A janela mensal em que o teto é medido. Ver CommitmentWindow. */
   commitment: CommitmentWindow;
+  /**
+   * Quanto o saldo deste ciclo precisa manter para as caixinhas: o que falta
+   * guardar no corrente mais o guardar de cada ciclo até este. Zero sem fatias.
+   */
+  savingsRequired: number;
   /** Este ciclo já reprovava antes da compra — o NÃO não é culpa dela. */
   alreadyFailing: boolean;
 }
 
-export type SimulationBlocker = "negativeBalance" | "overCommitment" | "noIncome";
+export type SimulationBlocker =
+  | "negativeBalance"
+  /** O saldo fica no azul, mas abaixo do que precisa ir para as caixinhas. */
+  | "savingsReserve"
+  | "overCommitment"
+  | "noIncome";
 
 export interface PurchaseSimulation {
   approved: boolean;
@@ -167,6 +185,14 @@ export type SimulatePurchaseInput = Omit<ForecastInput, "creditCards"> & {
   purchase: SimulatedPurchase;
   /** De 1 a 100. */
   commitmentLimitPercent: number;
+  /** As fatias da renda, quando ligadas: as de guardar reservam saldo. */
+  slices?: SlicePercents | null;
+  /**
+   * O que ainda falta guardar no ciclo corrente, exatamente como a Início
+   * calcula (`todayBudget().savings.remaining`). Ausente, sai da projeção —
+   * que conta como renda até um freela lançado, e daria outro número.
+   */
+  savingsDueNow?: number;
 };
 
 /**
@@ -383,9 +409,13 @@ function compare(input: SimulatePurchaseInput): Comparison {
   // E vai um mês além da última parcela: o saldo é encadeado, então a compra
   // continua pesando depois de paga, e um mês apertado logo em seguida é
   // justamente onde ela ainda pode faltar.
+  //
+  // E nunca menos que o horizonte da Previsão: uma conta grande meses depois
+  // da última parcela (IPVA, IPTU) é exatamente onde a sobra que a compra
+  // levou vai faltar, e a Previsão já mostra esses ciclos.
   const count = Math.min(
     MAX_SIMULATION_OFFSET,
-    offset - (offset % monthSize) + 2 * monthSize - 1,
+    Math.max(offset - (offset % monthSize) + 2 * monthSize - 1, MAX_FORECAST_OFFSET),
   );
 
   const before = forecastPeriods({ ...input, count, maxOffset: MAX_SIMULATION_OFFSET });
@@ -397,6 +427,27 @@ function compare(input: SimulatePurchaseInput): Comparison {
   });
 
   if (before.length === 0) return unanswerable;
+
+  // O que cada ciclo precisa manter para as caixinhas, acumulado: o saldo é
+  // encadeado, então o guardar de um ciclo que não foi para a caixinha
+  // continua no saldo dos seguintes. No corrente, como na Início, só o que
+  // ainda falta guardar da renda que já entrou.
+  const slices = input.slices ?? null;
+  const savingsRequired: number[] = [];
+  before.reduce((total, period, index) => {
+    const step = !slices
+      ? 0
+      : index === 0 && input.savingsDueNow !== undefined
+        ? Math.max(0, input.savingsDueNow)
+        : savingReserve({
+            income: index === 0 ? period.incomeTotal : period.expectedIncomeTotal,
+            percents: slices,
+            saved: period.jarTotal,
+            spendable: Infinity,
+          }).remaining;
+    savingsRequired.push(toCents(total + step));
+    return total + step;
+  }, 0);
 
   const periods: PeriodImpact[] = [];
   const balanceSlack: number[] = [];
@@ -448,7 +499,8 @@ function compare(input: SimulatePurchaseInput): Comparison {
       after: ratioOf(windowAfter.committed, windowAfter.income),
     };
 
-    const failsBalanceBefore = baseline.balance < -EPSILON;
+    const required = savingsRequired[index];
+    const failsBalanceBefore = baseline.balance < Math.max(0, required) - EPSILON;
     // O teto só é cobrado das janelas em que cai parcela: numa janela que a
     // compra não toca, o comprometimento é o mesmo com ou sem ela.
     const failsCommitmentBefore =
@@ -465,6 +517,7 @@ function compare(input: SimulatePurchaseInput): Comparison {
       dailyBefore: baseline.dailyAvailable,
       dailyAfter: simulated.dailyAvailable,
       commitment,
+      savingsRequired: required,
       alreadyFailing: failsBalanceBefore || failsCommitmentBefore,
     });
 
@@ -478,7 +531,7 @@ function compare(input: SimulatePurchaseInput): Comparison {
      * ciclo: é o total delas que o saldo encadeado carrega.
      */
     if (cumulativeCount > 0) {
-      balanceSlack.push(Math.max(0, baseline.balance) / cumulativeCount);
+      balanceSlack.push(Math.max(0, baseline.balance - required) / cumulativeCount);
     }
 
     if (!touched) continue;
@@ -499,7 +552,9 @@ function compare(input: SimulatePurchaseInput): Comparison {
   // parcela repetida no saldo, e alongariam a lista sem dizer nada novo.
   const lastShown = periods.reduce(
     (last, period, index) =>
-      period.installmentAmount > 0 || period.balanceAfter < -EPSILON ? index : last,
+      period.installmentAmount > 0 || period.balanceAfter < period.savingsRequired - EPSILON
+        ? index
+        : last,
     -1,
   );
   const checkedPeriods = [...periods];
@@ -512,6 +567,13 @@ function compare(input: SimulatePurchaseInput): Comparison {
 
   const blockers: SimulationBlocker[] = [];
   if (checkedPeriods.some((p) => p.balanceAfter < -EPSILON)) blockers.push("negativeBalance");
+  if (
+    checkedPeriods.some(
+      (p) => p.balanceAfter >= -EPSILON && p.balanceAfter < p.savingsRequired - EPSILON,
+    )
+  ) {
+    blockers.push("savingsReserve");
+  }
   if (
     periods.some(
       (p) =>
@@ -528,11 +590,16 @@ function compare(input: SimulatePurchaseInput): Comparison {
    * pobre mesmo quando quem estoura o teto é outro.
    */
   const slackAfter = (p: PeriodImpact) =>
-    Math.min(p.balanceAfter, p.commitment.after === null ? Infinity : limit - p.commitment.after);
+    Math.min(
+      p.balanceAfter - p.savingsRequired,
+      p.commitment.after === null ? Infinity : limit - p.commitment.after,
+    );
   const worstPeriod =
     periods.length === 0
       ? null
-      : periods.reduce((worst, period) => (slackAfter(period) < slackAfter(worst) ? period : worst));
+      : periods.reduce((worst, period) =>
+          slackAfter(period) < slackAfter(worst) ? period : worst,
+        );
 
   const unevaluatedAmount = Math.max(0, toCents(input.purchase.amount - evaluatedAmount));
 
