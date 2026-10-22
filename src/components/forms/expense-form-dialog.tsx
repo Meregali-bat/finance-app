@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectTrigger,
@@ -49,6 +50,9 @@ export function ExpenseFormDialog({
   const [open, setOpen] = useState(false);
   const [cardId, setCardId] = useState<string>(expense?.cardId ?? NONE);
   const [categoryId, setCategoryId] = useState<string>(expense?.categoryId ?? NONE);
+  // A cobrança deste mês já foi lançada como gasto comum ou compra no cartão:
+  // a despesa começa na próxima, para não ficar em dobro.
+  const [skipCurrent, setSkipCurrent] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const isEdit = !!expense;
@@ -174,12 +178,18 @@ export function ExpenseFormDialog({
           {categories.length > 0 && (
             <div className="flex flex-col gap-2">
               <Label htmlFor="categoryId">Categoria</Label>
-              <input type="hidden" name="categoryId" value={categoryId === NONE ? "" : categoryId} />
+              <input
+                type="hidden"
+                name="categoryId"
+                value={categoryId === NONE ? "" : categoryId}
+              />
               <Select value={categoryId} onValueChange={(v) => setCategoryId(v as string)}>
                 <SelectTrigger id="categoryId" className="w-full">
                   <SelectValue>
                     {(value: string) =>
-                      value === NONE ? "Sem categoria" : categories.find((c) => c.id === value)?.name
+                      value === NONE
+                        ? "Sem categoria"
+                        : categories.find((c) => c.id === value)?.name
                     }
                   </SelectValue>
                 </SelectTrigger>
@@ -192,6 +202,20 @@ export function ExpenseFormDialog({
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+          )}
+          {!isEdit && (
+            <div className="flex items-center justify-between gap-3 rounded-2xl bg-muted/60 p-3">
+              <input type="hidden" name="skipCurrent" value={skipCurrent ? "1" : ""} />
+              <div className="min-w-0">
+                <Label htmlFor="skip-current">Já lancei a cobrança deste mês</Label>
+                <p className="text-xs text-muted-foreground">
+                  {hasCard
+                    ? "Começa na próxima fatura: a que está aberta já tem a compra que você lançou."
+                    : "Começa no próximo vencimento, para não contar duas vezes."}
+                </p>
+              </div>
+              <Switch id="skip-current" checked={skipCurrent} onCheckedChange={setSkipCurrent} />
             </div>
           )}
           {error && (

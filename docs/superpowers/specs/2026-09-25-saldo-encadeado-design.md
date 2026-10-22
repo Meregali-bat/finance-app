@@ -189,3 +189,7 @@ Guardar pode dizer **"Vou tirar numa data"** (`JarDeposit.plannedWithdrawalAt`, 
 - **Dinheiro que já estava na caixinha** ganha data pelo "Agendar resgate" do card (`JarWithdrawalPlan`: valor até o saldo sem data, e o dia), que vale o mesmo que um depósito com data; só resgates feitos depois do agendamento o abatem. Cada data aparece no card com um "×" para cancelar.
 - **Dia passado sem resgate:** deixa de contar na Previsão (o dinheiro continua na caixinha, não pode virar saldo) e o card da caixinha avisa em vermelho que era para ter voltado.
 
+
+## Despesa fixa com a cobrança deste mês já lançada (23/10)
+
+Cadastrar uma assinatura depois de ter lançado a cobrança do mês à mão (gasto comum ou compra no cartão) a contava duas vezes: a despesa vale a partir do `createdAt`, e no cartão entra em toda fatura cujo ciclo fecha a partir dele — inclusive a aberta. O cadastro tem **"Já lancei a cobrança deste mês"**, que grava o `createdAt` de onde a despesa começa na cobrança seguinte (`startAfterCurrentCharge`): na conta, o dia seguinte ao vencimento deste mês se ele ainda não passou (se passou, hoje já basta); no cartão, o dia seguinte ao próximo fechamento, deixando a fatura aberta de fora.
