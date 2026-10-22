@@ -14,8 +14,14 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { CurrencyInput } from "@/components/currency-input";
-import { JarYieldPreview, type YieldContext } from "@/components/jar-yield-preview";
+import {
+  dayFromKey,
+  JarYieldPreview,
+  shortDay,
+  type LotView,
+  type YieldContext,
+} from "@/components/jar-yield-preview";
+import { formatCurrency } from "@/lib/format";
 import { setJarYield } from "@/lib/actions/jar";
 import { errorMessage } from "@/lib/error-message";
 
@@ -32,13 +38,14 @@ function numberOf(text: string): number {
 export function JarYieldDialog({
   jarId,
   jarName,
-  balance,
+  lots,
   cdiPercent,
   context,
 }: {
   jarId: string;
   jarName: string;
-  balance: number;
+  /** O saldo pelas entradas que o formam, cada uma com a sua data. */
+  lots: LotView[];
   cdiPercent: number | null;
   context: YieldContext;
 }) {
@@ -47,7 +54,6 @@ export function JarYieldDialog({
   const [cdiText, setCdiText] = useState(
     context.cdiAnnualPercent.toLocaleString("pt-BR", { maximumFractionDigits: 2 }),
   );
-  const [amount, setAmount] = useState(balance);
   const [until, setUntil] = useState(context.nextPayday ?? "");
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
@@ -128,40 +134,47 @@ export function JarYieldDialog({
             A Caixinha do Nubank e o RDB costumam render 100%.
           </p>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="yieldAmount">Valor</Label>
-              <CurrencyInput
-                id="yieldAmount"
-                name="yieldAmount"
-                defaultValue={balance > 0 ? balance : undefined}
-                onValueChange={setAmount}
-              />
-            </div>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="yieldUntil">Resgatar em</Label>
-              <Input
-                id="yieldUntil"
-                type="date"
-                value={until}
-                min={context.today}
-                onChange={(e) => setUntil(e.target.value)}
-              />
-            </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="yieldUntil">Resgatar em</Label>
+            <Input
+              id="yieldUntil"
+              type="date"
+              value={until}
+              min={context.today}
+              onChange={(e) => setUntil(e.target.value)}
+            />
           </div>
 
-          <JarYieldPreview
-            amount={amount}
-            cdiAnnualPercent={numberOf(cdiText)}
-            cdiPercent={numberOf(percentText)}
-            from={context.today}
-            to={until || context.today}
-          />
+          {lots.length > 0 && (
+            <p className="-mt-1 text-[12.5px] text-muted-foreground">
+              O saldo pelas datas em que entrou:{" "}
+              {lots
+                .map(
+                  (lot) => `${formatCurrency(lot.amount)} desde ${shortDay(dayFromKey(lot.from))}`,
+                )
+                .join(" · ")}
+              . Para uma entrada de outro dia, use o Guardar e informe quando entrou.
+            </p>
+          )}
+
+          {lots.length > 0 ? (
+            <JarYieldPreview
+              lots={lots}
+              cdiAnnualPercent={numberOf(cdiText)}
+              cdiPercent={numberOf(percentText)}
+              to={until || context.today}
+            />
+          ) : (
+            <p className="rounded-[14px] bg-muted/50 px-3.5 py-3 text-[13px] text-muted-foreground">
+              A caixinha está vazia. No Guardar, depois de salvar a porcentagem, aparece quanto cada
+              valor rende até o resgate.
+            </p>
+          )}
           <p className="-mt-2 text-[12.5px] text-muted-foreground">
             {context.nextPayday && until === context.nextPayday
               ? "O resgate está no dia do seu próximo pagamento. "
               : ""}
-            A conta é para um valor guardado hoje: o que já está lá há mais de 30 dias não paga IOF.
+            O que está lá há mais de 30 dias já não paga IOF.
           </p>
 
           {error && (

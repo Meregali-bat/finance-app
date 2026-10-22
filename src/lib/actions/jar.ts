@@ -58,17 +58,43 @@ export async function deleteJar(id: string) {
 const depositSchema = z.object({
   amount: z.coerce.number().positive("Valor deve ser maior que zero"),
   note: z.string().trim().max(120).optional().nullable(),
+  // O dia em que o dinheiro entrou ou saiu de verdade: é dele que o
+  // rendimento e o IOF contam. Ausente ou hoje, vale o agora.
+  date: z.iso.date().optional(),
 });
+
+/**
+ * O instante gravado para um movimento com data escolhida: meio-dia daquele
+ * dia no fuso do app, longe da virada para outro dia. Hoje (ou sem data) é o
+ * agora, como sempre foi. Não aceita data no futuro.
+ */
+function movementInstant(date: string | undefined): Date | undefined {
+  if (!date) return undefined;
+  const [y, m, d] = date.split("-").map(Number);
+  const now = new Date();
+  const chosen = new Date(y, m - 1, d, 12);
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  if (chosen.getTime() >= today.getTime() + 86_400_000) {
+    throw new Error("A data não pode ser depois de hoje.");
+  }
+  if (chosen.getTime() >= today.getTime()) return undefined;
+  return chosen;
+}
 
 export async function depositToJar(jarId: string, formData: FormData) {
   const userId = await requireUserId();
   const data = depositSchema.parse({
     amount: formData.get("amount"),
     note: formData.get("note") || undefined,
+    date: formData.get("date") || undefined,
   });
+  const createdAt = movementInstant(data.date);
 
   const [deposit] = await prisma.$transaction([
-    prisma.jarDeposit.create({ data: { ...data, jarId, userId }, select: { id: true } }),
+    prisma.jarDeposit.create({
+      data: { amount: data.amount, note: data.note, createdAt, jarId, userId },
+      select: { id: true },
+    }),
     prisma.jar.update({
       where: { id: jarId, userId },
       data: { balance: { increment: data.amount } },
@@ -91,7 +117,9 @@ export async function withdrawFromJar(jarId: string, formData: FormData) {
   const data = depositSchema.parse({
     amount: formData.get("amount"),
     note: formData.get("note") || undefined,
+    date: formData.get("date") || undefined,
   });
+  const createdAt = movementInstant(data.date);
 
   const jar = await prisma.jar.findUnique({ where: { id: jarId, userId } });
   if (!jar) throw new Error("Caixinha não encontrada");
@@ -108,6 +136,7 @@ export async function withdrawFromJar(jarId: string, formData: FormData) {
         amount: -data.amount,
         note: data.note ?? (overdraw ? "Resgate com rendimento" : "Resgate"),
         ...(overdraw ? { balanceChange: -decrement } : {}),
+        createdAt,
         jarId,
         userId,
       },
