@@ -45,6 +45,10 @@ Conferido com a fatura real: os 59 lançamentos somam o total da fatura.
 
 O extrato da conta PJ do Nubank tem o mesmo layout, com duas diferenças: cada dia fecha com uma linha "Saldo do dia" na coluna do tipo, que não é movimento e é pulada; e o titular vem com o CNPJ do MEI na frente ("62.071.278 FULANA"), que é tirado dos dois lados ao reconhecer a transferência para a conta pessoal da mesma pessoa.
 
+## Transferência já lançada como gasto (22/10)
+
+A transferência entre contas próprias não confere com nada, mas procura um **lançamento comum** do app com o mesmo valor e até 2 dias de diferença: se achar, ele entrou por engano (importação antiga, antes do titular de MEI ser reconhecido, ou lançado à mão) e está tirando do saldo um dinheiro que só mudou de conta. A importação lista esses lançamentos à parte, com "Apagar do app" para todos de uma vez (com confirmação; leva junto o empréstimo ligado).
+
 ## Banrisul (22/10)
 
 O extrato de conta corrente do Banrisul ("PARA SIMPLES CONFERENCIA") também é lido (`src/lib/statement/banrisul.ts`). É fonte de máquina de escrever, com colunas fixas: o dia só na primeira linha do dia, o histórico ("PIX", "PIX RECEBIDO", "IOF ADICIONAL"), o documento e o valor com "-" no fim quando saiu. O mês e o ano vêm do cabeçalho "MOVIMENTOS OUT/2026"; quem está do outro lado vem da linha "NOME:" de baixo, sem o CNPJ de MEI na frente — então o Pix do próprio MEI do titular conta como transferência entre contas próprias. As linhas de saldo ("SALDO NA DATA", "SALDO ANT EM") não são movimento. O período vai do dia seguinte ao "SALDO ANT EM" até a data de emissão.

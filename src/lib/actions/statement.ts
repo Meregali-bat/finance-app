@@ -37,8 +37,19 @@ export type StatementAnalysis =
       alreadyIgnored: number;
       /** Pagamentos de fatura sem pagamento marcado no app. */
       unmatchedBills: { date: string; amount: number }[];
+      /** Lançamentos do app que são, pelo extrato, transferência entre contas próprias. */
+      wrongTransfers: WrongTransfer[];
       differences: StatementDifference[];
     };
+
+export interface WrongTransfer {
+  id: string;
+  /** "YYYY-MM-DD", do lançamento no app. */
+  date: string;
+  /** Assinado como no app: positivo saiu, negativo entrou. */
+  amount: number;
+  description: string;
+}
 
 const DAY = 86_400_000;
 
@@ -84,7 +95,7 @@ export async function analyzeStatement(formData: FormData): Promise<StatementAna
   const [transactions, receipts, payments, jars, ignores] = await Promise.all([
     prisma.transaction.findMany({
       where: { userId, fromPeriodClose: false, date: { gte: from, lt: to } },
-      select: { amount: true, date: true },
+      select: { id: true, amount: true, date: true, description: true },
     }),
     prisma.incomeReceipt.findMany({
       where: { userId, occurrenceDate: { gte: from, lt: to } },
@@ -106,6 +117,8 @@ export async function analyzeStatement(formData: FormData): Promise<StatementAna
       day: utcDay(t.date),
       amount: Number(t.amount),
       kind: "transaction" as const,
+      id: t.id,
+      description: t.description,
     })),
     ...receipts.map((r) => ({
       day: utcDay(r.occurrenceDate),
@@ -155,6 +168,14 @@ export async function analyzeStatement(formData: FormData): Promise<StatementAna
     unmatchedBills: result
       .filter((r) => r.kind === "billPayment" && !r.matched)
       .map((r) => ({ date: r.line.date.toISOString().slice(0, 10), amount: r.line.amount })),
+    wrongTransfers: result.flatMap((r) => {
+      const record = r.wrongRecord === null ? null : app[r.wrongRecord];
+      if (!record?.id) return [];
+      const date = new Date(record.day * DAY).toISOString().slice(0, 10);
+      return [
+        { id: record.id, date, amount: record.amount, description: record.description ?? "" },
+      ];
+    }),
     differences,
   };
 }
@@ -254,4 +275,17 @@ export async function applyStatementDecisions(input: unknown) {
   revalidatePath("/cartoes");
   for (const id of cardIds) revalidatePath(`/cartoes/${id}`);
   return { added: add.length + cardAdd.length, ignored: ignore.length };
+}
+
+/**
+ * Apaga os lançamentos que a conferência mostrou serem transferência entre
+ * contas próprias: o dinheiro só mudou de conta e não pode sair do saldo.
+ * Leva junto o empréstimo ligado, como apagar pelo Histórico.
+ */
+export async function deleteWrongTransfers(input: unknown) {
+  const userId = await requireUserId();
+  const { ids } = z.object({ ids: z.array(z.string().min(1)).min(1).max(200) }).parse(input);
+  const { count } = await prisma.transaction.deleteMany({ where: { userId, id: { in: ids } } });
+  revalidatePath("/", "layout");
+  return { deleted: count };
 }

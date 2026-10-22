@@ -7,10 +7,13 @@ import { Button } from "@/components/ui/button";
 import { homeCard } from "@/components/home-card";
 import { ChoiceSelect } from "@/components/ui/choice-select";
 import { SectionLabel } from "@/components/page-header";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   analyzeStatement,
   applyStatementDecisions,
+  deleteWrongTransfers,
   type StatementAnalysis,
+  type WrongTransfer,
 } from "@/lib/actions/statement";
 import { errorMessage } from "@/lib/error-message";
 import { formatCurrency } from "@/lib/format";
@@ -160,8 +163,8 @@ export function StatementImport({ categories }: { categories: { id: string; name
               : "Escolher o PDF do extrato"}
         </span>
         <span className="text-[13px] text-muted-foreground">
-          O PDF do extrato da conta (Nubank, Sicoob ou Banrisul) ou da fatura do cartão Sicoob, como o app do
-          banco exporta.
+          O PDF do extrato da conta (Nubank, Sicoob ou Banrisul) ou da fatura do cartão Sicoob, como
+          o app do banco exporta.
         </span>
         <input
           type="file"
@@ -211,6 +214,19 @@ export function StatementImport({ categories }: { categories: { id: string; name
             />
           ) : (
             <Summary analysis={analysis} />
+          )}
+
+          {analysis.mode === "account" && analysis.wrongTransfers.length > 0 && (
+            <WrongTransfers
+              items={analysis.wrongTransfers}
+              onDeleted={() =>
+                setAnalysis((current) =>
+                  current && current.mode === "account"
+                    ? { ...current, wrongTransfers: [] }
+                    : current,
+                )
+              }
+            />
           )}
 
           {analysis.mode === "account" &&
@@ -438,5 +454,85 @@ function DifferenceRow({
         ))}
       </div>
     </li>
+  );
+}
+
+/**
+ * Lançamentos que já estão no app como gasto ou receita, mas que o extrato
+ * mostra serem transferência entre as próprias contas — de uma importação
+ * antiga ou lançados à mão. Ficam tirando do saldo um dinheiro que só mudou
+ * de conta; daqui dá para apagar todos de uma vez.
+ */
+function WrongTransfers({ items, onDeleted }: { items: WrongTransfer[]; onDeleted: () => void }) {
+  const [confirming, setConfirming] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, start] = useTransition();
+  const one = items.length === 1;
+
+  return (
+    <div className="flex flex-col gap-3 rounded-[18px] bg-negative/8 px-4 py-3.5 ring-1 ring-negative/20">
+      <div className="flex items-start gap-3">
+        <AlertTriangle className="mt-0.5 size-4 shrink-0 text-negative" aria-hidden="true" />
+        <div className="flex min-w-0 flex-col gap-1 text-[13px]">
+          <p className="font-medium">
+            {one
+              ? "1 lançamento do app é transferência entre suas contas"
+              : `${items.length} lançamentos do app são transferência entre suas contas`}
+          </p>
+          <p className="text-muted-foreground">
+            O dinheiro só mudou de conta, mas {one ? "ele está" : "eles estão"} contando como{" "}
+            {items.every((i) => i.amount > 0) ? "gasto" : "gasto ou receita"} e mexendo no saldo.
+          </p>
+        </div>
+      </div>
+      <ul className="flex flex-col gap-1.5 pl-7">
+        {items.map((item) => (
+          <li key={item.id} className="flex items-center justify-between gap-3 text-[13px]">
+            <span className="min-w-0 truncate">
+              <span className="text-muted-foreground tabular-nums">{shortDay(item.date)}</span> ·{" "}
+              {item.description}
+            </span>
+            <span className="shrink-0 tabular-nums">
+              {item.amount < 0 ? "+" : "−"}
+              {formatCurrency(Math.abs(item.amount))}
+            </span>
+          </li>
+        ))}
+      </ul>
+      {error && <p className="pl-7 text-[13px] text-negative">{error}</p>}
+      <div className="pl-7">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => setConfirming(true)}
+          disabled={pending}
+        >
+          {one ? "Apagar do app" : `Apagar os ${items.length} do app`}
+        </Button>
+      </div>
+      <ConfirmDialog
+        open={confirming}
+        onOpenChange={setConfirming}
+        title={one ? "Apagar 1 lançamento?" : `Apagar ${items.length} lançamentos?`}
+        description="Saem do Histórico, do orçamento e do saldo. Não dá para desfazer."
+        confirmLabel="Apagar"
+        destructive
+        isPending={pending}
+        onConfirm={() =>
+          start(async () => {
+            try {
+              setError(null);
+              await deleteWrongTransfers({ ids: items.map((i) => i.id) });
+              setConfirming(false);
+              onDeleted();
+            } catch (e) {
+              setConfirming(false);
+              setError(errorMessage(e, "Não deu para apagar. Tente de novo."));
+            }
+          })
+        }
+      />
+    </div>
   );
 }
