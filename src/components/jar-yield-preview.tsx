@@ -142,4 +142,62 @@ export interface YieldContext {
   today: string;
   /** O dia do próximo pagamento, "YYYY-MM-DD"; nulo sem renda cadastrada. */
   nextPayday: string | null;
+  /** As próximas contas a pagar, da mais próxima: atalhos para a data de tirar. */
+  upcomingBills: { label: string; date: string; amount: number }[];
+}
+
+/**
+ * O dia de tirar sugerido: o da maior das próximas contas — o aluguel, em
+ * geral, que é para o que se separa dinheiro —, ou o do próximo pagamento.
+ */
+export function suggestedUntil(context: YieldContext): string {
+  const biggest = [...context.upcomingBills].sort((a, b) => b.amount - a.amount)[0];
+  return biggest?.date ?? context.nextPayday ?? context.today;
+}
+
+/**
+ * Atalhos para a data de tirar: as próximas contas e o próximo salário. O
+ * dinheiro sai da caixinha para pagar alguma coisa, e o dia dela é a resposta.
+ */
+export function UntilChips({
+  context,
+  value,
+  onChange,
+}: {
+  context: YieldContext;
+  value: string;
+  onChange: (date: string) => void;
+}) {
+  const chips = [
+    ...context.upcomingBills.map((b) => ({ key: `${b.label}-${b.date}`, ...b })),
+    ...(context.nextPayday
+      ? [{ key: "payday", label: "Salário", date: context.nextPayday, amount: 0 }]
+      : []),
+  ];
+  if (chips.length === 0) return null;
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {chips.map((chip) => {
+        const active = chip.date === value;
+        return (
+          <button
+            key={chip.key}
+            type="button"
+            onClick={() => onChange(chip.date)}
+            aria-pressed={active}
+            className={
+              active
+                ? "flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-foreground px-3 text-[12.5px] font-semibold text-background"
+                : "flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-[12.5px] font-medium text-muted-foreground ring-1 ring-(--hairline) transition-colors duration-150 hover:text-foreground"
+            }
+          >
+            {chip.label}
+            <span className={active ? "opacity-70" : "opacity-60"}>
+              {shortDay(dayFromKey(chip.date))}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
 }

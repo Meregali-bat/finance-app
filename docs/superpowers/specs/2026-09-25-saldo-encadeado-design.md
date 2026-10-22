@@ -181,7 +181,7 @@ Cada caixinha pode dizer quanto do CDI rende (`Jar.cdiPercent`, ex. 100). Com is
 
 ## Resgate previsto: dinheiro estacionado (23/10)
 
-Guardar pode dizer **"Vou tirar numa data"** (`JarDeposit.plannedWithdrawalAt`, um dia de calendário). Esse dinheiro não é guardado — está estacionado rendendo até o dia de usar:
+Guardar pode dizer **"Vou tirar numa data"** (`JarDeposit.plannedWithdrawalAt`, um dia de calendário). O dinheiro sai da caixinha para pagar alguma coisa, então a data sugerida é a da **maior das próximas contas** (o aluguel, em geral), com atalhos para cada conta a pagar deste ciclo e do seguinte e para o próximo salário. Esse dinheiro não é guardado — está estacionado rendendo até o dia de usar:
 
 - **Sai do disponível no dia em que entra**, como todo depósito, e **volta no dia previsto**: no orçamento do período (`jarReturnTotal` soma ao resultado; com saldo em conta, entra no "a chegar" enquanto o dia não passou) e na Previsão, como "Voltam das caixinhas". Assim um ciclo não fica no vermelho por causa de um dinheiro que já tem dia para voltar — e o "Posso comprar isso?", que usa a mesma projeção, também conta com ele.
 - **Não conta como guardado nas fatias** (`parkedDepositTotal` sai do guardado do período, e a tela das Metas ignora esses depósitos).
