@@ -11,6 +11,7 @@ import { currentCdi } from "@/lib/cdi";
 import { todayInputValue } from "@/lib/format";
 import { remainingLots } from "@/lib/jar-yield";
 import { jarReturns } from "@/lib/jar-plans";
+import { forecastPeriods } from "@/lib/forecast";
 
 /** O dia local de um instante como "YYYY-MM-DD". */
 function dayKey(instant: Date) {
@@ -42,11 +43,36 @@ export default async function JarsPage() {
     loadBudgetInputs(userId),
     currentCdi(),
   ]);
-  // O próximo pagamento é o fim do período: o dia em que o dinheiro guardado
-  // costuma voltar a fazer falta, e por isso a data de resgate sugerida.
-  const { budget } = todayBudget(inputs, new Date());
-  const end = budget.periodEnd;
-  const nextPayday = inputs.incomes.length > 0 ? dayKey(end) : null;
+  const today = new Date();
+  const { budget } = todayBudget(inputs, today);
+  const nextPayday = inputs.incomes.length > 0 ? dayKey(budget.periodEnd) : null;
+
+  // As próximas contas a pagar, deste ciclo e do seguinte: o dinheiro sai da
+  // caixinha para pagar uma delas, e o dia dela é a data de tirar sugerida.
+  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const seen = new Set<string>();
+  const upcomingBills = forecastPeriods({
+    ...inputs,
+    openingBalance: budget.openingBalance,
+    today,
+    count: 1,
+  })
+    .flatMap((period) => period.entries)
+    .filter(
+      (e) =>
+        (e.kind === "fixedExpense" || e.kind === "cardBill") &&
+        !e.confirmed &&
+        e.date.getTime() >= todayStart.getTime(),
+    )
+    .sort((a, b) => a.date.getTime() - b.date.getTime())
+    .filter((e) => {
+      // Uma vez cada conta: a do mês que vem repete a deste.
+      if (seen.has(e.label)) return false;
+      seen.add(e.label);
+      return true;
+    })
+    .slice(0, 5)
+    .map((e) => ({ label: e.label, date: dayKey(e.date), amount: e.amount }));
 
   /**
    * As entradas que formam o saldo de cada caixinha, cada uma com a sua data:
@@ -114,6 +140,7 @@ export default async function JarsPage() {
             cdiSource: cdi.source,
             today: todayInputValue(),
             nextPayday,
+            upcomingBills,
           }}
         />
       )}

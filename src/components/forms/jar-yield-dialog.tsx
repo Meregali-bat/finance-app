@@ -18,6 +18,8 @@ import {
   dayFromKey,
   JarYieldPreview,
   shortDay,
+  suggestedUntil,
+  UntilChips,
   type LotView,
   type YieldContext,
 } from "@/components/jar-yield-preview";
@@ -54,7 +56,7 @@ export function JarYieldDialog({
   const [cdiText, setCdiText] = useState(
     context.cdiAnnualPercent.toLocaleString("pt-BR", { maximumFractionDigits: 2 }),
   );
-  const [until, setUntil] = useState(context.nextPayday ?? "");
+  const [until, setUntil] = useState(suggestedUntil(context));
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
@@ -143,6 +145,7 @@ export function JarYieldDialog({
               min={context.today}
               onChange={(e) => setUntil(e.target.value)}
             />
+            <UntilChips context={context} value={until} onChange={setUntil} />
           </div>
 
           {lots.length > 0 && (
@@ -171,9 +174,6 @@ export function JarYieldDialog({
             </p>
           )}
           <p className="-mt-2 text-[12.5px] text-muted-foreground">
-            {context.nextPayday && until === context.nextPayday
-              ? "O resgate está no dia do seu próximo pagamento. "
-              : ""}
             O que está lá há mais de 30 dias já não paga IOF.
           </p>
 

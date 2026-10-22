@@ -18,7 +18,12 @@ import { CurrencyInput } from "@/components/currency-input";
 import { depositToJar, withdrawFromJar } from "@/lib/actions/jar";
 import { iconButton } from "@/components/ui/icon-button";
 import { errorMessage } from "@/lib/error-message";
-import { JarYieldPreview, type YieldContext } from "@/components/jar-yield-preview";
+import {
+  JarYieldPreview,
+  suggestedUntil,
+  UntilChips,
+  type YieldContext,
+} from "@/components/jar-yield-preview";
 
 /**
  * Guardar e resgatar são o mesmo formulário com a direção trocada: o resgate
@@ -48,7 +53,7 @@ export function JarDepositDialog({
   const [amount, setAmount] = useState(0);
   // O resgate previsto começa no próximo pagamento: é o dia em que o dinheiro
   // costuma voltar a fazer falta.
-  const [until, setUntil] = useState(yieldContext?.nextPayday ?? "");
+  const [until, setUntil] = useState(yieldContext ? suggestedUntil(yieldContext) : "");
   // O dia em que o dinheiro entrou (ou saiu) de verdade — pode ter sido antes
   // de lançar aqui, e é dele que o rendimento e o IOF contam.
   const [date, setDate] = useState(yieldContext?.today ?? "");
@@ -149,6 +154,7 @@ export function JarDepositDialog({
                     required={planned}
                     onChange={(e) => setUntil(e.target.value)}
                   />
+                  <UntilChips context={yieldContext} value={until} onChange={setUntil} />
                 </div>
               )}
               {showYield && (
