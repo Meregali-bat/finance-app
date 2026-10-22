@@ -141,3 +141,73 @@ export function simulateYield(input: {
  * estimativa, num campo que a pessoa pode corrigir.
  */
 export const FALLBACK_CDI_ANNUAL_PERCENT = 14.9;
+
+export interface YieldLot {
+  /** O dia em que o dinheiro entrou, meia-noite UTC. */
+  from: Date;
+  amount: number;
+}
+
+/**
+ * O que sobra de cada entrada depois dos resgates, do mais antigo para o mais
+ * novo — como os bancos tiram: primeiro o que entrou primeiro. Cada sobra rende
+ * e paga imposto pela própria data.
+ */
+export function remainingLots(movements: { date: Date; amount: number }[]): YieldLot[] {
+  const lots: YieldLot[] = [];
+  const sorted = [...movements].sort((a, b) => a.date.getTime() - b.date.getTime());
+  for (const m of sorted) {
+    if (m.amount > 0) {
+      lots.push({ from: m.date, amount: m.amount });
+      continue;
+    }
+    let out = -m.amount;
+    while (out > 0.005 && lots.length > 0) {
+      const take = Math.min(out, lots[0].amount);
+      lots[0].amount = cents(lots[0].amount - take);
+      out = cents(out - take);
+      if (lots[0].amount <= 0.005) lots.shift();
+    }
+  }
+  return lots;
+}
+
+export interface LotsYieldResult {
+  principal: number;
+  gross: number;
+  iof: number;
+  ir: number;
+  net: number;
+  total: number;
+  lots: (YieldLot & YieldResult)[];
+}
+
+/** O mesmo `simulateYield`, entrada por entrada, somado. */
+export function simulateLotsYield(input: {
+  lots: YieldLot[];
+  cdiAnnualPercent: number;
+  cdiPercent: number;
+  to: Date;
+}): LotsYieldResult {
+  const lots = input.lots.map((lot) => ({
+    ...lot,
+    ...simulateYield({
+      amount: lot.amount,
+      cdiAnnualPercent: input.cdiAnnualPercent,
+      cdiPercent: input.cdiPercent,
+      from: lot.from,
+      to: input.to,
+    }),
+  }));
+  const sum = (pick: (l: YieldResult & YieldLot) => number) =>
+    cents(lots.reduce((total, lot) => total + pick(lot), 0));
+  return {
+    principal: sum((l) => l.amount),
+    gross: sum((l) => l.gross),
+    iof: sum((l) => l.iof),
+    ir: sum((l) => l.ir),
+    net: sum((l) => l.net),
+    total: sum((l) => l.total),
+    lots,
+  };
+}

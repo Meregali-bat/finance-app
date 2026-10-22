@@ -48,6 +48,9 @@ export function JarDepositDialog({
   // O resgate previsto começa no próximo pagamento: é o dia em que o dinheiro
   // costuma voltar a fazer falta.
   const [until, setUntil] = useState(yieldContext?.nextPayday ?? "");
+  // O dia em que o dinheiro entrou (ou saiu) de verdade — pode ter sido antes
+  // de lançar aqui, e é dele que o rendimento e o IOF contam.
+  const [date, setDate] = useState(yieldContext?.today ?? "");
   const showYield = !withdraw && cdiPercent != null && yieldContext != null;
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -97,9 +100,24 @@ export function JarDepositDialog({
           </DialogTitle>
         </DialogHeader>
         <form action={handleSubmit} className="flex flex-col gap-4">
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="amount">Valor</Label>
-            <CurrencyInput id="amount" name="amount" required onValueChange={setAmount} />
+          <div className="grid grid-cols-2 gap-3">
+            <div className="flex min-w-0 flex-col gap-2">
+              <Label htmlFor="amount">Valor</Label>
+              <CurrencyInput id="amount" name="amount" required onValueChange={setAmount} />
+            </div>
+            {yieldContext && (
+              <div className="flex min-w-0 flex-col gap-2">
+                <Label htmlFor="date">{withdraw ? "Quando saiu" : "Quando entrou"}</Label>
+                <Input
+                  id="date"
+                  name="date"
+                  type="date"
+                  value={date}
+                  max={yieldContext.today}
+                  onChange={(e) => setDate(e.target.value)}
+                />
+              </div>
+            )}
           </div>
           {showYield && (
             <div className="flex flex-col gap-2">
@@ -112,10 +130,9 @@ export function JarDepositDialog({
                 onChange={(e) => setUntil(e.target.value)}
               />
               <JarYieldPreview
-                amount={amount}
+                lots={[{ from: date || yieldContext.today, amount }]}
                 cdiAnnualPercent={yieldContext.cdiAnnualPercent}
                 cdiPercent={cdiPercent}
-                from={yieldContext.today}
                 to={until || yieldContext.today}
               />
             </div>

@@ -9,6 +9,17 @@ import { loadBudgetInputs } from "@/lib/budget-inputs";
 import { todayBudget } from "@/lib/today-budget";
 import { currentCdi } from "@/lib/cdi";
 import { todayInputValue } from "@/lib/format";
+import { remainingLots } from "@/lib/jar-yield";
+
+/** O dia local de um instante como "YYYY-MM-DD". */
+function dayKey(instant: Date) {
+  return `${instant.getFullYear()}-${String(instant.getMonth() + 1).padStart(2, "0")}-${String(instant.getDate()).padStart(2, "0")}`;
+}
+
+/** O mesmo dia como meia-noite UTC, a forma que o cálculo de rendimento usa. */
+function utcDay(instant: Date) {
+  return new Date(Date.UTC(instant.getFullYear(), instant.getMonth(), instant.getDate()));
+}
 
 export default async function JarsPage() {
   const userId = await requireUserId();
@@ -16,6 +27,7 @@ export default async function JarsPage() {
     prisma.jar.findMany({
       where: { userId, deletedAt: null },
       orderBy: { createdAt: "asc" },
+      include: { deposits: { select: { amount: true, balanceChange: true, createdAt: true } } },
     }),
     loadBudgetInputs(userId),
     currentCdi(),
@@ -24,10 +36,30 @@ export default async function JarsPage() {
   // costuma voltar a fazer falta, e por isso a data de resgate sugerida.
   const { budget } = todayBudget(inputs, new Date());
   const end = budget.periodEnd;
-  const nextPayday =
-    inputs.incomes.length > 0
-      ? `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, "0")}-${String(end.getDate()).padStart(2, "0")}`
-      : null;
+  const nextPayday = inputs.incomes.length > 0 ? dayKey(end) : null;
+
+  /**
+   * As entradas que formam o saldo de cada caixinha, cada uma com a sua data:
+   * o resgate sai das mais antigas. O que o saldo tem e os movimentos não
+   * explicam (um saldo de antes do app) conta desde a criação da caixinha.
+   */
+  function lotsOf(jar: (typeof jars)[number]) {
+    const movements = jar.deposits.map((d) => ({
+      date: utcDay(d.createdAt),
+      // Um resgate com rendimento tira do saldo só o que havia nele.
+      amount: Number(d.balanceChange ?? d.amount),
+    }));
+    const explained = movements.reduce((sum, m) => sum + m.amount, 0);
+    const gap = Number(jar.balance) - explained;
+    // Sobrando, entrou antes de tudo; faltando, sai das entradas mais antigas.
+    if (Math.abs(gap) >= 0.005) {
+      movements.push({ date: utcDay(gap > 0 ? jar.createdAt : new Date()), amount: gap });
+    }
+    return remainingLots(movements).map((lot) => ({
+      from: lot.from.toISOString().slice(0, 10),
+      amount: lot.amount,
+    }));
+  }
 
   return (
     <div className="flex flex-col gap-5 lg:gap-6">
@@ -51,6 +83,7 @@ export default async function JarsPage() {
             name: jar.name,
             balance: Number(jar.balance),
             cdiPercent: jar.cdiPercent === null ? null : Number(jar.cdiPercent),
+            lots: lotsOf(jar),
           }))}
           yieldContext={{
             cdiAnnualPercent: cdi.annualPercent,

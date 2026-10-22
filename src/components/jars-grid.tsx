@@ -6,7 +6,7 @@ import { StatLabel } from "@/components/page-header";
 import { CountUpCurrency } from "@/components/ui/animated-number";
 import { JarDepositDialog } from "@/components/forms/jar-deposit-dialog";
 import { JarYieldDialog } from "@/components/forms/jar-yield-dialog";
-import type { YieldContext } from "@/components/jar-yield-preview";
+import type { LotView, YieldContext } from "@/components/jar-yield-preview";
 import { DeleteIconButton } from "@/components/delete-icon-button";
 import { UndoToast, type UndoToastState } from "@/components/undo-toast";
 import { deleteJar, undoJarDeposit } from "@/lib/actions/jar";
@@ -14,7 +14,14 @@ import { formatCurrency } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { errorMessage } from "@/lib/error-message";
 
-export type JarView = { id: string; name: string; balance: number; cdiPercent: number | null };
+export type JarView = {
+  id: string;
+  name: string;
+  balance: number;
+  cdiPercent: number | null;
+  /** O saldo dividido pelas entradas que o formam, cada uma com a sua data. */
+  lots: LotView[];
+};
 
 const TOAST_MS = 4000;
 
@@ -116,7 +123,7 @@ export function JarsGrid({ jars, yieldContext }: { jars: JarView[]; yieldContext
             <JarYieldDialog
               jarId={jar.id}
               jarName={jar.name}
-              balance={jar.balance}
+              lots={jar.lots}
               cdiPercent={jar.cdiPercent}
               context={yieldContext}
             />
@@ -134,6 +141,7 @@ export function JarsGrid({ jars, yieldContext }: { jars: JarView[]; yieldContext
                 jarId={jar.id}
                 jarName={jar.name}
                 mode="withdraw"
+                yieldContext={yieldContext}
                 disabled={jar.balance <= 0}
                 onDone={({ depositId, amount }) => done(jar, true, depositId, amount)}
               />

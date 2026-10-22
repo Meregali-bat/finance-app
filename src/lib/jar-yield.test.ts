@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { businessDaysBetween, iofRate, irRate, isBusinessDay, simulateYield } from "./jar-yield";
+import {
+  businessDaysBetween,
+  iofRate,
+  irRate,
+  isBusinessDay,
+  remainingLots,
+  simulateLotsYield,
+  simulateYield,
+} from "./jar-yield";
 
 const day = (y: number, m: number, d: number) => new Date(Date.UTC(y, m - 1, d));
 
@@ -96,5 +104,45 @@ describe("simulateYield", () => {
       to: day(2026, 10, 22),
     });
     expect(r).toMatchObject({ gross: 0, net: 0, total: 1000 });
+  });
+});
+
+describe("entradas em datas diferentes", () => {
+  it("o resgate sai primeiro do que entrou primeiro", () => {
+    const lots = remainingLots([
+      { date: day(2026, 8, 1), amount: 1000 },
+      { date: day(2026, 10, 6), amount: 500 },
+      { date: day(2026, 9, 10), amount: -300 },
+    ]);
+    expect(lots).toEqual([
+      { from: day(2026, 8, 1), amount: 700 },
+      { from: day(2026, 10, 6), amount: 500 },
+    ]);
+  });
+
+  it("um resgate maior que a entrada mais antiga avança para a seguinte", () => {
+    const lots = remainingLots([
+      { date: day(2026, 8, 1), amount: 200 },
+      { date: day(2026, 8, 15), amount: 800 },
+      { date: day(2026, 9, 1), amount: -500 },
+    ]);
+    expect(lots).toEqual([{ from: day(2026, 8, 15), amount: 500 }]);
+  });
+
+  it("cada entrada paga o IOF da própria data: a antiga não paga, a nova sim", () => {
+    const r = simulateLotsYield({
+      lots: [
+        { from: day(2026, 8, 3), amount: 1000 },
+        { from: day(2026, 10, 29), amount: 1000 },
+      ],
+      cdiAnnualPercent: 14.9,
+      cdiPercent: 100,
+      to: day(2026, 11, 5),
+    });
+    expect(r.lots[0].iof).toBe(0);
+    expect(r.lots[1].iof).toBeGreaterThan(0);
+    expect(r.principal).toBe(2000);
+    expect(r.total).toBeCloseTo(2000 + r.net, 2);
+    expect(r.net).toBeCloseTo(r.lots[0].net + r.lots[1].net, 2);
   });
 });
