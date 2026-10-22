@@ -354,47 +354,51 @@ model CardBillEstimate {
 }
 
 model Jar {
-  id        String       @id @default(cuid())
+  id         String       @id @default(cuid())
   /// "goals" (Metas) ou "freedom" (Liberdade financeira): a fatia que o
   /// guardado nesta caixinha cumpre. Nulo = Liberdade financeira.
-  slice     String?
-  userId    String
-  name      String
-  color     String?
-  balance   Decimal      @default(0)
+  slice      String?
+  userId     String
+  name       String
+  color      String?
+  balance    Decimal      @default(0)
   /// Quanto do CDI a caixinha rende, em % (100 = 100% do CDI). Nulo = não
   /// informado: a caixinha não mostra simulação de rendimento.
   cdiPercent Decimal?
   /// Apagada pelo usuário: some da lista, mas os depósitos continuam — foi
   /// dinheiro que saiu do disponível. Só dá para apagar uma caixinha vazia; o
   /// saldo dela sai antes por um resgate.
-  deletedAt DateTime?
-  createdAt DateTime     @default(now())
-  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  deposits  JarDeposit[]
+  deletedAt  DateTime?
+  createdAt  DateTime     @default(now())
+  user       User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deposits   JarDeposit[]
 
   @@index([userId])
 }
 
 model JarDeposit {
-  id              String   @id @default(cuid())
-  jarId           String
-  userId          String
-  amount          Decimal
-  note            String?
-  createdAt       DateTime @default(now())
+  id                  String    @id @default(cuid())
+  jarId               String
+  userId              String
+  amount              Decimal
+  note                String?
+  /// O dia (meia-noite UTC) em que este dinheiro deve voltar: guardado com
+  /// data para usar, e não guardado. A Previsão conta com ele de volta nesse
+  /// dia, e as fatias não o contam como guardado. Ver src/lib/jar-plans.ts.
+  plannedWithdrawalAt DateTime?
+  createdAt           DateTime  @default(now())
   /// Depósito que o fechamento de período antigo criava. Os de agora são
   /// depósitos comuns (fromPeriodClose false): guardar a sobra numa caixinha
   /// tira o dinheiro do disponível, como qualquer depósito. Os antigos seguem
   /// fora do saldo em conta, que foi informado contando com eles assim.
-  fromPeriodClose Boolean  @default(false)
+  fromPeriodClose     Boolean   @default(false)
   /// Quanto o saldo da caixinha mudou com este movimento, quando difere de
   /// `amount`: um resgate maior que o saldo (o rendimento do CDB) zera a
   /// caixinha, mas o valor inteiro volta para o disponível. O "Desfazer" usa
   /// isto para devolver o saldo de antes. Nulo = igual a `amount`.
-  balanceChange   Decimal?
-  jar             Jar      @relation(fields: [jarId], references: [id], onDelete: Cascade)
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  balanceChange       Decimal?
+  jar                 Jar       @relation(fields: [jarId], references: [id], onDelete: Cascade)
+  user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([jarId])
   @@index([userId])

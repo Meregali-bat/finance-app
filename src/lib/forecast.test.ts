@@ -729,3 +729,23 @@ describe("forecastPeriods — renda com o dia alterado depois de receber", () =>
     expect(next).toMatchObject({ date: new Date(2026, 9, 10), amount: 6000, confirmed: false });
   });
 });
+
+describe("forecastPeriods — resgate previsto de caixinha", () => {
+  it("o dinheiro estacionado volta no dia previsto, no ciclo dele", () => {
+    // 2.000 guardados hoje com volta em 06/out: saem deste ciclo e voltam no
+    // próximo — que não fica no vermelho por causa da caixinha.
+    const periods = forecast({
+      jarDeposits: [{ amount: 2000, date: new Date(2026, 8, 10, 9), parked: true }],
+      jarReturns: [{ amount: 2000, date: storedDate(2026, 9, 6), label: "Resgate de Reserva" }],
+    });
+    expect(periods[0].jarTotal).toBe(2000);
+    expect(periods[1].jarReturnTotal).toBe(2000);
+    expect(entriesOf(periods, 1, "jarReturn")).toMatchObject([
+      { label: "Resgate de Reserva", amount: 2000, date: new Date(2026, 9, 6) },
+    ]);
+    // O salário de 05/set não foi confirmado, então o corrente fecha em
+    // −2.000; o seguinte recebe 5.000 e os 2.000 de volta.
+    expect(periods[0].balance).toBe(-2000);
+    expect(periods[1].balance).toBe(5000);
+  });
+});

@@ -10,6 +10,7 @@ import { todayBudget } from "@/lib/today-budget";
 import { currentCdi } from "@/lib/cdi";
 import { todayInputValue } from "@/lib/format";
 import { remainingLots } from "@/lib/jar-yield";
+import { jarReturns } from "@/lib/jar-plans";
 
 /** O dia local de um instante como "YYYY-MM-DD". */
 function dayKey(instant: Date) {
@@ -27,7 +28,16 @@ export default async function JarsPage() {
     prisma.jar.findMany({
       where: { userId, deletedAt: null },
       orderBy: { createdAt: "asc" },
-      include: { deposits: { select: { amount: true, balanceChange: true, createdAt: true } } },
+      include: {
+        deposits: {
+          select: {
+            amount: true,
+            balanceChange: true,
+            createdAt: true,
+            plannedWithdrawalAt: true,
+          },
+        },
+      },
     }),
     loadBudgetInputs(userId),
     currentCdi(),
@@ -84,6 +94,19 @@ export default async function JarsPage() {
             balance: Number(jar.balance),
             cdiPercent: jar.cdiPercent === null ? null : Number(jar.cdiPercent),
             lots: lotsOf(jar),
+            returns: jarReturns(
+              jar.deposits.map((d) => ({
+                jarId: jar.id,
+                amount: Number(d.balanceChange ?? d.amount),
+                date: d.createdAt,
+                plannedWithdrawalAt: d.plannedWithdrawalAt,
+              })),
+              new Date(),
+            ).map((r) => ({
+              amount: r.amount,
+              date: r.date.toISOString().slice(0, 10),
+              overdue: r.overdue,
+            })),
           }))}
           yieldContext={{
             cdiAnnualPercent: cdi.annualPercent,

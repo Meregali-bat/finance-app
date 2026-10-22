@@ -61,6 +61,8 @@ const depositSchema = z.object({
   // O dia em que o dinheiro entrou ou saiu de verdade: é dele que o
   // rendimento e o IOF contam. Ausente ou hoje, vale o agora.
   date: z.iso.date().optional(),
+  // Guardado com data para voltar: a Previsão conta com ele de volta nesse dia.
+  plannedWithdrawalAt: z.iso.date().optional(),
 });
 
 /**
@@ -87,12 +89,26 @@ export async function depositToJar(jarId: string, formData: FormData) {
     amount: formData.get("amount"),
     note: formData.get("note") || undefined,
     date: formData.get("date") || undefined,
+    plannedWithdrawalAt: formData.get("plannedWithdrawalAt") || undefined,
   });
   const createdAt = movementInstant(data.date);
+  const plannedWithdrawalAt = data.plannedWithdrawalAt
+    ? new Date(`${data.plannedWithdrawalAt}T00:00:00.000Z`)
+    : null;
+  if (plannedWithdrawalAt && data.date && data.plannedWithdrawalAt! <= data.date) {
+    throw new Error("O dia de tirar precisa ser depois do dia em que entrou.");
+  }
 
   const [deposit] = await prisma.$transaction([
     prisma.jarDeposit.create({
-      data: { amount: data.amount, note: data.note, createdAt, jarId, userId },
+      data: {
+        amount: data.amount,
+        note: data.note,
+        createdAt,
+        plannedWithdrawalAt,
+        jarId,
+        userId,
+      },
       select: { id: true },
     }),
     prisma.jar.update({
@@ -103,6 +119,7 @@ export async function depositToJar(jarId: string, formData: FormData) {
 
   revalidatePath("/caixinhas");
   revalidatePath("/");
+  revalidatePath("/previsao");
   // O id volta para o "Desfazer" do toast.
   return { depositId: deposit.id };
 }

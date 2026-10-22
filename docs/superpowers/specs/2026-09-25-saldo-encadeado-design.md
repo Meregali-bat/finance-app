@@ -178,3 +178,13 @@ Cada caixinha pode dizer quanto do CDI rende (`Jar.cdiPercent`, ex. 100). Com is
 - Do bruto saem o IOF regressivo (96% no 1º dia a 3% no 29º, zero a partir de 30) e o IR sobre o que sobra (22,5% até 180 dias, 20%, 17,5%, 15%). A tela mostra o que sai no dia, o ganho líquido e, com IOF, quanto daria esperar os 30 dias (`src/lib/jar-yield.ts`).
 - **A data de cada entrada conta.** Guardar e resgatar aceitam o dia em que o dinheiro entrou ou saiu de verdade (padrão hoje; nunca no futuro), gravado como meio-dia daquele dia — é dele que o rendimento, o IOF e o IR contam, e o movimento cai no período desse dia. O "Quanto rende?" divide o saldo nas entradas que o formam, cada uma com a sua data, com os resgates saindo das mais antigas primeiro (`remainingLots`); o que o saldo tem e os movimentos não explicam conta desde a criação da caixinha.
 - É simulação: não entra no orçamento nem no saldo. O rendimento de verdade continua entrando pelo resgate.
+
+## Resgate previsto: dinheiro estacionado (23/10)
+
+Guardar pode dizer **"Vou tirar numa data"** (`JarDeposit.plannedWithdrawalAt`, um dia de calendário). Esse dinheiro não é guardado — está estacionado rendendo até o dia de usar:
+
+- **Sai do disponível no dia em que entra**, como todo depósito, e **volta no dia previsto**: no orçamento do período (`jarReturnTotal` soma ao resultado; com saldo em conta, entra no "a chegar" enquanto o dia não passou) e na Previsão, como "Voltam das caixinhas". Assim um ciclo não fica no vermelho por causa de um dinheiro que já tem dia para voltar — e o "Posso comprar isso?", que usa a mesma projeção, também conta com ele.
+- **Não conta como guardado nas fatias** (`parkedDepositTotal` sai do guardado do período, e a tela das Metas ignora esses depósitos).
+- **O que já voltou sai da conta sozinho:** cada resgate de verdade da caixinha abate os previstos, o de data mais próxima primeiro, entre os depósitos feitos até ele (`src/lib/jar-plans.ts`). É calculado na hora, não gravado, então desfazer um resgate devolve o previsto.
+- **Dia passado sem resgate:** deixa de contar na Previsão (o dinheiro continua na caixinha, não pode virar saldo) e o card da caixinha avisa em vermelho que era para ter voltado.
+

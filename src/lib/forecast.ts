@@ -37,6 +37,7 @@ import {
   type IncomeInput,
   type IncomeReceiptInput,
   type JarDepositInput,
+  type JarReturnInput,
   type TransactionInput,
 } from "./period";
 
@@ -50,7 +51,14 @@ export type ForecastFixedExpenseInput = FixedExpenseInput & { label: string };
 export type ForecastCreditCardInput = CreditCardInput & { name: string };
 export type ForecastTransactionInput = TransactionInput & { id: string; description: string };
 
-export type ForecastEntryKind = "income" | "fixedExpense" | "cardBill" | "scheduled" | "jar";
+export type ForecastEntryKind =
+  | "income"
+  | "fixedExpense"
+  | "cardBill"
+  | "scheduled"
+  | "jar"
+  /** Dinheiro de caixinha previsto para voltar no dia (resgate com data). */
+  | "jarReturn";
 
 export interface ForecastEntry {
   kind: ForecastEntryKind;
@@ -96,6 +104,8 @@ export interface PeriodForecast {
   cardBillTotal: number;
   scheduledTotal: number;
   jarTotal: number;
+  /** O que volta das caixinhas no ciclo, pelos resgates previstos. */
+  jarReturnTotal: number;
   /** Só o que acontece no período: entradas menos saídas, sem a herança. */
   periodResult: number;
   /**
@@ -144,6 +154,7 @@ export interface ForecastInput {
   expensePayments?: ExpensePaymentInput[];
   transactions: ForecastTransactionInput[];
   jarDeposits?: JarDepositInput[];
+  jarReturns?: JarReturnInput[];
   /**
    * O saldo com que o período corrente abre — `openingBalance` do orçamento
    * que `calculateCurrentBudget` devolve. Ausente, ele abre do zero.
@@ -213,6 +224,7 @@ function forecastOnePeriod(
     expensePayments = [],
     transactions,
     jarDeposits = [],
+    jarReturns = [],
     today,
   } = input;
 
@@ -363,8 +375,20 @@ function forecastOnePeriod(
       confirmed: true,
     }));
 
+  const jarReturnEntries: ForecastEntry[] = jarReturns
+    .filter((r) => inPeriod(storedDay(r.date)))
+    .map((r, index) => ({
+      kind: "jarReturn" as const,
+      sourceId: `jar-return-${index}`,
+      label: r.label,
+      date: storedDay(r.date),
+      amount: r.amount,
+      confirmed: false,
+    }));
+
   const entries = [
     ...receiptEntries,
+    ...jarReturnEntries,
     ...projectedIncomeEntries,
     ...fixedExpenseEntries,
     ...cardBillEntries,
@@ -385,8 +409,10 @@ function forecastOnePeriod(
   const cardBillTotal = sumOf("cardBill");
   const scheduledTotal = sumOf("scheduled");
   const jarTotal = sumOf("jar");
+  const jarReturnTotal = sumOf("jarReturn");
 
-  const periodResult = incomeTotal - fixedExpenseTotal - cardBillTotal - scheduledTotal - jarTotal;
+  const periodResult =
+    incomeTotal - fixedExpenseTotal - cardBillTotal - scheduledTotal - jarTotal + jarReturnTotal;
   const balance = openingBalance + periodResult;
   const totalDays = diffCalendarDays(periodEnd, periodStart);
   // No corrente, o dinheiro que resta tem de durar só os dias que faltam —
@@ -406,6 +432,7 @@ function forecastOnePeriod(
     cardBillTotal,
     scheduledTotal,
     jarTotal,
+    jarReturnTotal,
     periodResult,
     balance,
     // Provisórios: `forecastPeriods` só sabe quanto reservar depois de ver

@@ -30,6 +30,7 @@ function monthLabel(date: Date) {
 
 const GROUPS: { kind: ForecastEntryKind; label: string; incoming: boolean }[] = [
   { kind: "income", label: "Entradas previstas", incoming: true },
+  { kind: "jarReturn", label: "Voltam das caixinhas", incoming: true },
   { kind: "fixedExpense", label: "Despesas fixas", incoming: false },
   { kind: "cardBill", label: "Faturas", incoming: false },
   { kind: "scheduled", label: "Agendados", incoming: false },

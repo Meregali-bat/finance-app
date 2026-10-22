@@ -32,7 +32,8 @@ export function todayBudget(inputs: BudgetInputs, today: Date) {
     ? savingReserve({
         income: budget.incomeTotal,
         percents: inputs.slices,
-        saved: budget.jarDepositTotal,
+        // O estacionado com data para voltar não é guardado.
+        saved: budget.jarDepositTotal - budget.parkedDepositTotal,
         spendable: beforeSavings * days,
       })
     : null;
