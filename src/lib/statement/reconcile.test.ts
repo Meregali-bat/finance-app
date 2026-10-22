@@ -134,12 +134,25 @@ describe("reconcile", () => {
     ).toBe(true);
   });
 
-  it("transferência própria e investimento não procuram par", () => {
+  it("transferência própria não confere nada, mas aponta o lançamento que a registrou como gasto", () => {
     const own = line({ detail: "FULANA DE TAL - SICOOB" });
     const result = reconcile([own], HOLDER, [
+      { day: day("2026-10-05"), amount: 50, kind: "fixedPayment" },
+      { day: day("2026-10-07"), amount: 50, kind: "transaction" },
+    ]);
+    expect(result[0]).toMatchObject({ kind: "ownTransfer", matched: false, wrongRecord: 1 });
+  });
+
+  it("investimento não procura par, e transferência sem lançamento não aponta nada", () => {
+    const rdb = line({ type: "Aplicação RDB", detail: "" });
+    const own = line({ detail: "FULANA DE TAL - SICOOB", amount: 70 });
+    const result = reconcile([rdb, own], HOLDER, [
       { day: day("2026-10-06"), amount: 50, kind: "transaction" },
     ]);
-    expect(result[0]).toMatchObject({ kind: "ownTransfer", matched: false });
+    expect(result.map((r) => [r.kind, r.matched, r.wrongRecord])).toEqual([
+      ["investment", false, null],
+      ["ownTransfer", false, null],
+    ]);
   });
 
   it("localDay usa o dia local de um instante", () => {

@@ -130,6 +130,9 @@ export interface AppMovement {
   /** Positivo = saiu da conta; negativo = entrou. */
   amount: number;
   kind: "transaction" | "income" | "fixedPayment" | "billPayment" | "jar";
+  /** O lançamento, quando kind === "transaction": é o que dá para apagar. */
+  id?: string;
+  description?: string;
 }
 
 /** Um dia de calendário, gravado como meia-noite UTC, em número de dias. */
@@ -149,6 +152,12 @@ export interface ReconciledLine {
   description: string;
   /** Achou no app um registro com o mesmo valor e data próxima. */
   matched: boolean;
+  /**
+   * Numa transferência entre contas próprias, o lançamento do app (índice em
+   * `app`) que a registrou como gasto ou receita — de uma importação antiga,
+   * ou lançado à mão. Ele tira do saldo um dinheiro que só mudou de conta.
+   */
+  wrongRecord: number | null;
 }
 
 /**
@@ -169,13 +178,17 @@ export function reconcile(
     const kind = classifyLine(line, holder);
     const signed = line.direction === "out" ? line.amount : -line.amount;
     let matched = false;
+    let wrongRecord: number | null = null;
 
-    if (kind === "movement" || kind === "billPayment") {
+    if (kind !== "investment") {
       const day = utcDay(line.date);
       let best = -1;
       let bestGap = Infinity;
       app.forEach((m, i) => {
         if (used.has(i) || cents(m.amount) !== cents(signed)) return;
+        // A transferência própria só procura um lançamento comum: é o único
+        // jeito de ela ter entrado no app por engano.
+        if (kind === "ownTransfer" && m.kind !== "transaction") return;
         if (kind === "billPayment" ? m.kind !== "billPayment" : m.kind === "billPayment") return;
         const gap = Math.abs(m.day - day);
         if (gap > (m.kind === "income" ? 3 : 2) || gap >= bestGap) return;
@@ -184,10 +197,18 @@ export function reconcile(
       });
       if (best >= 0) {
         used.add(best);
-        matched = true;
+        if (kind === "ownTransfer") wrongRecord = best;
+        else matched = true;
       }
     }
 
-    return { line, fingerprint: prints[index], kind, description: describeLine(line), matched };
+    return {
+      line,
+      fingerprint: prints[index],
+      kind,
+      description: describeLine(line),
+      matched,
+      wrongRecord,
+    };
   });
 }
