@@ -34,10 +34,19 @@ export function classifyLine(line: StatementLine, holder: string | null): LineKi
   if (/PGTO\.BOLETO/i.test(line.type) && /cart[aã]o de cr[eé]dito/i.test(line.detail)) {
     return "billPayment";
   }
-  if (holder && normalizeName(whoOf(line)) === normalizeName(holder)) {
+  // Na conta do MEI o titular vem com o CNPJ na frente ("62.071.278 FULANA"),
+  // e o Pix para a conta pessoal só com o nome.
+  if (
+    holder &&
+    normalizeName(withoutDocument(whoOf(line))) === normalizeName(withoutDocument(holder))
+  ) {
     return "ownTransfer";
   }
   return "movement";
+}
+
+function withoutDocument(name: string): string {
+  return name.replace(/^[\d./-]+\s+/, "");
 }
 
 const LOWER = new Set(["de", "da", "do", "das", "dos", "e"]);

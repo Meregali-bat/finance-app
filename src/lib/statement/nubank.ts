@@ -140,6 +140,11 @@ export function parseNubankStatement(pages: PdfTextItem[][]): ParsedStatement {
         current = null;
         continue;
       }
+      // A conta PJ fecha cada dia com "Saldo do dia": é saldo, não movimento.
+      if (/^Saldo\b/i.test(middle)) {
+        current = null;
+        continue;
+      }
       if (middle && amountText && date && direction) {
         current = {
           date,

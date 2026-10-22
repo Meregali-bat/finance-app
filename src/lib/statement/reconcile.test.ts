@@ -27,6 +27,14 @@ describe("classifyLine", () => {
       "ownTransfer",
     );
   });
+  it("na conta do MEI, o CNPJ na frente do titular não esconde que é a mesma pessoa", () => {
+    expect(
+      classifyLine(
+        line({ detail: "Fulana de Tal - •••.176.710-•• - Banco do Estado" }),
+        "62.071.278 FULANA DE TAL",
+      ),
+    ).toBe("ownTransfer");
+  });
   it("RDB é investimento, fatura é pagamento de fatura, o resto é movimento", () => {
     expect(classifyLine(line({ type: "Aplicação RDB", detail: "" }), HOLDER)).toBe("investment");
     expect(classifyLine(line({ type: "Resgate RDB", detail: "" }), HOLDER)).toBe("investment");
