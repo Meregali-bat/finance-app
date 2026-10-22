@@ -17,6 +17,7 @@ import { CurrencyInput } from "@/components/currency-input";
 import { depositToJar, withdrawFromJar } from "@/lib/actions/jar";
 import { iconButton } from "@/components/ui/icon-button";
 import { errorMessage } from "@/lib/error-message";
+import { JarYieldPreview, type YieldContext } from "@/components/jar-yield-preview";
 
 /**
  * Guardar e resgatar são o mesmo formulário com a direção trocada: o resgate
@@ -28,16 +29,26 @@ export function JarDepositDialog({
   mode = "deposit",
   onDone,
   disabled,
+  cdiPercent = null,
+  yieldContext = null,
 }: {
   jarId: string;
   jarName: string;
   mode?: "deposit" | "withdraw";
+  /** Quanto do CDI a caixinha rende: com ele, guardar mostra o rendimento até o resgate. */
+  cdiPercent?: number | null;
+  yieldContext?: YieldContext | null;
   /** Depois de salvar, com o id do movimento e o valor — para o toast. */
   onDone?: (result: { depositId: string; amount: number }) => void;
   disabled?: boolean;
 }) {
   const withdraw = mode === "withdraw";
   const [open, setOpen] = useState(false);
+  const [amount, setAmount] = useState(0);
+  // O resgate previsto começa no próximo pagamento: é o dia em que o dinheiro
+  // costuma voltar a fazer falta.
+  const [until, setUntil] = useState(yieldContext?.nextPayday ?? "");
+  const showYield = !withdraw && cdiPercent != null && yieldContext != null;
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
@@ -88,8 +99,27 @@ export function JarDepositDialog({
         <form action={handleSubmit} className="flex flex-col gap-4">
           <div className="flex flex-col gap-2">
             <Label htmlFor="amount">Valor</Label>
-            <CurrencyInput id="amount" name="amount" required />
+            <CurrencyInput id="amount" name="amount" required onValueChange={setAmount} />
           </div>
+          {showYield && (
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="until">Até quando fica lá</Label>
+              <Input
+                id="until"
+                type="date"
+                value={until}
+                min={yieldContext.today}
+                onChange={(e) => setUntil(e.target.value)}
+              />
+              <JarYieldPreview
+                amount={amount}
+                cdiAnnualPercent={yieldContext.cdiAnnualPercent}
+                cdiPercent={cdiPercent}
+                from={yieldContext.today}
+                to={until || yieldContext.today}
+              />
+            </div>
+          )}
           <div className="flex flex-col gap-2">
             <Label htmlFor="note">Nota (opcional)</Label>
             <Input

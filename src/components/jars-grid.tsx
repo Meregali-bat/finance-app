@@ -5,6 +5,8 @@ import { PiggyBank } from "lucide-react";
 import { StatLabel } from "@/components/page-header";
 import { CountUpCurrency } from "@/components/ui/animated-number";
 import { JarDepositDialog } from "@/components/forms/jar-deposit-dialog";
+import { JarYieldDialog } from "@/components/forms/jar-yield-dialog";
+import type { YieldContext } from "@/components/jar-yield-preview";
 import { DeleteIconButton } from "@/components/delete-icon-button";
 import { UndoToast, type UndoToastState } from "@/components/undo-toast";
 import { deleteJar, undoJarDeposit } from "@/lib/actions/jar";
@@ -12,7 +14,7 @@ import { formatCurrency } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { errorMessage } from "@/lib/error-message";
 
-export type JarView = { id: string; name: string; balance: number };
+export type JarView = { id: string; name: string; balance: number; cdiPercent: number | null };
 
 const TOAST_MS = 4000;
 
@@ -21,7 +23,7 @@ const TOAST_MS = 4000;
  * fazem o saldo e o total contarem até o valor novo (eles vêm revalidados do
  * servidor) e abrem um toast com "Desfazer".
  */
-export function JarsGrid({ jars }: { jars: JarView[] }) {
+export function JarsGrid({ jars, yieldContext }: { jars: JarView[]; yieldContext: YieldContext }) {
   const [toast, setToast] = useState<(UndoToastState & { depositId: string }) | null>(null);
   const [undoing, startUndo] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -111,10 +113,19 @@ export function JarsGrid({ jars }: { jars: JarView[] }) {
                 )}
               />
             </div>
+            <JarYieldDialog
+              jarId={jar.id}
+              jarName={jar.name}
+              balance={jar.balance}
+              cdiPercent={jar.cdiPercent}
+              context={yieldContext}
+            />
             <div className="flex gap-2">
               <JarDepositDialog
                 jarId={jar.id}
                 jarName={jar.name}
+                cdiPercent={jar.cdiPercent}
+                yieldContext={yieldContext}
                 onDone={({ depositId, amount }) => done(jar, false, depositId, amount)}
               />
               {/* Sem saldo não há o que resgatar: o botão fica, apagado, para a

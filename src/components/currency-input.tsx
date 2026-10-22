@@ -24,12 +24,15 @@ export function CurrencyInput({
   defaultValue,
   required,
   className,
+  onValueChange,
 }: {
   name: string;
   id?: string;
   defaultValue?: number;
   required?: boolean;
   className?: string;
+  /** O valor em reais a cada tecla, para quem mostra algo ao vivo. */
+  onValueChange?: (value: number) => void;
 }) {
   const generatedId = useId();
   const inputId = id ?? generatedId;
@@ -51,6 +54,7 @@ export function CurrencyInput({
         onChange={(e) => {
           const raw = e.target.value.replace(/\D/g, "").replace(/^0+(?=\d)/, "");
           setDigits(raw.slice(0, 15));
+          onValueChange?.(raw ? parseInt(raw.slice(0, 15), 10) / 100 : 0);
         }}
         required={required}
         className={cn("pl-9 tabular-nums", className)}
