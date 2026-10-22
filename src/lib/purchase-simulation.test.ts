@@ -476,3 +476,76 @@ describe("simulatePurchase — o contexto que a tela mostra", () => {
     expect(result.blockers).not.toContain("overCommitment");
   });
 });
+
+describe("simulatePurchase — o que precisa ficar guardado", () => {
+  // As fatias padrão guardam 40% da renda (Liberdade 25 + Metas 15): R$ 2.000
+  // de cada salário de R$ 5.000 não é dinheiro para parcela.
+  const slices = { freedom: 25, fixed: 30, comfort: 15, goals: 15, pleasure: 10, knowledge: 5 };
+
+  it("sem fatias, a compra pode usar toda a sobra", () => {
+    const result = simulate({
+      commitmentLimitPercent: 100,
+      purchase: { ...base.purchase, amount: 4000 },
+    });
+    expect(result.approved).toBe(true);
+  });
+
+  it("com fatias, reprova a compra que come o que ia para as caixinhas", () => {
+    // Sobram R$ 5.000; a compra leva 4.000 e deixaria 1.000, mas 2.000 deste
+    // ciclo são para guardar — a Início já tira isso do número do dia.
+    const result = simulate({
+      slices,
+      commitmentLimitPercent: 100,
+      purchase: { ...base.purchase, amount: 4000 },
+    });
+    expect(result.approved).toBe(false);
+    expect(result.blockers).toEqual(["savingsReserve"]);
+    expect(result.maxAffordableAmount).toBe(3000);
+  });
+
+  it("no ciclo corrente, usa o que falta guardar como a Início calcula", () => {
+    // A Início diz que faltam só R$ 500 neste ciclo: a compra de 4.000 deixa
+    // 1.000, e isso basta.
+    const result = simulate({
+      slices,
+      savingsDueNow: 500,
+      commitmentLimitPercent: 100,
+      purchase: { ...base.purchase, amount: 4000 },
+    });
+    expect(result.approved).toBe(true);
+    expect(result.periods[0].savingsRequired).toBe(500);
+  });
+
+  it("o que já está nas caixinhas não é cobrado de novo", () => {
+    const result = simulate({
+      slices,
+      jarDeposits: [{ amount: 2000, date: new Date(2026, 8, 6) }],
+      commitmentLimitPercent: 100,
+      purchase: { ...base.purchase, amount: 3000 },
+    });
+    // 5.000 − 2.000 já guardados − 3.000 da compra = 0, e nada falta guardar.
+    expect(result.approved).toBe(true);
+  });
+});
+
+describe("simulatePurchase — o horizonte", () => {
+  it("reprova quando um ciclo bem depois da última parcela fica no vermelho", () => {
+    // Uma conta grande em março: sem a compra o saldo encadeado chega lá em
+    // 500; com ela, falta. A régua olhava só até um mês depois da parcela.
+    const result = simulate({
+      fixedExpenses: [
+        {
+          id: "ipva",
+          label: "IPVA",
+          amount: 5000 * 7 - 500,
+          dueDay: 15,
+          createdAt: new Date(2027, 2, 1),
+          endedAt: new Date(2027, 2, 20),
+        },
+      ],
+      commitmentLimitPercent: 100,
+      purchase: { ...base.purchase, amount: 1000, installments: 1 },
+    });
+    expect(result.blockers).toContain("negativeBalance");
+  });
+});

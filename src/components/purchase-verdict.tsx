@@ -5,10 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { SectionLabel } from "@/components/page-header";
 import { formatCurrency, formatDate, formatDateLong, installmentLabel } from "@/lib/format";
-import type {
-  PeriodImpactView,
-  PurchaseSimulationView,
-} from "@/lib/actions/purchase-simulation";
+import type { PeriodImpactView, PurchaseSimulationView } from "@/lib/actions/purchase-simulation";
 
 function formatPercent(ratio: number): string {
   return `${Math.round(ratio * 100)}%`;
@@ -51,6 +48,18 @@ function reasons(result: PurchaseSimulationView): string[] {
     );
   }
 
+  if (result.blockers.includes("savingsReserve")) {
+    const short =
+      result.periods.find(
+        (p) => p.balanceAfter >= 0 && p.balanceAfter < p.savingsRequired - 0.005,
+      ) ?? worst;
+    if (short) {
+      lines.push(
+        `No ciclo de ${rangeLabel(short.periodStart, short.periodEnd)} sobrariam ${formatCurrency(Math.max(0, short.balanceAfter))}, mas ${formatCurrency(short.savingsRequired)} são para guardar nas caixinhas — a parcela sairia das suas fatias de guardar.`,
+      );
+    }
+  }
+
   if (result.blockers.includes("overCommitment") && worst?.commitmentAfter != null) {
     lines.push(
       `O comprometimento iria a ${formatPercent(worst.commitmentAfter)} da renda, acima do seu teto de ${result.commitmentLimitPercent}%.`,
@@ -73,9 +82,7 @@ function PeriodRow({ period }: { period: PeriodImpactView }) {
         <span className="flex items-center gap-1.5 text-sm tabular-nums">
           <span className="text-muted-foreground">{formatCurrency(period.balanceBefore)}</span>
           <ArrowRight className="size-3 shrink-0 text-muted-foreground" />
-          <span
-            className={period.balanceAfter < 0 ? "font-medium text-negative" : "font-medium"}
-          >
+          <span className={period.balanceAfter < 0 ? "font-medium text-negative" : "font-medium"}>
             {formatCurrency(period.balanceAfter)}
           </span>
         </span>
@@ -153,9 +160,7 @@ export function PurchaseVerdict({
           <SectionLabel>O que caberia</SectionLabel>
           {result.minInstallments !== null && (
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="text-sm">
-                Em {result.minInstallments}x, este mesmo valor passaria.
-              </p>
+              <p className="text-sm">Em {result.minInstallments}x, este mesmo valor passaria.</p>
               <Button
                 type="button"
                 variant="outline"

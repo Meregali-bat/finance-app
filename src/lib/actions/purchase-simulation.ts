@@ -4,8 +4,8 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/auth-helpers";
-import { accountBalanceOf, loadBudgetInputs } from "@/lib/budget-inputs";
-import { calculateCurrentBudget } from "@/lib/carry-over";
+import { loadBudgetInputs } from "@/lib/budget-inputs";
+import { todayBudget } from "@/lib/today-budget";
 import {
   DEFAULT_COMMITMENT_LIMIT_PERCENT,
   MAX_SIMULATION_INSTALLMENTS,
@@ -18,8 +18,10 @@ import {
  * `PendingPeriodClose` faz. Serializar à mão em vez de confiar no codec de Date
  * do RSC mantém o contrato explícito e legível no DevTools.
  */
-export interface PurchaseSimulationView
-  extends Omit<PurchaseSimulation, "firstDueDate" | "lastDueDate" | "periods" | "worstPeriod"> {
+export interface PurchaseSimulationView extends Omit<
+  PurchaseSimulation,
+  "firstDueDate" | "lastDueDate" | "periods" | "worstPeriod"
+> {
   firstDueDate: string | null;
   lastDueDate: string | null;
   periods: PeriodImpactView[];
@@ -43,6 +45,7 @@ export interface PeriodImpactView {
   commitmentEnd: string;
   commitmentBefore: number | null;
   commitmentAfter: number | null;
+  savingsRequired: number;
   alreadyFailing: boolean;
 }
 
@@ -60,9 +63,7 @@ const simulationSchema = z.object({
   installments: z.coerce.number().int().min(1).max(MAX_SIMULATION_INSTALLMENTS).default(1),
 });
 
-export async function runPurchaseSimulation(
-  formData: FormData,
-): Promise<PurchaseSimulationView> {
+export async function runPurchaseSimulation(formData: FormData): Promise<PurchaseSimulationView> {
   const userId = await requireUserId();
   const purchase = simulationSchema.parse({
     cardId: formData.get("cardId"),
@@ -89,15 +90,17 @@ export async function runPurchaseSimulation(
   const today = new Date();
   // A projeção parte do saldo com que o ciclo corrente abre, como a Previsão:
   // a sobra dos meses anteriores (ou o dinheiro na conta) também paga parcela.
-  const { openingBalance } = calculateCurrentBudget({
-    ...inputs,
-    accountBalance: accountBalanceOf(inputs, today),
-    today,
-  });
+  // E o que falta guardar no ciclo sai da mesma conta da Início, para a
+  // simulação e o número do dia nunca discordarem sobre ele.
+  const { budget, savings } = todayBudget(inputs, today);
+  const { openingBalance } = budget;
 
+  // `inputs` traz as fatias: com elas ligadas, o que vai para as caixinhas
+  // não paga parcela, como não entra no número do dia.
   const result = simulatePurchase({
     ...inputs,
     openingBalance,
+    savingsDueNow: savings?.remaining,
     today,
     purchase,
     commitmentLimitPercent,
@@ -124,6 +127,7 @@ export async function runPurchaseSimulation(
       commitmentEnd: period.commitment.end.toISOString(),
       commitmentBefore: period.commitment.before,
       commitmentAfter: period.commitment.after,
+      savingsRequired: period.savingsRequired,
       alreadyFailing: period.alreadyFailing,
     })),
     commitmentLimitPercent,
