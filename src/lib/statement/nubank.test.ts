@@ -46,6 +46,9 @@ const page2: PdfTextItem[] = [
   { str: "- 2.000,00", x: 504, y: 588 },
   { str: "Aplicação RDB", x: 120, y: 567 },
   { str: "2.000,00", x: 504, y: 567 },
+  // A conta PJ fecha cada dia com o saldo, na coluna do tipo: não é movimento.
+  { str: "Saldo do dia", x: 120, y: 533 },
+  { str: "627,13", x: 508, y: 533 },
   ...footer,
 ];
 
@@ -75,6 +78,11 @@ describe("parseNubankStatement", () => {
       "POSTO RODA MAIS 6 LTDA - 54.312.342/0001-76 - QUERO-QUERO VERDECARD IP S.A.",
     );
     expect(parsed.lines[3].detail).toBe("");
+  });
+
+  it("não lê o saldo do dia como movimento", () => {
+    expect(parsed.lines.some((l) => /saldo/i.test(l.type))).toBe(false);
+    expect(parsed.lines.some((l) => l.amount === 627.13)).toBe(false);
   });
 
   it("ignora o resumo do topo e o rodapé", () => {
