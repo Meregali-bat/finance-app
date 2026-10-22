@@ -76,3 +76,54 @@ describe("todayBudget com as fatias da renda", () => {
     expect(Object.is(result.dailyAvailable, 0)).toBe(true);
   });
 });
+
+describe("todayBudget com dinheiro estacionado na caixinha", () => {
+  it("guardar com data para voltar dentro do período não muda o número do dia", () => {
+    const parked = todayBudget(
+      inputs({
+        jarDeposits: [{ amount: 1000, date: new Date(2026, 9, 20, 9), parked: true }],
+        jarReturns: [{ amount: 1000, date: day("2026-10-30"), label: "Resgate de Reserva" }],
+      }),
+      today,
+    );
+    expect(parked.dailyAvailable).toBeCloseTo(3000 / 16);
+  });
+
+  it("sem data para voltar, o guardado sai do período", () => {
+    const saved = todayBudget(
+      inputs({ jarDeposits: [{ amount: 1000, date: new Date(2026, 9, 20, 9) }] }),
+      today,
+    );
+    expect(saved.dailyAvailable).toBeCloseTo(2000 / 16);
+  });
+
+  it("estacionado não conta como guardado nas fatias", () => {
+    const result = todayBudget(
+      inputs({
+        slices: DEFAULT_SLICES,
+        jarDeposits: [{ amount: 1000, date: new Date(2026, 9, 20, 9), parked: true }],
+        jarReturns: [{ amount: 1000, date: day("2026-10-30"), label: "Resgate de Reserva" }],
+      }),
+      today,
+    );
+    expect(result.savings).toMatchObject({ saved: 0, remaining: 1200 });
+  });
+
+  it("com saldo em conta, o resgate previsto entra como dinheiro a chegar", () => {
+    // O banco já não tem os 1.000 (foram para a caixinha): 2.000 na conta,
+    // e o resgate de 30/10 os devolve antes do fim do período.
+    const account = {
+      adjustment: { balance: 2000, createdAt: new Date(2026, 9, 20, 18) },
+      credits: [],
+      debits: [],
+    };
+    const result = todayBudget(
+      inputs({
+        account,
+        jarReturns: [{ amount: 1000, date: day("2026-10-30"), label: "Resgate de Reserva" }],
+      }),
+      today,
+    );
+    expect(result.budget.periodBalance).toBeCloseTo(3000);
+  });
+});

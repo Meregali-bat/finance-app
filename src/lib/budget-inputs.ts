@@ -1,3 +1,4 @@
+import { jarReturns } from "@/lib/jar-plans";
 import { prisma } from "@/lib/prisma";
 import { parseSlices, type SlicePercents } from "@/lib/slices";
 import { storedDay } from "@/lib/period";
@@ -10,6 +11,7 @@ import type {
   IncomeInput,
   IncomeReceiptInput,
   JarDepositInput,
+  JarReturnInput,
   TransactionInput,
 } from "@/lib/period";
 import {
@@ -49,6 +51,8 @@ export interface BudgetInputs {
   expensePayments: ExpensePaymentInput[];
   transactions: NamedTransactionInput[];
   jarDeposits: JarDepositInput[];
+  /** O que volta das caixinhas em resgates previstos que ainda não chegaram. */
+  jarReturns?: JarReturnInput[];
   /** As fatias da renda, quando configuradas: as de guardar saem do número do dia. */
   slices: SlicePercents | null;
   /** A matéria-prima do saldo em conta — ver `accountBalanceOf`. */
@@ -96,7 +100,7 @@ export async function loadBudgetInputs(userId: string): Promise<BudgetInputs> {
       include: { cardPurchase: { select: { amount: true } } },
     }),
     prisma.cardBillEstimate.findMany({ where: { userId } }),
-    prisma.jarDeposit.findMany({ where: { userId } }),
+    prisma.jarDeposit.findMany({ where: { userId }, include: { jar: { select: { name: true } } } }),
     prisma.balanceAdjustment.findFirst({ where: { userId }, orderBy: { createdAt: "desc" } }),
     prisma.user.findUnique({ where: { id: userId }, select: { budgetSlices: true } }),
   ]);
@@ -160,7 +164,28 @@ export async function loadBudgetInputs(userId: string): Promise<BudgetInputs> {
       createdAt: t.createdAt,
       fromPeriodClose: t.fromPeriodClose,
     })),
-    jarDeposits: jarDeposits.map((d) => ({ amount: Number(d.amount), date: d.createdAt })),
+    jarDeposits: jarDeposits.map((d) => ({
+      amount: Number(d.amount),
+      date: d.createdAt,
+      parked: d.plannedWithdrawalAt !== null,
+    })),
+    // Só os que ainda vão chegar: um previsto cujo dia passou sem o resgate
+    // não pode virar dinheiro na conta — ele continua na caixinha.
+    jarReturns: jarReturns(
+      jarDeposits.map((d) => ({
+        jarId: d.jarId,
+        amount: Number(d.balanceChange ?? d.amount),
+        date: d.createdAt,
+        plannedWithdrawalAt: d.plannedWithdrawalAt,
+      })),
+      new Date(),
+    )
+      .filter((r) => !r.overdue)
+      .map((r) => ({
+        amount: r.amount,
+        date: r.date,
+        label: `Resgate de ${jarDeposits.find((d) => d.jarId === r.jarId)?.jar.name ?? "caixinha"}`,
+      })),
     slices: parseSlices(user?.budgetSlices),
     account: {
       adjustment: adjustment

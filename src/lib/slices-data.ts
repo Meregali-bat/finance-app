@@ -27,7 +27,12 @@ export async function loadSlicesOverview(userId: string, today: Date) {
   const [{ items, categories, categoryNameById }, deposits, fixedCategories] = await Promise.all([
     loadHistoryItems(userId, range),
     prisma.jarDeposit.findMany({
-      where: { userId, createdAt: { gte: budget.periodStart, lt: budget.periodEnd } },
+      // O estacionado com data para voltar não é guardado.
+      where: {
+        userId,
+        plannedWithdrawalAt: null,
+        createdAt: { gte: budget.periodStart, lt: budget.periodEnd },
+      },
       select: { amount: true, jar: { select: { slice: true } } },
     }),
     prisma.fixedExpense.findMany({

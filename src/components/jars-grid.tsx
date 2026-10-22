@@ -6,7 +6,12 @@ import { StatLabel } from "@/components/page-header";
 import { CountUpCurrency } from "@/components/ui/animated-number";
 import { JarDepositDialog } from "@/components/forms/jar-deposit-dialog";
 import { JarYieldDialog } from "@/components/forms/jar-yield-dialog";
-import type { LotView, YieldContext } from "@/components/jar-yield-preview";
+import {
+  dayFromKey,
+  shortDay,
+  type LotView,
+  type YieldContext,
+} from "@/components/jar-yield-preview";
 import { DeleteIconButton } from "@/components/delete-icon-button";
 import { UndoToast, type UndoToastState } from "@/components/undo-toast";
 import { deleteJar, undoJarDeposit } from "@/lib/actions/jar";
@@ -21,6 +26,8 @@ export type JarView = {
   cdiPercent: number | null;
   /** O saldo dividido pelas entradas que o formam, cada uma com a sua data. */
   lots: LotView[];
+  /** O que foi guardado com data para voltar e ainda não voltou. */
+  returns: { amount: number; date: string; overdue: boolean }[];
 };
 
 const TOAST_MS = 4000;
@@ -120,6 +127,20 @@ export function JarsGrid({ jars, yieldContext }: { jars: JarView[]; yieldContext
                 )}
               />
             </div>
+            {jar.returns.length > 0 && (
+              <ul className="-mt-1 flex flex-col gap-0.5 text-[12.5px] tabular-nums">
+                {jar.returns.map((r) => (
+                  <li
+                    key={`${r.date}-${r.amount}`}
+                    className={r.overdue ? "text-negative" : "text-muted-foreground"}
+                  >
+                    {r.overdue
+                      ? `${formatCurrency(r.amount)} era para voltar em ${shortDay(dayFromKey(r.date))}: resgate para contar`
+                      : `${formatCurrency(r.amount)} volta em ${shortDay(dayFromKey(r.date))}`}
+                  </li>
+                ))}
+              </ul>
+            )}
             <JarYieldDialog
               jarId={jar.id}
               jarName={jar.name}

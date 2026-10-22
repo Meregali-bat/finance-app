@@ -142,6 +142,24 @@ export interface JarDepositInput {
   amount: number;
   /** O instante do depósito (`createdAt`), não um dia de calendário. */
   date: Date;
+  /**
+   * Guardado com data para voltar (`plannedWithdrawalAt`): estacionado rendendo
+   * até o dia de usar, e não guardado. Sai do disponível do mesmo jeito, mas
+   * as fatias não o contam como guardado.
+   */
+  parked?: boolean;
+}
+
+/**
+ * O dinheiro de uma caixinha previsto para voltar num dia (ver jar-plans.ts):
+ * só o que ainda não foi resgatado e cujo dia não passou.
+ */
+export interface JarReturnInput {
+  amount: number;
+  /** O dia previsto, meia-noite UTC — um dia de calendário. */
+  date: Date;
+  /** "Resgate de Viagem", para a Previsão. */
+  label: string;
 }
 
 export interface CardBillReminder {
@@ -243,6 +261,10 @@ export interface PeriodBudget {
   transactionTotal: number;
   /** Guardado em caixinhas durante o período. */
   jarDepositTotal: number;
+  /** Desse guardado, o que tem data para voltar: não conta para as fatias. */
+  parkedDepositTotal: number;
+  /** O que volta das caixinhas no período, pelos resgates previstos. */
+  jarReturnTotal: number;
   /** Só o que aconteceu no período: renda menos todas as saídas, sem a herança. */
   periodResult: number;
   /** O saldo com que o período termina: `openingBalance + periodResult`. */
@@ -1085,6 +1107,7 @@ export interface BudgetInput {
   expensePayments?: ExpensePaymentInput[];
   transactions: TransactionInput[];
   jarDeposits?: JarDepositInput[];
+  jarReturns?: JarReturnInput[];
   today: Date;
 }
 
@@ -1217,6 +1240,7 @@ export function budgetForBounds(
     incomeReceipts = [],
     transactions,
     jarDeposits = [],
+    jarReturns = [],
     today,
     periodStart,
     periodEnd,
@@ -1328,12 +1352,22 @@ export function budgetForBounds(
   );
   const transactionTotal = periodTransactions.reduce((sum, t) => sum + t.amount, 0);
 
-  const jarDepositTotal = jarDeposits
-    .filter((d) => inPeriod(startOfDay(d.date)))
+  const periodJarDeposits = jarDeposits.filter((d) => inPeriod(startOfDay(d.date)));
+  const jarDepositTotal = periodJarDeposits.reduce((sum, d) => sum + d.amount, 0);
+  const parkedDepositTotal = periodJarDeposits
+    .filter((d) => d.parked)
     .reduce((sum, d) => sum + d.amount, 0);
+  // O que volta das caixinhas neste período entra como uma receita marcada.
+  const periodJarReturns = jarReturns.filter((r) => inPeriod(storedDay(r.date)));
+  const jarReturnTotal = periodJarReturns.reduce((sum, r) => sum + r.amount, 0);
 
   const periodResult =
-    incomeTotal - fixedExpenseTotal - cardBillTotal - transactionTotal - jarDepositTotal;
+    incomeTotal -
+    fixedExpenseTotal -
+    cardBillTotal -
+    transactionTotal -
+    jarDepositTotal +
+    jarReturnTotal;
 
   let periodBalance: number;
   let openingSource: OpeningSource;
@@ -1350,9 +1384,15 @@ export function budgetForBounds(
       periodTransactions
         .filter((t) => storedDay(t.date).getTime() > todayStart.getTime())
         .reduce((sum, t) => sum + t.amount, 0);
-    const pendingIn = periodReceipts
-      .filter((r) => storedDay(r.occurrenceDate).getTime() > todayStart.getTime())
-      .reduce((sum, r) => sum + r.amount, 0);
+    // O resgate previsto para hoje também: enquanto não for feito, o dinheiro
+    // continua na caixinha, fora do saldo em conta.
+    const pendingIn =
+      periodReceipts
+        .filter((r) => storedDay(r.occurrenceDate).getTime() > todayStart.getTime())
+        .reduce((sum, r) => sum + r.amount, 0) +
+      periodJarReturns
+        .filter((r) => storedDay(r.date).getTime() >= todayStart.getTime())
+        .reduce((sum, r) => sum + r.amount, 0);
 
     periodBalance = accountBalance - pendingOut + pendingIn;
     openingSource = "account";
@@ -1376,6 +1416,8 @@ export function budgetForBounds(
     cardBillTotal,
     transactionTotal,
     jarDepositTotal,
+    parkedDepositTotal,
+    jarReturnTotal,
     periodResult,
     periodBalance,
     dailyAvailable: periodBalance / daysRemaining,

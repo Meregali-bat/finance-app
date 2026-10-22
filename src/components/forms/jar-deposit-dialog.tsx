@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { CurrencyInput } from "@/components/currency-input";
 import { depositToJar, withdrawFromJar } from "@/lib/actions/jar";
 import { iconButton } from "@/components/ui/icon-button";
@@ -51,6 +52,10 @@ export function JarDepositDialog({
   // O dia em que o dinheiro entrou (ou saiu) de verdade — pode ter sido antes
   // de lançar aqui, e é dele que o rendimento e o IOF contam.
   const [date, setDate] = useState(yieldContext?.today ?? "");
+  // Com data para tirar, o dinheiro está estacionado, e não guardado: volta
+  // para a Previsão no dia e não conta nas fatias.
+  const [planned, setPlanned] = useState(false);
+  const canPlan = !withdraw && yieldContext != null;
   const showYield = !withdraw && cdiPercent != null && yieldContext != null;
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -119,22 +124,41 @@ export function JarDepositDialog({
               </div>
             )}
           </div>
-          {showYield && (
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="until">Até quando fica lá</Label>
-              <Input
-                id="until"
-                type="date"
-                value={until}
-                min={yieldContext.today}
-                onChange={(e) => setUntil(e.target.value)}
-              />
-              <JarYieldPreview
-                lots={[{ from: date || yieldContext.today, amount }]}
-                cdiAnnualPercent={yieldContext.cdiAnnualPercent}
-                cdiPercent={cdiPercent}
-                to={until || yieldContext.today}
-              />
+          {canPlan && (
+            <div className="flex flex-col gap-3 rounded-2xl bg-muted/60 p-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <Label htmlFor="planned-switch">Vou tirar numa data</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Volta para a Previsão nesse dia e não conta como guardado nas fatias.
+                  </p>
+                </div>
+                <Switch id="planned-switch" checked={planned} onCheckedChange={setPlanned} />
+              </div>
+              {(planned || showYield) && (
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="until">{planned ? "Tirar em" : "Simular até"}</Label>
+                  <Input
+                    id="until"
+                    // Só vai para o servidor quando é um resgate previsto; sem
+                    // ele, a data serve só à simulação do rendimento.
+                    name={planned ? "plannedWithdrawalAt" : undefined}
+                    type="date"
+                    value={until}
+                    min={yieldContext.today}
+                    required={planned}
+                    onChange={(e) => setUntil(e.target.value)}
+                  />
+                </div>
+              )}
+              {showYield && (
+                <JarYieldPreview
+                  lots={[{ from: date || yieldContext.today, amount }]}
+                  cdiAnnualPercent={yieldContext.cdiAnnualPercent}
+                  cdiPercent={cdiPercent}
+                  to={until || yieldContext.today}
+                />
+              )}
             </div>
           )}
           <div className="flex flex-col gap-2">
