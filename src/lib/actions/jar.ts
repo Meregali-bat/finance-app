@@ -203,3 +203,56 @@ export async function undoJarDeposit(depositId: string) {
   revalidatePath("/historico");
   revalidatePath("/previsao");
 }
+
+const scheduleSchema = z.object({
+  amount: z.coerce.number().positive("Valor deve ser maior que zero"),
+  date: z.iso.date(),
+});
+
+/**
+ * Dá data de volta para dinheiro que já estava na caixinha: a Previsão conta
+ * com ele de volta nesse dia, como um depósito feito com data para tirar.
+ */
+export async function scheduleJarWithdrawal(jarId: string, formData: FormData) {
+  const userId = await requireUserId();
+  const data = scheduleSchema.parse({
+    amount: formData.get("amount"),
+    date: formData.get("date"),
+  });
+  const jar = await prisma.jar.findUnique({ where: { id: jarId, userId } });
+  if (!jar) throw new Error("Caixinha não encontrada");
+  if (data.amount > Number(jar.balance) + 0.005) {
+    throw new Error("O valor passa do que está na caixinha.");
+  }
+  const now = new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  if (data.date < today) throw new Error("A data de tirar não pode ser antes de hoje.");
+
+  await prisma.jarWithdrawalPlan.create({
+    data: {
+      userId,
+      jarId,
+      amount: data.amount,
+      date: new Date(`${data.date}T00:00:00.000Z`),
+    },
+  });
+  revalidatePath("/caixinhas");
+  revalidatePath("/");
+  revalidatePath("/previsao");
+}
+
+/** Tira a data de volta: o dinheiro fica na caixinha sem previsão de sair. */
+export async function cancelJarReturn(source: { kind: "deposit" | "schedule"; id: string }) {
+  const userId = await requireUserId();
+  if (source.kind === "schedule") {
+    await prisma.jarWithdrawalPlan.deleteMany({ where: { id: source.id, userId } });
+  } else {
+    await prisma.jarDeposit.updateMany({
+      where: { id: source.id, userId },
+      data: { plannedWithdrawalAt: null },
+    });
+  }
+  revalidatePath("/caixinhas");
+  revalidatePath("/");
+  revalidatePath("/previsao");
+}

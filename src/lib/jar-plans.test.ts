@@ -12,7 +12,7 @@ describe("jarReturns", () => {
         [{ jarId: "j", amount: 1000, date: at(10, 22), plannedWithdrawalAt: day(11, 5) }],
         today,
       ),
-    ).toEqual([{ jarId: "j", amount: 1000, date: day(11, 5), overdue: false }]);
+    ).toMatchObject([{ jarId: "j", amount: 1000, date: day(11, 5), overdue: false }]);
   });
 
   it("depósito sem data é guardado, não volta", () => {
@@ -28,7 +28,7 @@ describe("jarReturns", () => {
       today,
     );
     // Sobraram 600 do previsto para 20/10, e o dia já passou.
-    expect(returns).toEqual([{ jarId: "j", amount: 600, date: day(10, 20), overdue: true }]);
+    expect(returns).toMatchObject([{ jarId: "j", amount: 600, date: day(10, 20), overdue: true }]);
   });
 
   it("um resgate abate primeiro o previsto mais próximo", () => {
@@ -64,5 +64,40 @@ describe("jarReturns", () => {
     );
     expect(returns).toHaveLength(1);
     expect(returns[0]).toMatchObject({ jarId: "a", amount: 1000 });
+  });
+});
+
+describe("jarReturns — resgate agendado", () => {
+  it("dinheiro que já estava na caixinha volta no dia agendado", () => {
+    const returns = jarReturns([{ jarId: "j", amount: 3000, date: at(8, 1) }], today, [
+      { id: "s", jarId: "j", amount: 1450, date: day(11, 8), createdAt: at(10, 22) },
+    ]);
+    expect(returns).toEqual([
+      {
+        source: { kind: "schedule", id: "s" },
+        jarId: "j",
+        amount: 1450,
+        date: day(11, 8),
+        overdue: false,
+      },
+    ]);
+  });
+
+  it("um resgate de antes do agendamento não o abate; um de depois, sim", () => {
+    const schedule = {
+      id: "s",
+      jarId: "j",
+      amount: 1000,
+      date: day(11, 8),
+      createdAt: at(10, 22),
+    };
+    expect(
+      jarReturns([{ jarId: "j", amount: -500, date: at(10, 10) }], today, [schedule])[0].amount,
+    ).toBe(1000);
+    expect(
+      jarReturns([{ jarId: "j", amount: -400, date: new Date(2026, 9, 22, 15) }], today, [
+        schedule,
+      ])[0].amount,
+    ).toBe(600);
   });
 });

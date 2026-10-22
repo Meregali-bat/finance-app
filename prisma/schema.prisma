@@ -50,11 +50,12 @@ model User {
   onboardedAt            DateTime?
   /// SHA-256 da chave do atalho do iPhone (src/app/api/atalho). A chave em si
   /// só aparece uma vez, quando é gerada; trocar a chave invalida a anterior.
-  shortcutTokenHash      String?   @unique
+  shortcutTokenHash      String?             @unique
   /// As fatias da renda (src/lib/slices.ts): { freedom, fixed, comfort, goals,
   /// pleasure, knowledge } em porcentagem inteira, somando 100. Nulo = ainda
   /// não configuradas, e o número do dia não reserva nada para guardar.
   budgetSlices           Json?
+  jarWithdrawalPlans     JarWithdrawalPlan[]
 }
 
 model Category {
@@ -354,24 +355,25 @@ model CardBillEstimate {
 }
 
 model Jar {
-  id         String       @id @default(cuid())
+  id                 String              @id @default(cuid())
   /// "goals" (Metas) ou "freedom" (Liberdade financeira): a fatia que o
   /// guardado nesta caixinha cumpre. Nulo = Liberdade financeira.
-  slice      String?
-  userId     String
-  name       String
-  color      String?
-  balance    Decimal      @default(0)
+  slice              String?
+  userId             String
+  name               String
+  color              String?
+  balance            Decimal             @default(0)
   /// Quanto do CDI a caixinha rende, em % (100 = 100% do CDI). Nulo = não
   /// informado: a caixinha não mostra simulação de rendimento.
-  cdiPercent Decimal?
+  cdiPercent         Decimal?
   /// Apagada pelo usuário: some da lista, mas os depósitos continuam — foi
   /// dinheiro que saiu do disponível. Só dá para apagar uma caixinha vazia; o
   /// saldo dela sai antes por um resgate.
-  deletedAt  DateTime?
-  createdAt  DateTime     @default(now())
-  user       User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  deposits   JarDeposit[]
+  deletedAt          DateTime?
+  createdAt          DateTime            @default(now())
+  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deposits           JarDeposit[]
+  jarWithdrawalPlans JarWithdrawalPlan[]
 
   @@index([userId])
 }
@@ -541,4 +543,22 @@ model StatementIgnore {
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, fingerprint])
+}
+
+/// Um resgate agendado para dinheiro que já estava na caixinha: volta para a
+/// Previsão no dia, como um depósito com `plannedWithdrawalAt`. Resgates de
+/// verdade feitos depois do agendamento o abatem (src/lib/jar-plans.ts).
+model JarWithdrawalPlan {
+  id        String   @id @default(cuid())
+  userId    String
+  jarId     String
+  amount    Decimal
+  /// O dia previsto, meia-noite UTC.
+  date      DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  jar       Jar      @relation(fields: [jarId], references: [id], onDelete: Cascade)
+
+  @@index([jarId])
+  @@index([userId])
 }
