@@ -10,6 +10,9 @@ const loanSchema = z.object({
   personId: z.string().trim().optional(),
   personName: z.string().trim().max(60).optional(),
   amount: z.coerce.number().positive("O valor emprestado deve ser maior que zero").optional(),
+  // A parte da despesa que a pessoa deve (0,5 = metade), quando escolhida por
+  // atalho: a conta sai do valor da despesa aqui, e não do que a tela calculou.
+  share: z.coerce.number().gt(0).max(1).optional(),
   installments: z.coerce.number().int().min(1).max(48).default(1),
   firstDueDate: z
     .string()
@@ -26,6 +29,7 @@ export function parseLoanFields(formData: FormData): LoanFields | null {
     personId: formData.get("lentPersonId") || undefined,
     personName: formData.get("lentPersonName") || undefined,
     amount: formData.get("lentAmount") || undefined,
+    share: formData.get("lentShare") || undefined,
     installments: formData.get("lentInstallments") || 1,
     firstDueDate: formData.get("lentDueDate") || undefined,
   });
@@ -34,6 +38,19 @@ export function parseLoanFields(formData: FormData): LoanFields | null {
 }
 
 type Link = { transactionId: string } | { cardPurchaseId: string };
+
+/**
+ * Quanto a pessoa deve: o valor digitado; senão a parte escolhida (metade, um
+ * terço) do valor da despesa, em centavos; senão a despesa inteira.
+ */
+export function loanAmount(
+  fields: Pick<LoanFields, "amount" | "share">,
+  expenseAmount: number,
+): number {
+  if (fields.amount != null) return fields.amount;
+  if (fields.share != null) return Math.round(expenseAmount * fields.share * 100) / 100;
+  return expenseAmount;
+}
 
 /**
  * Cria, atualiza ou apaga o empréstimo ligado a uma despesa. Sem valor
@@ -50,7 +67,7 @@ export async function syncLoan(
     await tx.loan.deleteMany({ where: { userId, ...link } });
     return;
   }
-  const amount = fields.amount ?? expenseAmount;
+  const amount = loanAmount(fields, expenseAmount);
   if (amount > expenseAmount + 0.005) {
     throw new Error("O valor emprestado não pode passar do valor da despesa");
   }

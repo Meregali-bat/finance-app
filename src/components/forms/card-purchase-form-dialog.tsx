@@ -37,6 +37,7 @@ export function CardPurchaseFormDialog({
 }) {
   const [open, setOpen] = useState(false);
   const [categoryId, setCategoryId] = useState<string>(NONE);
+  const [amount, setAmount] = useState(0);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
@@ -78,7 +79,7 @@ export function CardPurchaseFormDialog({
           <div className="grid grid-cols-2 gap-4">
             <div className="flex flex-col gap-2">
               <Label htmlFor="amount">Valor</Label>
-              <CurrencyInput id="amount" name="amount" required />
+              <CurrencyInput id="amount" name="amount" required onValueChange={setAmount} />
             </div>
             <div className="flex flex-col gap-2">
               <Label htmlFor="date">Data</Label>
@@ -129,7 +130,7 @@ export function CardPurchaseFormDialog({
               </Select>
             </div>
           )}
-          <LoanFields />
+          <LoanFields total={amount} />
           {error && (
             <p role="alert" className="text-sm text-negative">
               {error}
