@@ -49,6 +49,8 @@ export function MovementFormDialog({
   const [kind, setKind] = useState<"expense" | "income">(movement?.type ?? "expense");
   const [cardId, setCardId] = useState<string>(CASH);
   const [categoryId, setCategoryId] = useState<string>(movement?.categoryId ?? NONE);
+  // O valor digitado, para o "Emprestado" mostrar a parte de cada atalho.
+  const [amount, setAmount] = useState(movement?.amount ?? 0);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -188,7 +190,13 @@ export function MovementFormDialog({
             <div className="grid grid-cols-2 gap-4">
               <div className="flex flex-col gap-2">
                 <Label htmlFor="amount">Valor</Label>
-                <CurrencyInput id="amount" name="amount" defaultValue={movement?.amount} required />
+                <CurrencyInput
+                  id="amount"
+                  name="amount"
+                  defaultValue={movement?.amount}
+                  required
+                  onValueChange={setAmount}
+                />
               </div>
               <div className="flex flex-col gap-2">
                 <Label htmlFor="date">Data</Label>
@@ -305,6 +313,7 @@ export function MovementFormDialog({
             )}
             {kind === "expense" && (
               <LoanFields
+                total={amount}
                 link={
                   movement
                     ? { kind: movement.kind === "card" ? "card" : "transaction", id: movement.id }

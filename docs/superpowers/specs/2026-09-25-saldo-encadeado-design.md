@@ -193,3 +193,8 @@ Guardar pode dizer **"Vou tirar numa data"** (`JarDeposit.plannedWithdrawalAt`, 
 ## Despesa fixa com a cobrança deste mês já lançada (23/10)
 
 Cadastrar uma assinatura depois de ter lançado a cobrança do mês à mão (gasto comum ou compra no cartão) a contava duas vezes: a despesa vale a partir do `createdAt`, e no cartão entra em toda fatura cujo ciclo fecha a partir dele — inclusive a aberta. O cadastro tem **"Já lancei a cobrança deste mês"**, que grava o `createdAt` de onde a despesa começa na cobrança seguinte (`startAfterCurrentCharge`): na conta, o dia seguinte ao vencimento deste mês se ele ainda não passou (se passou, hoje já basta); no cartão, o dia seguinte ao próximo fechamento, deixando a fatura aberta de fora.
+
+## Emprestado: dividir a conta (23/10)
+
+"Quanto te deve" ganhou atalhos — **Metade**, **Um terço**, **Tudo** e **Outro valor** — e um empréstimo novo começa na **Metade**, o caso de dividir um almoço. O atalho vai como fração (`lentShare`) e o valor sai do valor da despesa no servidor, em centavos (`loanAmount`); "Outro valor" é o campo de antes. Editar uma despesa já emprestada abre no valor gravado.
+
