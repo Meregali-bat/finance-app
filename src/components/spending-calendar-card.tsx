@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { CreditCard } from "lucide-react";
 import { homeCard } from "@/components/home-card";
+import { useHistoryDay } from "@/components/history-day";
 import { SectionLabel } from "@/components/page-header";
 import { formatCurrency } from "@/lib/format";
 import type { CalendarDay, SpendingCalendar } from "@/lib/spending-calendar";
@@ -49,6 +50,7 @@ export function SpendingCalendarCard({
 }) {
   const days = calendar.weeks.flat().filter((d): d is CalendarDay => d !== null);
   const [selectedKey, setSelectedKey] = useState(initialDay);
+  const { setDay } = useHistoryDay();
   const selected = days.find((d) => d.key === selectedKey) ?? null;
 
   return (
@@ -84,7 +86,11 @@ export function SpendingCalendarCard({
                 <button
                   key={day.key}
                   type="button"
-                  onClick={() => setSelectedKey(day.key)}
+                  onClick={() => {
+                    setSelectedKey(day.key);
+                    // A listagem embaixo passa a mostrar só este dia.
+                    setDay(day.key);
+                  }}
                   aria-pressed={day.key === selectedKey}
                   aria-label={`${dayLabel(day.key)}: ${day.total > 0 ? formatCurrency(day.total) : "nada gasto"}`}
                   className={cn(

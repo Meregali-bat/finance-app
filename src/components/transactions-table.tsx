@@ -18,7 +18,8 @@ import { iconButton } from "@/components/ui/icon-button";
 import { homeCard } from "@/components/home-card";
 import { MovementFormDialog } from "@/components/forms/movement-form-dialog";
 import { DeleteIconButton } from "@/components/delete-icon-button";
-import { toMovementValues, historyItemKey, type HistoryItem } from "@/lib/history-item";
+import { itemDayKey, toMovementValues, historyItemKey, type HistoryItem } from "@/lib/history-item";
+import { useHistoryDay } from "@/components/history-day";
 import { countsAsSpending } from "@/lib/report-totals";
 import { bulkDelete, bulkSetCategory, setItemCategory, setItemSlice } from "@/lib/actions/slices";
 import { unmarkExpensePayment } from "@/lib/actions/expense-payment";
@@ -45,14 +46,23 @@ const editable = (item: HistoryItem) => item.kind === "transaction" || item.kind
 const incoming = (item: HistoryItem) =>
   item.amount < 0 && item.kind !== "jarDeposit" && item.kind !== "cardBillAdjustment";
 
-function dayLabel(date: Date, kind: HistoryItem["kind"]) {
-  // Lançamentos guardam o dia em UTC; confirmações e parcelas, instantes locais.
+function dayLabel(item: HistoryItem) {
+  // Lançamentos e compras inteiras guardam o dia em UTC; confirmações e
+  // parcelas (pelo vencimento da fatura), instantes locais.
+  const utc = item.kind === "transaction" || (item.kind === "card" && !item.installmentNumber);
   return new Intl.DateTimeFormat("pt-BR", {
     day: "2-digit",
     month: "2-digit",
     year: "2-digit",
-    timeZone: kind === "transaction" ? "UTC" : undefined,
-  }).format(date);
+    timeZone: utc ? "UTC" : undefined,
+  }).format(item.date);
+}
+
+/** "2026-10-21" → "21 de out", lido como dia de calendário. */
+function dayChipLabel(key: string) {
+  return new Intl.DateTimeFormat("pt-BR", { day: "numeric", month: "short", timeZone: "UTC" })
+    .format(new Date(`${key}T00:00:00.000Z`))
+    .replace(".", "");
 }
 
 function accountOf(item: HistoryItem) {
@@ -71,8 +81,15 @@ export function TransactionsTable({
   categories,
   cards,
   slicesActive,
+  purchases = [],
 }: {
   items: HistoryItem[];
+  /**
+   * As compras no cartão feitas no período, inteiras: com um dia escolhido no
+   * calendário, elas substituem as parcelas — o calendário mostra a compra no
+   * dia em que foi feita, e a parcela dela pode vencer só no mês que vem.
+   */
+  purchases?: HistoryItem[];
   categories: Category[];
   cards: { id: string; name: string }[];
   /** Sem fatias configuradas, a coluna de fatia some. */
@@ -88,13 +105,17 @@ export function TransactionsTable({
   const [error, setError] = useState<string | null>(null);
   const [busy, startTransition] = useTransition();
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
+  // O dia tocado no calendário de gastos, quando há um.
+  const { day, setDay } = useHistoryDay();
 
   const categoryById = useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories]);
   const categoryOptions = categories.map((c) => ({ value: c.id, label: c.name }));
 
   const filtered = useMemo(() => {
     const q = query.trim().toLocaleLowerCase("pt-BR");
-    const rows = items.filter((item) => {
+    const source = day ? [...items.filter((i) => i.kind !== "card"), ...purchases] : items;
+    const rows = source.filter((item) => {
+      if (day && itemDayKey(item) !== day) return false;
       if (q && !item.description.toLocaleLowerCase("pt-BR").includes(q)) return false;
       if (direction === "in" && !incoming(item)) return false;
       if (direction === "out" && incoming(item)) return false;
@@ -111,7 +132,7 @@ export function TransactionsTable({
         return a.description.localeCompare(b.description, "pt-BR") * factor;
       return (a.date.getTime() - b.date.getTime()) * factor;
     });
-  }, [items, query, direction, category, account, sort]);
+  }, [items, purchases, query, direction, category, account, sort, day]);
 
   const pages = Math.max(1, Math.ceil(filtered.length / PAGE));
   const current = Math.min(page, pages - 1);
@@ -369,9 +390,25 @@ export function TransactionsTable({
             className="w-full lg:w-auto"
           />
         </div>
-        <p className="text-[13px] text-muted-foreground lg:ml-auto">
-          {filtered.length === 1 ? "1 lançamento" : `${filtered.length} lançamentos`}
-        </p>
+        <div className="flex flex-wrap items-center gap-2 lg:ml-auto">
+          {day && (
+            <button
+              type="button"
+              onClick={() => {
+                setDay(null);
+                setPage(0);
+              }}
+              aria-label="Mostrar todos os dias"
+              className="flex h-8 items-center gap-1.5 rounded-full bg-foreground pr-2 pl-3 text-[12.5px] font-semibold text-background"
+            >
+              Só {dayChipLabel(day)}
+              <X className="size-3.5" aria-hidden="true" />
+            </button>
+          )}
+          <p className="text-[13px] text-muted-foreground">
+            {filtered.length === 1 ? "1 lançamento" : `${filtered.length} lançamentos`}
+          </p>
+        </div>
       </div>
 
       {/* Ações em lote, quando há seleção. */}
@@ -490,13 +527,15 @@ export function TransactionsTable({
                     )}
                   </span>
                   <span role="cell" className="text-[13px] text-muted-foreground tabular-nums">
-                    {dayLabel(item.date, item.kind)}
+                    {dayLabel(item)}
                   </span>
                   <span role="cell" className="min-w-0">
                     <span className="block truncate text-sm font-semibold">{item.description}</span>
                     {item.kind === "card" && item.installments && item.installments > 1 && (
                       <span className="block text-xs text-muted-foreground tabular-nums">
-                        parcela {item.installmentNumber}/{item.installments}
+                        {item.installmentNumber
+                          ? `parcela ${item.installmentNumber}/${item.installments}`
+                          : `em ${item.installments}x`}
                       </span>
                     )}
                   </span>
@@ -550,9 +589,11 @@ export function TransactionsTable({
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-[15px] font-semibold">{item.description}</p>
                     <p className="text-[12.5px] text-muted-foreground tabular-nums">
-                      {dayLabel(item.date, item.kind)} · {accountOf(item)}
+                      {dayLabel(item)} · {accountOf(item)}
                       {item.kind === "card" && item.installments && item.installments > 1
-                        ? ` · ${item.installmentNumber}/${item.installments}`
+                        ? item.installmentNumber
+                          ? ` · ${item.installmentNumber}/${item.installments}`
+                          : ` · ${item.installments}x`
                         : ""}
                     </p>
                   </div>

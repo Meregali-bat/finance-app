@@ -97,3 +97,17 @@ export function toMovementValues(item: HistoryItem): MovementValues {
     installments: item.installments,
   };
 }
+
+/**
+ * O dia do lançamento como "YYYY-MM-DD", o mesmo do calendário de gastos: a
+ * compra no cartão no dia em que foi feita (e não no vencimento da fatura que
+ * cobra a parcela), lançamentos pelo dia de calendário que guardam em UTC, e o
+ * resto — pagamentos, confirmações, caixinhas — pelo dia local do instante.
+ */
+export function itemDayKey(item: HistoryItem): string {
+  if (item.kind === "card" && item.purchaseDate)
+    return item.purchaseDate.toISOString().slice(0, 10);
+  if (item.kind === "transaction") return item.date.toISOString().slice(0, 10);
+  const d = item.date;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
