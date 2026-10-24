@@ -28,6 +28,11 @@ export type JarView = {
   cdiPercent: number | null;
   /** O saldo dividido pelas entradas que o formam, cada uma com a sua data. */
   lots: LotView[];
+  /**
+   * Quanto vale hoje, com a porcentagem do CDI informada: o guardado mais o
+   * que rendeu (`total`) e o que sairia num resgate agora, sem IOF e IR (`net`).
+   */
+  now: { total: number; net: number } | null;
   /** O que foi guardado com data para voltar e ainda não voltou. */
   returns: {
     source: { kind: "deposit" | "schedule"; id: string };
@@ -51,7 +56,10 @@ export function JarsGrid({ jars, yieldContext }: { jars: JarView[]; yieldContext
   // Uma chave nova por toast, para um segundo aviso substituir o primeiro com
   // a animação de entrada em vez de só trocar o texto.
   const seq = useRef(0);
-  const total = jars.reduce((sum, jar) => sum + jar.balance, 0);
+  // Como o banco mostra: com rendimento, o que a caixinha vale hoje.
+  const total = jars.reduce((sum, jar) => sum + (jar.now?.total ?? jar.balance), 0);
+  const earned = jars.reduce((sum, jar) => sum + (jar.now ? jar.now.total - jar.balance : 0), 0);
+  const estimated = yieldContext.cdiSource === "estimate";
 
   useEffect(() => {
     if (!toast) return;
@@ -106,6 +114,12 @@ export function JarsGrid({ jars, yieldContext }: { jars: JarView[]; yieldContext
           delay={0.2}
           className="font-heading text-[40px] leading-none font-bold tracking-[-0.045em] tabular-nums"
         />
+        {earned > 0.005 && (
+          <p className="text-[13px] text-muted-foreground tabular-nums">
+            <span className="font-medium text-positive">+{formatCurrency(earned)}</span> de
+            rendimento até hoje{estimated ? " (CDI estimado)" : ""}
+          </p>
+        )}
       </div>
 
       {error && (
@@ -137,13 +151,29 @@ export function JarsGrid({ jars, yieldContext }: { jars: JarView[]; yieldContext
             <div className="min-w-0">
               <p className="truncate text-sm font-semibold">{jar.name}</p>
               <CountUpCurrency
-                value={jar.balance}
+                value={jar.now?.total ?? jar.balance}
                 duration={1}
                 delay={0.3 + index * 0.07}
                 className={cn(
                   "block truncate font-heading text-[22px] leading-tight font-bold tracking-[-0.035em] tabular-nums",
                 )}
               />
+              {jar.now && (
+                // Como o banco mostra: o que rendeu até hoje e o que sairia num
+                // resgate agora, já sem IOF e IR. O número grande é o valor de hoje.
+                <dl className="mt-1.5 grid grid-cols-2 gap-x-2 text-[12px] tabular-nums">
+                  <div className="min-w-0">
+                    <dt className="text-muted-foreground">Rendeu</dt>
+                    <dd className="truncate font-semibold text-positive">
+                      +{formatCurrency(jar.now.total - jar.balance)}
+                    </dd>
+                  </div>
+                  <div className="min-w-0">
+                    <dt className="text-muted-foreground">Saque líquido</dt>
+                    <dd className="truncate font-semibold">{formatCurrency(jar.now.net)}</dd>
+                  </div>
+                </dl>
+              )}
             </div>
             {jar.returns.length > 0 && (
               <ul className="-mt-1 flex flex-col text-[12.5px] tabular-nums">

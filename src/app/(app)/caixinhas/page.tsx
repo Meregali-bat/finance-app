@@ -9,7 +9,7 @@ import { loadBudgetInputs } from "@/lib/budget-inputs";
 import { todayBudget } from "@/lib/today-budget";
 import { currentCdi } from "@/lib/cdi";
 import { todayInputValue } from "@/lib/format";
-import { remainingLots } from "@/lib/jar-yield";
+import { remainingLots, simulateLotsYield } from "@/lib/jar-yield";
 import { jarReturns } from "@/lib/jar-plans";
 import { forecastPeriods } from "@/lib/forecast";
 
@@ -99,6 +99,23 @@ export default async function JarsPage() {
     }));
   }
 
+  /**
+   * Quanto a caixinha vale hoje, como o banco mostra: o guardado mais o que
+   * rendeu até hoje, e o que sairia se resgatasse agora (sem IOF e IR). Só
+   * com a porcentagem do CDI informada.
+   */
+  const todayUtc = utcDay(today);
+  function nowOf(jar: (typeof jars)[number], lots: { from: string; amount: number }[]) {
+    if (jar.cdiPercent === null || lots.length === 0) return null;
+    const r = simulateLotsYield({
+      lots: lots.map((l) => ({ from: new Date(`${l.from}T00:00:00.000Z`), amount: l.amount })),
+      cdiAnnualPercent: cdi.annualPercent,
+      cdiPercent: Number(jar.cdiPercent),
+      to: todayUtc,
+    });
+    return { total: r.principal + r.gross, net: r.total };
+  }
+
   return (
     <div className="flex flex-col gap-5 lg:gap-6">
       <PageHeader
@@ -116,35 +133,39 @@ export default async function JarsPage() {
       ) : (
         // Decimal não atravessa para o cliente: o saldo vai como número.
         <JarsGrid
-          jars={jars.map((jar) => ({
-            id: jar.id,
-            name: jar.name,
-            balance: Number(jar.balance),
-            cdiPercent: jar.cdiPercent === null ? null : Number(jar.cdiPercent),
-            lots: lotsOf(jar),
-            returns: jarReturns(
-              jar.deposits.map((d) => ({
-                id: d.id,
-                jarId: jar.id,
-                amount: Number(d.balanceChange ?? d.amount),
-                date: d.createdAt,
-                plannedWithdrawalAt: d.plannedWithdrawalAt,
+          jars={jars.map((jar) => {
+            const lots = lotsOf(jar);
+            return {
+              id: jar.id,
+              name: jar.name,
+              balance: Number(jar.balance),
+              cdiPercent: jar.cdiPercent === null ? null : Number(jar.cdiPercent),
+              lots,
+              now: nowOf(jar, lots),
+              returns: jarReturns(
+                jar.deposits.map((d) => ({
+                  id: d.id,
+                  jarId: jar.id,
+                  amount: Number(d.balanceChange ?? d.amount),
+                  date: d.createdAt,
+                  plannedWithdrawalAt: d.plannedWithdrawalAt,
+                })),
+                today,
+                jar.jarWithdrawalPlans.map((p) => ({
+                  id: p.id,
+                  jarId: jar.id,
+                  amount: Number(p.amount),
+                  date: p.date,
+                  createdAt: p.createdAt,
+                })),
+              ).map((r) => ({
+                source: r.source,
+                amount: r.amount,
+                date: r.date.toISOString().slice(0, 10),
+                overdue: r.overdue,
               })),
-              today,
-              jar.jarWithdrawalPlans.map((p) => ({
-                id: p.id,
-                jarId: jar.id,
-                amount: Number(p.amount),
-                date: p.date,
-                createdAt: p.createdAt,
-              })),
-            ).map((r) => ({
-              source: r.source,
-              amount: r.amount,
-              date: r.date.toISOString().slice(0, 10),
-              overdue: r.overdue,
-            })),
-          }))}
+            };
+          })}
           yieldContext={{
             cdiAnnualPercent: cdi.annualPercent,
             cdiDate: cdi.date,
