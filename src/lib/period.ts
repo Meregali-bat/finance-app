@@ -1028,6 +1028,11 @@ export function findNextOpenBill(bills: CardBill[]): CardBill | undefined {
  * quando a fatura é paga —, e é por isso que marcar uma fatura como paga é o
  * que libera limite aqui.
  *
+ * Das faturas de ciclos que ainda não começaram, só as parcelas contam: o
+ * banco reserva a compra inteira, mas não a cobrança de uma assinatura que
+ * ainda não aconteceu, nem uma previsão manual (anuidade, IOF) de um mês à
+ * frente. Somá-las comia o limite com meses de assinaturas futuras.
+ *
  * Devolve null quando o cartão não tem limite informado, para a tela ter uma
  * coisa só para checar em vez de adivinhar a partir de um zero.
  */
@@ -1082,9 +1087,12 @@ export function getCardLimitUsage(input: {
     months,
   });
   const open = bills.filter((bill) => !bill.paid && bill.amount > 0);
+  // Um ciclo que começa depois de hoje ainda não cobrou nada além das parcelas.
+  const charged = (bill: CardBill) =>
+    bill.cycleStart.getTime() >= todayStart.getTime() ? bill.purchaseAmount : bill.amount;
   // Um parcial já devolve ao limite o que pagou, como no banco.
   const used = open.reduce(
-    (sum, bill) => sum + Math.max(0, bill.amount - (bill.partialPaid ?? 0)),
+    (sum, bill) => sum + Math.max(0, charged(bill) - (bill.partialPaid ?? 0)),
     0,
   );
 
