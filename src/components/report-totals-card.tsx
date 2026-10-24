@@ -9,14 +9,29 @@ import { cn } from "@/lib/utils";
  * esquerdo de cada célula, e o `overflow-hidden` corta o que cai na borda —
  * assim eles acertam sozinhos tanto na grade 2×2 quanto na faixa.
  */
-export function ReportTotalsCard({ totals }: { totals: ReportTotals }) {
+export function ReportTotalsCard({
+  totals,
+  carried = 0,
+  periodLabel,
+}: {
+  totals: ReportTotals;
+  /**
+   * O que sobrou ou faltou dos períodos anteriores: o saldo o carrega, como o
+   * resto do app — o que faltou num mês não some no outro.
+   */
+  carried?: number;
+  /** "Outubro de 2026", para dizer de onde vem cada parte do saldo. */
+  periodLabel?: string;
+}) {
+  const hasCarry = Math.abs(carried) >= 0.005;
+  const balance = totals.balance + carried;
   const figures = [
     { label: "Gasto", value: totals.spent, tone: "" },
     { label: "Recebido", value: totals.received, tone: "text-positive" },
     {
       label: "Saldo",
-      value: totals.balance,
-      tone: totals.balance < 0 ? "text-negative" : "text-positive",
+      value: balance,
+      tone: balance < 0 ? "text-negative" : "text-positive",
     },
     { label: "Média diária", value: totals.dailyAverage, tone: "" },
   ];
@@ -43,6 +58,20 @@ export function ReportTotalsCard({ totals }: { totals: ReportTotals }) {
             </p>
             {/* A caixinha não é gasto nem receita, mas sai do saldo: sem dizer
                 isso, o saldo pareceria não bater com as duas colunas. */}
+            {/* De onde vem o saldo: o período mais o que veio dos anteriores. */}
+            {figure.label === "Saldo" && hasCarry && (
+              <p className="text-xs text-muted-foreground tabular-nums">
+                {formatCurrency(totals.balance)}{" "}
+                {periodLabel
+                  ? `de ${periodLabel.toLocaleLowerCase("pt-BR").replace(/ de \d{4}$/, "")}`
+                  : "do período"}
+                {" · "}
+                <span className={carried < 0 ? "text-negative" : undefined}>
+                  {formatCurrency(carried)}
+                </span>{" "}
+                {carried < 0 ? "que faltou antes" : "que sobrou antes"}
+              </p>
+            )}
             {figure.label === "Saldo" && Math.abs(totals.saved) >= 0.005 && (
               <p className="text-xs text-muted-foreground tabular-nums">
                 {totals.saved > 0
