@@ -177,6 +177,7 @@ Cada caixinha pode dizer quanto do CDI rende (`Jar.cdiPercent`, ex. 100). Com is
 - Rende por dia útil: diária = (1 + CDI)^(1/252) − 1, vezes a % do CDI; conta os dias úteis de [hoje, resgate), sem fins de semana e feriados nacionais (os fixos, carnaval, Sexta-feira Santa e Corpus Christi pela Páscoa).
 - Do bruto saem o IOF regressivo (96% no 1º dia a 3% no 29º, zero a partir de 30) e o IR sobre o que sobra (22,5% até 180 dias, 20%, 17,5%, 15%). A tela mostra o que sai no dia, o ganho líquido e, com IOF, quanto daria esperar os 30 dias (`src/lib/jar-yield.ts`).
 - **A data de cada entrada conta.** Guardar e resgatar aceitam o dia em que o dinheiro entrou ou saiu de verdade (padrão hoje; nunca no futuro), gravado como meio-dia daquele dia — é dele que o rendimento, o IOF e o IR contam, e o movimento cai no período desse dia. O "Quanto rende?" divide o saldo nas entradas que o formam, cada uma com a sua data, com os resgates saindo das mais antigas primeiro (`remainingLots`); o que o saldo tem e os movimentos não explicam conta desde a criação da caixinha.
+- **O valor de hoje, como o banco mostra:** com a % do CDI informada, o card mostra o guardado mais o que rendeu até hoje (entrada por entrada, cada uma desde a sua data), o rendimento e o **saque líquido** — o que sairia num resgate agora, já sem IOF e IR. O "Total guardado" soma esses valores de hoje.
 - É simulação: não entra no orçamento nem no saldo. O rendimento de verdade continua entrando pelo resgate.
 
 ## Resgate previsto: dinheiro estacionado (23/10)
