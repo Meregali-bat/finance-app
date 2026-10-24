@@ -16,7 +16,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/page-header";
 import { HistoryRow } from "@/components/movement-row";
 import { CategoryBreakdown, type CategoryGroup } from "@/components/category-breakdown";
-import { historyItemKey, type HistoryItem } from "@/lib/history-item";
+import { historyItemKey, lentNames, type HistoryItem } from "@/lib/history-item";
 import { loadHistoryItems } from "@/lib/history-items";
 import { carriedBalance } from "@/lib/history-carry";
 import { prisma } from "@/lib/prisma";
@@ -133,7 +133,7 @@ export default async function HistoryPage({
         installments: p.installments,
         purchaseAmount: Number(p.amount),
         purchaseDate: p.date,
-        lentTo: p.loan?.person.name,
+        lentTo: lentNames(p.loans),
       })),
   );
 

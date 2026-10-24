@@ -8,7 +8,8 @@ import { dateOnlyInputValue } from "@/lib/format";
 
 /**
  * O que o formulário de despesa precisa para o "Emprestado para alguém": as
- * pessoas já cadastradas e, na edição, o empréstimo da própria despesa.
+ * pessoas já cadastradas e, na edição, os empréstimos da própria despesa —
+ * um por pessoa, numa conta dividida.
  * Buscado ao abrir o formulário, para não ter de passar a lista por todas as
  * telas que abrem uma movimentação.
  */
@@ -17,30 +18,29 @@ export async function getLoanFormData(link?: {
   id: string;
 }): Promise<{
   people: { id: string; name: string }[];
-  loan: { personId: string; amount: number; installments: number; firstDueDate: string } | null;
+  loans: { personId: string; amount: number }[];
+  installments: number;
+  firstDueDate: string;
 }> {
   const userId = await requireUserId();
-  const [people, loan] = await Promise.all([
+  const [people, loans] = await Promise.all([
     prisma.person.findMany({ where: { userId }, orderBy: { name: "asc" } }),
     link
-      ? prisma.loan.findFirst({
+      ? prisma.loan.findMany({
           where:
             link.kind === "card"
               ? { userId, cardPurchaseId: link.id }
               : { userId, transactionId: link.id },
+          orderBy: { createdAt: "asc" },
         })
-      : null,
+      : [],
   ]);
   return {
     people: people.map((p) => ({ id: p.id, name: p.name })),
-    loan: loan
-      ? {
-          personId: loan.personId,
-          amount: Number(loan.amount),
-          installments: loan.installments,
-          firstDueDate: loan.firstDueDate ? dateOnlyInputValue(loan.firstDueDate) : "",
-        }
-      : null,
+    loans: loans.map((l) => ({ personId: l.personId, amount: Number(l.amount) })),
+    // Gravadas iguais em todos; o primeiro responde por eles.
+    installments: loans[0]?.installments ?? 1,
+    firstDueDate: loans[0]?.firstDueDate ? dateOnlyInputValue(loans[0].firstDueDate) : "",
   };
 }
 

@@ -254,8 +254,9 @@ model Transaction {
   categoryId      String?
   user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   category        Category?      @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  /// Esta despesa foi emprestada para alguém (ver Loan).
-  loan            Loan?
+  /// Para quem esta despesa foi emprestada (ver Loan): uma conta dividida
+  /// pode ter várias pessoas.
+  loans           Loan[]
   /// Esta receita é dinheiro que alguém devolveu (ver LoanRepayment).
   loanRepayment   LoanRepayment?
   /// O nome do cartão que a Carteira mandou pelo atalho, quando o app não o
@@ -321,8 +322,8 @@ model CardPurchase {
   user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   category       Category?       @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   expensePayment ExpensePayment?
-  /// Esta compra foi feita para alguém, que vai devolver (ver Loan).
-  loan           Loan?
+  /// Para quem esta compra foi feita, que vai devolver (ver Loan).
+  loans          Loan[]
 
   @@index([cardId, date])
   @@index([userId])
@@ -468,8 +469,8 @@ model Loan {
   installments   Int           @default(1)
   /// Quando vence a primeira parcela (as outras, mês a mês). Nulo = sem data.
   firstDueDate   DateTime?
-  transactionId  String?       @unique
-  cardPurchaseId String?       @unique
+  transactionId  String?
+  cardPurchaseId String?
   createdAt      DateTime      @default(now())
   user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   person         Person        @relation(fields: [personId], references: [id], onDelete: Cascade)
@@ -478,6 +479,8 @@ model Loan {
 
   @@index([userId])
   @@index([personId])
+  @@index([transactionId])
+  @@index([cardPurchaseId])
 }
 
 /// Dinheiro que uma pessoa devolveu. É uma receita comum (a Transaction

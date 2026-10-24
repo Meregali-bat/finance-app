@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { billLinesInRange } from "@/lib/history-bills";
 import { toFixedExpenseInput } from "@/lib/budget-inputs";
-import type { HistoryItem } from "@/lib/history-item";
+import { lentNames, type HistoryItem } from "@/lib/history-item";
 
 /**
  * Tudo o que mexeu no dinheiro num intervalo, linha a linha: lançamentos,
@@ -26,7 +26,7 @@ export async function loadHistoryItems(
         where: { userId, fromPeriodClose: false, date: { gte: utcRangeStart, lt: utcRangeEnd } },
         include: {
           category: { select: { id: true, name: true } },
-          loan: { select: { person: { select: { name: true } } } },
+          loans: { select: { person: { select: { name: true } } }, orderBy: { createdAt: "asc" } },
         },
       }),
       // Agrupado pela data em que foi pago, não pelo vencimento: pagar antes do
@@ -57,7 +57,10 @@ export async function loadHistoryItems(
           purchases: {
             include: {
               category: { select: { id: true, name: true } },
-              loan: { select: { person: { select: { name: true } } } },
+              loans: {
+                select: { person: { select: { name: true } } },
+                orderBy: { createdAt: "asc" },
+              },
             },
           },
           fixedExpenses: {
@@ -138,7 +141,7 @@ export async function loadHistoryItems(
             installmentNumber: line.installmentNumber,
             purchaseAmount: Number(purchase.amount),
             purchaseDate: purchase.date,
-            lentTo: purchase.loan?.person.name,
+            lentTo: lentNames(purchase.loans),
           };
         }
         case "subscription": {
@@ -191,7 +194,7 @@ export async function loadHistoryItems(
       createdAt: t.createdAt,
       categoryId: rememberCategory(t.category),
       slice: t.slice,
-      lentTo: t.loan?.person.name,
+      lentTo: lentNames(t.loans),
     })),
     ...cardItems,
     ...expensePayments.map((p) => ({
