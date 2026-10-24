@@ -18,6 +18,7 @@ import { HistoryRow } from "@/components/movement-row";
 import { CategoryBreakdown, type CategoryGroup } from "@/components/category-breakdown";
 import { historyItemKey, type HistoryItem } from "@/lib/history-item";
 import { loadHistoryItems } from "@/lib/history-items";
+import { carriedBalance } from "@/lib/history-carry";
 import { prisma } from "@/lib/prisma";
 import { parseSlices, sliceOfCategory } from "@/lib/slices";
 import { TransactionsTable } from "@/components/transactions-table";
@@ -40,9 +41,11 @@ export default async function HistoryPage({
   // do calendário em meia-noite UTC, confirmações guardam instantes locais.
   const { rangeStart, rangeEnd, utcRangeStart, utcRangeEnd } = range;
 
-  const [{ items, categories, creditCards, categoryNameById }, user] = await Promise.all([
+  const [{ items, categories, creditCards, categoryNameById }, user, carried] = await Promise.all([
     loadHistoryItems(userId, range),
     prisma.user.findUnique({ where: { id: userId }, select: { budgetSlices: true } }),
+    // O que sobrou ou faltou dos meses anteriores vai para o saldo deste.
+    carriedBalance(userId, range),
   ]);
   const slicesActive = parseSlices(user?.budgetSlices) !== null;
 
@@ -158,7 +161,7 @@ export default async function HistoryPage({
           ganha uma superfície própria em vez de flutuar solto sobre o fundo. */}
         <PeriodPicker range={range} />
 
-        <ReportTotalsCard totals={totals} />
+        <ReportTotalsCard totals={totals} carried={carried} periodLabel={range.label} />
 
         {/* O gasto do período no tempo: uma série só, em rosé, sem legenda — o
           título diz o que é. As colunas somam o "Gasto" do resumo. */}

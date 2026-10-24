@@ -199,3 +199,7 @@ Cadastrar uma assinatura depois de ter lançado a cobrança do mês à mão (gas
 
 "Quanto te deve" ganhou atalhos — **Metade**, **Um terço**, **Tudo** e **Outro valor** — e um empréstimo novo começa na **Metade**, o caso de dividir um almoço. O atalho vai como fração (`lentShare`) e o valor sai do valor da despesa no servidor, em centavos (`loanAmount`); "Outro valor" é o campo de antes. Editar uma despesa já emprestada abre no valor gravado.
 
+
+## Saldo do Histórico encadeado (24/10)
+
+O "Saldo" do resumo do Histórico era só o do período (recebido − gasto − guardado), e o que faltou num mês sumia no seguinte. Agora ele carrega o saldo de tudo antes do período, desde o primeiro registro (`carriedBalance`: o mesmo `loadHistoryItems` e o mesmo critério, num intervalo só, do dia anterior ao primeiro lançamento, pagamento, recebimento, caixinha, compra ou assinatura no cartão até o começo do período). Embaixo do valor aparece de onde ele vem: "R$ X de outubro · −R$ Y que faltou antes".
