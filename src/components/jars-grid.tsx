@@ -39,6 +39,8 @@ export type JarView = {
     amount: number;
     date: string;
     overdue: boolean;
+    /** O que volta no dia com o rendimento até lá, sem IOF e IR; nulo sem CDI. */
+    withYield: number | null;
   }[];
 };
 
@@ -189,6 +191,15 @@ export function JarsGrid({ jars, yieldContext }: { jars: JarView[]; yieldContext
                       {r.overdue
                         ? `${formatCurrency(r.amount)} era para voltar em ${shortDay(dayFromKey(r.date))}: resgate para contar`
                         : `${formatCurrency(r.amount)} volta em ${shortDay(dayFromKey(r.date))}`}
+                      {r.withYield != null && r.withYield - r.amount >= 0.005 && (
+                        <span className="block text-foreground">
+                          {formatCurrency(r.withYield)} com o rendimento até lá
+                          <span className="text-positive">
+                            {" "}
+                            (+{formatCurrency(r.withYield - r.amount)})
+                          </span>
+                        </span>
+                      )}
                     </span>
                     <button
                       type="button"

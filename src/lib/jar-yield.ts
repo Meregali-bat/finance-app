@@ -211,3 +211,47 @@ export function simulateLotsYield(input: {
     lots,
   };
 }
+
+/**
+ * Quanto cada resgate previsto vai devolver no dia dele, com o rendimento e
+ * sem IOF e IR. Os resgates saem das entradas mais antigas, na ordem das
+ * datas, como `remainingLots`: o primeiro resgate leva o dinheiro mais antigo.
+ * Um resgate de dia que já passou não rende mais nada e sai como guardado.
+ */
+export function returnsWithYield(input: {
+  lots: YieldLot[];
+  returns: { amount: number; date: Date }[];
+  cdiAnnualPercent: number;
+  cdiPercent: number;
+  today: Date;
+}): number[] {
+  const pool = [...input.lots]
+    .sort((a, b) => a.from.getTime() - b.from.getTime())
+    .map((lot) => ({ ...lot }));
+  const order = input.returns
+    .map((r, index) => ({ ...r, index }))
+    .sort((a, b) => a.date.getTime() - b.date.getTime());
+  const totals: number[] = input.returns.map((r) => r.amount);
+
+  for (const r of order) {
+    const taken: YieldLot[] = [];
+    let left = r.amount;
+    while (left > 0.005 && pool.length > 0) {
+      const take = Math.min(left, pool[0].amount);
+      taken.push({ from: pool[0].from, amount: take });
+      pool[0].amount = cents(pool[0].amount - take);
+      left = cents(left - take);
+      if (pool[0].amount <= 0.005) pool.shift();
+    }
+    if (r.date.getTime() <= input.today.getTime()) continue;
+    // O que o saldo não explica (sem entrada) volta sem rendimento.
+    const yielded = simulateLotsYield({
+      lots: taken,
+      cdiAnnualPercent: input.cdiAnnualPercent,
+      cdiPercent: input.cdiPercent,
+      to: r.date,
+    });
+    totals[r.index] = cents(yielded.total + left);
+  }
+  return totals;
+}
