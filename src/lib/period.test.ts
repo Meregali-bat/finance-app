@@ -931,23 +931,32 @@ describe("getCardLimitUsage", () => {
     expect(usage.percentUsed).toBe(100);
   });
 
-  it("conta a previsão manual no comprometido", () => {
-    const estimates = [{ cardId: "c1", dueDate: day(2026, 3, 27), amount: 600 }];
+  it("conta a previsão manual da fatura aberta no comprometido", () => {
+    // day() conta o mês a partir de zero: 2 é março, a fatura do ciclo aberto.
+    const estimates = [{ cardId: "c1", dueDate: day(2026, 2, 27), amount: 600 }];
     const usage = getCardLimitUsage({ card, purchases: [], billEstimates: estimates, today })!;
     expect(usage.used).toBe(600);
   });
 
-  it("conta a assinatura cobrada no cartão", () => {
+  it("conta a assinatura só na fatura aberta, não nas futuras", () => {
+    // O banco segura limite pelo que já foi cobrado, e a cobrança de abril de
+    // uma assinatura ainda não aconteceu: ela entra uma vez, no ciclo aberto
+    // (20/fev a 20/mar), e não em todo mês até o fim da janela.
     const usage = getCardLimitUsage({
       card,
       purchases: [],
       cardFixedExpenses: [
-        { id: "f1", amount: 34.9, cardId: "c1", createdAt: new Date(2026, 0, 1) },
+        { id: "f1", amount: 34.9, cardId: "c1", createdAt: new Date(2026, 2, 1) },
       ],
       today,
     })!;
-    // Uma assinatura entra em todo ciclo da janela, não só em um.
-    expect(usage.used).toBeGreaterThan(34.9);
+    expect(usage.used).toBe(34.9);
+  });
+
+  it("não conta previsão manual de uma fatura futura", () => {
+    const estimates = [{ cardId: "c1", dueDate: day(2026, 5, 27), amount: 600 }];
+    const usage = getCardLimitUsage({ card, purchases: [], billEstimates: estimates, today })!;
+    expect(usage.used).toBe(0);
   });
 });
 
