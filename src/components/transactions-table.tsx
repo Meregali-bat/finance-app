@@ -595,6 +595,7 @@ export function TransactionsTable({
                           ? ` · ${item.installmentNumber}/${item.installments}`
                           : ` · ${item.installments}x`
                         : ""}
+                      {item.lentTo ? ` · emprestado a ${item.lentTo}` : ""}
                     </p>
                   </div>
                   <span className="shrink-0 pt-0.5 text-[15px]">{amount(item)}</span>

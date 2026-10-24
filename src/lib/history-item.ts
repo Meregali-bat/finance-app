@@ -53,7 +53,7 @@ export type HistoryItem = {
   purchaseDate?: Date;
   /** Presente quando kind === "incomeReceipt": a receita fixa que foi confirmada. */
   incomeId?: string;
-  /** A despesa foi emprestada: o nome de quem vai devolver. */
+  /** A despesa foi emprestada: quem vai devolver ("Ana e Bruno"). */
   lentTo?: string;
   /** A fatia escolhida para este lançamento; ausente = a da categoria. */
   slice?: string | null;
@@ -110,4 +110,11 @@ export function itemDayKey(item: HistoryItem): string {
   if (item.kind === "transaction") return item.date.toISOString().slice(0, 10);
   const d = item.date;
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+const names = new Intl.ListFormat("pt-BR", { type: "conjunction" });
+
+/** "Ana", "Ana e Bruno", "Ana, Bruno e Carla"; nada quando não foi emprestada. */
+export function lentNames(loans: { person: { name: string } }[]): string | undefined {
+  return loans.length > 0 ? names.format(loans.map((l) => l.person.name)) : undefined;
 }
