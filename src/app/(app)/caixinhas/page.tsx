@@ -9,7 +9,7 @@ import { loadBudgetInputs } from "@/lib/budget-inputs";
 import { todayBudget } from "@/lib/today-budget";
 import { currentCdi } from "@/lib/cdi";
 import { todayInputValue } from "@/lib/format";
-import { remainingLots, simulateLotsYield } from "@/lib/jar-yield";
+import { remainingLots, returnsWithYield, simulateLotsYield } from "@/lib/jar-yield";
 import { jarReturns } from "@/lib/jar-plans";
 import { forecastPeriods } from "@/lib/forecast";
 
@@ -116,6 +116,38 @@ export default async function JarsPage() {
     return { total: r.principal + r.gross, net: r.total };
   }
 
+  /**
+   * Os resgates previstos da caixinha para a tela, cada um com o que vai
+   * devolver no dia — o guardado mais o rendimento até lá, sem IOF e IR —
+   * quando a porcentagem do CDI foi informada.
+   */
+  function withYield(
+    jar: (typeof jars)[number],
+    lots: { from: string; amount: number }[],
+    returns: ReturnType<typeof jarReturns>,
+  ) {
+    const totals =
+      jar.cdiPercent === null
+        ? null
+        : returnsWithYield({
+            lots: lots.map((l) => ({
+              from: new Date(`${l.from}T00:00:00.000Z`),
+              amount: l.amount,
+            })),
+            returns,
+            cdiAnnualPercent: cdi.annualPercent,
+            cdiPercent: Number(jar.cdiPercent),
+            today: todayUtc,
+          });
+    return returns.map((r, i) => ({
+      source: r.source,
+      amount: r.amount,
+      date: r.date.toISOString().slice(0, 10),
+      overdue: r.overdue,
+      withYield: totals && !r.overdue ? totals[i] : null,
+    }));
+  }
+
   return (
     <div className="flex flex-col gap-5 lg:gap-6">
       <PageHeader
@@ -142,28 +174,27 @@ export default async function JarsPage() {
               cdiPercent: jar.cdiPercent === null ? null : Number(jar.cdiPercent),
               lots,
               now: nowOf(jar, lots),
-              returns: jarReturns(
-                jar.deposits.map((d) => ({
-                  id: d.id,
-                  jarId: jar.id,
-                  amount: Number(d.balanceChange ?? d.amount),
-                  date: d.createdAt,
-                  plannedWithdrawalAt: d.plannedWithdrawalAt,
-                })),
-                today,
-                jar.jarWithdrawalPlans.map((p) => ({
-                  id: p.id,
-                  jarId: jar.id,
-                  amount: Number(p.amount),
-                  date: p.date,
-                  createdAt: p.createdAt,
-                })),
-              ).map((r) => ({
-                source: r.source,
-                amount: r.amount,
-                date: r.date.toISOString().slice(0, 10),
-                overdue: r.overdue,
-              })),
+              returns: withYield(
+                jar,
+                lots,
+                jarReturns(
+                  jar.deposits.map((d) => ({
+                    id: d.id,
+                    jarId: jar.id,
+                    amount: Number(d.balanceChange ?? d.amount),
+                    date: d.createdAt,
+                    plannedWithdrawalAt: d.plannedWithdrawalAt,
+                  })),
+                  today,
+                  jar.jarWithdrawalPlans.map((p) => ({
+                    id: p.id,
+                    jarId: jar.id,
+                    amount: Number(p.amount),
+                    date: p.date,
+                    createdAt: p.createdAt,
+                  })),
+                ),
+              ),
             };
           })}
           yieldContext={{

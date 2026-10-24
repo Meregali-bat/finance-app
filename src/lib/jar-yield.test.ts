@@ -5,6 +5,7 @@ import {
   irRate,
   isBusinessDay,
   remainingLots,
+  returnsWithYield,
   simulateLotsYield,
   simulateYield,
 } from "./jar-yield";
@@ -144,5 +145,51 @@ describe("entradas em datas diferentes", () => {
     expect(r.principal).toBe(2000);
     expect(r.total).toBeCloseTo(2000 + r.net, 2);
     expect(r.net).toBeCloseTo(r.lots[0].net + r.lots[1].net, 2);
+  });
+});
+
+describe("returnsWithYield", () => {
+  const lots = [
+    { from: day(2026, 8, 3), amount: 1000 },
+    { from: day(2026, 10, 20), amount: 500 },
+  ];
+  const base = { lots, cdiAnnualPercent: 14.9, cdiPercent: 115, today: day(2026, 10, 24) };
+
+  it("o resgate previsto volta com o rendimento até o dia, sem IOF e IR", () => {
+    const [total] = returnsWithYield({
+      ...base,
+      returns: [{ amount: 1500, date: day(2026, 11, 8) }],
+    });
+    const expected = simulateLotsYield({ ...base, lots, to: day(2026, 11, 8) }).total;
+    expect(total).toBeCloseTo(expected, 2);
+    expect(total).toBeGreaterThan(1500);
+  });
+
+  it("dois resgates dividem as entradas pela ordem das datas", () => {
+    const [early, late] = returnsWithYield({
+      ...base,
+      returns: [
+        { amount: 1000, date: day(2026, 11, 8) },
+        { amount: 500, date: day(2026, 12, 8) },
+      ],
+    });
+    // O primeiro leva a entrada antiga (sem IOF); o segundo, a de 20/10.
+    const first = simulateYield({
+      amount: 1000,
+      cdiAnnualPercent: 14.9,
+      cdiPercent: 115,
+      from: day(2026, 8, 3),
+      to: day(2026, 11, 8),
+    });
+    expect(early).toBeCloseTo(first.total, 2);
+    expect(late).toBeGreaterThan(500);
+  });
+
+  it("resgate de dia que já passou volta só o guardado", () => {
+    const [total] = returnsWithYield({
+      ...base,
+      returns: [{ amount: 300, date: day(2026, 10, 20) }],
+    });
+    expect(total).toBe(300);
   });
 });
