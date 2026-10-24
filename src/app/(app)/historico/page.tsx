@@ -22,6 +22,7 @@ import { prisma } from "@/lib/prisma";
 import { parseSlices, sliceOfCategory } from "@/lib/slices";
 import { TransactionsTable } from "@/components/transactions-table";
 import { SpendingCalendarCard } from "@/components/spending-calendar-card";
+import { HistoryDayProvider } from "@/components/history-day";
 import { spendingCalendar } from "@/lib/spending-calendar";
 
 const UNCATEGORIZED = "__none__";
@@ -110,124 +111,153 @@ export default async function HistoryPage({
     : null;
 
   const categoryOptions = categories.map((c) => ({ id: c.id, name: c.name }));
+  // As compras feitas no período, inteiras e no dia da compra: é como o
+  // calendário as mostra, e a listagem filtrada por um dia mostra o mesmo.
+  const periodPurchases: HistoryItem[] = creditCards.flatMap((card) =>
+    card.purchases
+      .filter((p) => p.date >= utcRangeStart && p.date < utcRangeEnd)
+      .map((p) => ({
+        id: p.id,
+        kind: "card" as const,
+        description: p.description,
+        amount: Number(p.amount),
+        date: p.date,
+        createdAt: p.createdAt,
+        categoryId: p.categoryId,
+        slice: p.slice,
+        cardId: card.id,
+        cardName: card.name,
+        installments: p.installments,
+        purchaseAmount: Number(p.amount),
+        purchaseDate: p.date,
+        lentTo: p.loan?.person.name,
+      })),
+  );
+
   const cardOptions = creditCards.filter((c) => c.active).map((c) => ({ id: c.id, name: c.name }));
 
   return (
-    <div className="flex flex-col gap-6">
-      <PageHeader
-        title="Histórico"
-        action={
-          <Link
-            href="/historico/importar"
-            aria-label="Importar extrato"
-            title="Importar extrato"
-            className={iconButton({ tone: "outline", size: "lg" })}
-          >
-            <FileUp aria-hidden="true" />
-          </Link>
-        }
-      />
-
-      {/* O seletor de período é o controle principal desta tela, então ele
-          ganha uma superfície própria em vez de flutuar solto sobre o fundo. */}
-      <PeriodPicker range={range} />
-
-      <ReportTotalsCard totals={totals} />
-
-      {/* O gasto do período no tempo: uma série só, em rosé, sem legenda — o
-          título diz o que é. As colunas somam o "Gasto" do resumo. */}
-      {calendar && (
-        <SpendingCalendarCard
-          calendar={calendar}
-          initialDay={
-            today >= range.firstDay && today <= range.lastDay ? today : (calendar.peak?.key ?? null)
+    // O dia tocado no calendário filtra a listagem: os dois falam por aqui.
+    <HistoryDayProvider>
+      <div className="flex flex-col gap-6">
+        <PageHeader
+          title="Histórico"
+          action={
+            <Link
+              href="/historico/importar"
+              aria-label="Importar extrato"
+              title="Importar extrato"
+              className={iconButton({ tone: "outline", size: "lg" })}
+            >
+              <FileUp aria-hidden="true" />
+            </Link>
           }
         />
-      )}
 
-      {buckets.length > 1 && !daily && (
-        <div
-          className={homeCard("rise-in flex flex-col gap-4")}
-          style={{ "--rise-delay": "140ms" } as React.CSSProperties}
-        >
-          <SectionLabel>
-            {buckets[0].unit === "month" ? "Gasto por mês" : "Gasto por dia"}
-          </SectionLabel>
-          <LineChart
-            title={buckets[0].unit === "month" ? "Gasto por mês" : "Gasto por dia"}
-            height={150}
-            points={buckets.map((bucket, index) => ({
-              key: bucket.start.toISOString(),
-              // Rótulo a cada poucos dias, para o eixo não virar uma sopa.
-              label:
-                bucket.unit === "month"
-                  ? new Intl.DateTimeFormat("pt-BR", { month: "short" })
-                      .format(bucket.start)
-                      .replace(".", "")
-                  : index % Math.max(2, Math.ceil(buckets.length / 10)) === 0
-                    ? String(bucket.start.getDate())
-                    : "",
-              value: bucket.total,
-              valueLabel: formatCurrency(bucket.total),
-              detail:
-                bucket.unit === "month"
-                  ? new Intl.DateTimeFormat("pt-BR", {
-                      month: "long",
-                      year: "numeric",
-                    }).format(bucket.start)
-                  : formatDate(bucket.start),
-              selected:
-                bucket.total === Math.max(...buckets.map((b) => b.total)) && bucket.total > 0,
-            }))}
+        {/* O seletor de período é o controle principal desta tela, então ele
+          ganha uma superfície própria em vez de flutuar solto sobre o fundo. */}
+        <PeriodPicker range={range} />
+
+        <ReportTotalsCard totals={totals} />
+
+        {/* O gasto do período no tempo: uma série só, em rosé, sem legenda — o
+          título diz o que é. As colunas somam o "Gasto" do resumo. */}
+        {calendar && (
+          <SpendingCalendarCard
+            calendar={calendar}
+            initialDay={
+              today >= range.firstDay && today <= range.lastDay
+                ? today
+                : (calendar.peak?.key ?? null)
+            }
           />
-        </div>
-      )}
+        )}
 
-      <Tabs
-        defaultValue="lancamentos"
-        className="rise-in"
-        style={{ "--rise-delay": "180ms" } as React.CSSProperties}
-      >
-        <TabsList className="w-full lg:w-fit">
-          <TabsTrigger value="lancamentos" className="flex-1 lg:flex-none">
-            Lançamentos
-          </TabsTrigger>
-          <TabsTrigger value="categorias" className="flex-1 lg:flex-none">
-            Por categoria
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="lancamentos" className="pt-4">
-          {items.length === 0 ? (
-            <EmptyState text="Nenhum lançamento neste período." />
-          ) : (
-            <TransactionsTable
-              items={items}
-              categories={categories.map((c) => ({
-                id: c.id,
-                name: c.name,
-                slice: sliceOfCategory(c),
+        {buckets.length > 1 && !daily && (
+          <div
+            className={homeCard("rise-in flex flex-col gap-4")}
+            style={{ "--rise-delay": "140ms" } as React.CSSProperties}
+          >
+            <SectionLabel>
+              {buckets[0].unit === "month" ? "Gasto por mês" : "Gasto por dia"}
+            </SectionLabel>
+            <LineChart
+              title={buckets[0].unit === "month" ? "Gasto por mês" : "Gasto por dia"}
+              height={150}
+              points={buckets.map((bucket, index) => ({
+                key: bucket.start.toISOString(),
+                // Rótulo a cada poucos dias, para o eixo não virar uma sopa.
+                label:
+                  bucket.unit === "month"
+                    ? new Intl.DateTimeFormat("pt-BR", { month: "short" })
+                        .format(bucket.start)
+                        .replace(".", "")
+                    : index % Math.max(2, Math.ceil(buckets.length / 10)) === 0
+                      ? String(bucket.start.getDate())
+                      : "",
+                value: bucket.total,
+                valueLabel: formatCurrency(bucket.total),
+                detail:
+                  bucket.unit === "month"
+                    ? new Intl.DateTimeFormat("pt-BR", {
+                        month: "long",
+                        year: "numeric",
+                      }).format(bucket.start)
+                    : formatDate(bucket.start),
+                selected:
+                  bucket.total === Math.max(...buckets.map((b) => b.total)) && bucket.total > 0,
               }))}
-              cards={cardOptions}
-              slicesActive={slicesActive}
             />
-          )}
-        </TabsContent>
+          </div>
+        )}
 
-        {/* Coluna única de propósito: o acordeão anima a altura ao expandir, e
+        <Tabs
+          defaultValue="lancamentos"
+          className="rise-in"
+          style={{ "--rise-delay": "180ms" } as React.CSSProperties}
+        >
+          <TabsList className="w-full lg:w-fit">
+            <TabsTrigger value="lancamentos" className="flex-1 lg:flex-none">
+              Lançamentos
+            </TabsTrigger>
+            <TabsTrigger value="categorias" className="flex-1 lg:flex-none">
+              Por categoria
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="lancamentos" className="pt-4">
+            {items.length === 0 ? (
+              <EmptyState text="Nenhum lançamento neste período." />
+            ) : (
+              <TransactionsTable
+                items={items}
+                categories={categories.map((c) => ({
+                  id: c.id,
+                  name: c.name,
+                  slice: sliceOfCategory(c),
+                }))}
+                cards={cardOptions}
+                slicesActive={slicesActive}
+                purchases={periodPurchases}
+              />
+            )}
+          </TabsContent>
+
+          {/* Coluna única de propósito: o acordeão anima a altura ao expandir, e
             em grid isso faria a coluna vizinha pular. */}
-        <TabsContent value="categorias" className="pt-4">
-          {categoryGroups.length === 0 ? (
-            <EmptyState text="Nenhum lançamento neste período." />
-          ) : (
-            <CategoryBreakdown
-              groups={categoryGroups}
-              cards={cardOptions}
-              categories={categoryOptions}
-            />
-          )}
-        </TabsContent>
-      </Tabs>
-    </div>
+          <TabsContent value="categorias" className="pt-4">
+            {categoryGroups.length === 0 ? (
+              <EmptyState text="Nenhum lançamento neste período." />
+            ) : (
+              <CategoryBreakdown
+                groups={categoryGroups}
+                cards={cardOptions}
+                categories={categoryOptions}
+              />
+            )}
+          </TabsContent>
+        </Tabs>
+      </div>
+    </HistoryDayProvider>
   );
 }
