@@ -128,7 +128,7 @@ export function JarsGrid({ jars, yieldContext }: { jars: JarView[]; yieldContext
         </p>
       )}
 
-      <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-3 lg:gap-4 xl:grid-cols-4">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-2.5 sm:grid-cols-2 lg:grid-cols-3 lg:gap-4 xl:grid-cols-4">
         {jars.map((jar, index) => (
           <div
             key={jar.id}
@@ -203,27 +203,31 @@ export function JarsGrid({ jars, yieldContext }: { jars: JarView[]; yieldContext
                 ))}
               </ul>
             )}
-            {jar.balance - jar.returns.reduce((sum, r) => sum + r.amount, 0) > 0.005 && (
-              <JarScheduleDialog
+            {/* Lado a lado quando cabe: no card largo do celular, uma embaixo da
+                outra só alongava a caixinha. */}
+            <div className="flex flex-wrap items-center gap-x-5 gap-y-1">
+              {jar.balance - jar.returns.reduce((sum, r) => sum + r.amount, 0) > 0.005 && (
+                <JarScheduleDialog
+                  jarId={jar.id}
+                  jarName={jar.name}
+                  available={
+                    Math.round(
+                      (jar.balance - jar.returns.reduce((sum, r) => sum + r.amount, 0)) * 100,
+                    ) / 100
+                  }
+                  lots={jar.lots}
+                  cdiPercent={jar.cdiPercent}
+                  context={yieldContext}
+                />
+              )}
+              <JarYieldDialog
                 jarId={jar.id}
                 jarName={jar.name}
-                available={
-                  Math.round(
-                    (jar.balance - jar.returns.reduce((sum, r) => sum + r.amount, 0)) * 100,
-                  ) / 100
-                }
                 lots={jar.lots}
                 cdiPercent={jar.cdiPercent}
                 context={yieldContext}
               />
-            )}
-            <JarYieldDialog
-              jarId={jar.id}
-              jarName={jar.name}
-              lots={jar.lots}
-              cdiPercent={jar.cdiPercent}
-              context={yieldContext}
-            />
+            </div>
             <div className="flex gap-2">
               <JarDepositDialog
                 jarId={jar.id}
