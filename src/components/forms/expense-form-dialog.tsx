@@ -163,7 +163,7 @@ export function ExpenseFormDialog({
                 name="installmentCount"
                 type="number"
                 inputMode="numeric"
-                min="1"
+                min="0"
                 placeholder="Sem fim"
                 defaultValue={expense?.installmentCount ?? undefined}
               />

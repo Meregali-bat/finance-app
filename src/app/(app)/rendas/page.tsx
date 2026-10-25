@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/auth-helpers";
 import { formatCurrency, formatShortDate } from "@/lib/format";
+import { installmentsLeft } from "@/lib/period";
 import { EmptyState } from "@/components/ui/empty-state";
 import { FixedTabs } from "@/components/fixed-tabs";
 import { ListRow, stagger } from "@/components/list-row";
@@ -20,6 +21,7 @@ import { deleteCategory, toggleCategoryActive } from "@/lib/actions/category";
 
 export default async function FixedPage() {
   const userId = await requireUserId();
+  const today = new Date();
 
   const [incomes, expenses, creditCards, categories] = await Promise.all([
     prisma.income.findMany({ where: { userId, deletedAt: null }, orderBy: { dayOfMonth: "asc" } }),
@@ -51,10 +53,7 @@ export default async function FixedPage() {
         panels={{
           rendas:
             incomes.length === 0 ? (
-              <EmptyState
-                text="Nenhuma renda cadastrada ainda."
-                hint="Use o + para cadastrar."
-              />
+              <EmptyState text="Nenhuma renda cadastrada ainda." hint="Use o + para cadastrar." />
             ) : (
               <ul className="grid gap-2 xl:grid-cols-2">
                 {incomes.map((income, index) => (
@@ -99,6 +98,17 @@ export default async function FixedPage() {
               <ul className="grid items-start gap-2 xl:grid-cols-2">
                 {expenses.map((expense, index) => {
                   const cardName = expense.cardId ? cardNameById.get(expense.cardId) : undefined;
+                  // Quantas faltam, e não o número salvo: é o que a pessoa
+                  // confere com o carnê, e o que o formulário edita.
+                  const left = installmentsLeft(
+                    {
+                      dueDay: expense.dueDay ?? undefined,
+                      createdAt: expense.createdAt,
+                      installmentCount: expense.installmentCount ?? undefined,
+                      installmentsFrom: expense.installmentsFrom ?? undefined,
+                    },
+                    today,
+                  );
                   return (
                     <li key={expense.id} className="rise-in" style={stagger(index, 80, 45)}>
                       <ListRow
@@ -107,8 +117,10 @@ export default async function FixedPage() {
                         subtitle={[
                           formatCurrency(Number(expense.amount)),
                           cardName ?? `vence dia ${expense.dueDay}`,
-                          expense.installmentCount != null &&
-                            `${expense.installmentCount} ${expense.installmentCount === 1 ? "parcela" : "parcelas"}`,
+                          left &&
+                            (left.remaining === 0
+                              ? "parcelas encerradas"
+                              : `${left.remaining === 1 ? "falta 1 parcela" : `faltam ${left.remaining} parcelas`} · última em ${formatShortDate(left.last)}`),
                         ]
                           .filter(Boolean)
                           .join(" · ")}
@@ -127,7 +139,7 @@ export default async function FixedPage() {
                                 dueDay: expense.dueDay,
                                 cardId: expense.cardId,
                                 categoryId: expense.categoryId,
-                                installmentCount: expense.installmentCount,
+                                installmentCount: left ? left.remaining : expense.installmentCount,
                               }}
                               cards={cards}
                               categories={activeCategories}

@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/auth-helpers";
 import { toFixedExpenseInput } from "@/lib/budget-inputs";
-import { deferralTargetDate, startAfterCurrentCharge } from "@/lib/period";
+import { deferralTargetDate, installmentsStart, startAfterCurrentCharge } from "@/lib/period";
 
 const expenseSchema = z
   .object({
@@ -19,7 +19,8 @@ const expenseSchema = z
     categoryId: z.string().trim().optional().nullable(),
     installmentCount: z.preprocess(
       (v) => (v === "" || v == null ? undefined : v),
-      z.coerce.number().int().min(1, "Pelo menos uma parcela").max(600).optional(),
+      // 0 = acabaram: as que já foram continuam no histórico.
+      z.coerce.number().int().min(0).max(600).optional(),
     ),
   })
   .superRefine((data, ctx) => {
@@ -59,6 +60,7 @@ export async function createFixedExpense(formData: FormData) {
       dueDay: cardId ? null : (dueDay ?? null),
       // No cartão o parcelamento é da compra, não da despesa.
       installmentCount: cardId ? null : (installmentCount ?? null),
+      installmentsFrom: installmentsFromFor(cardId, dueDay, installmentCount, createdAt),
       cardId: cardId || null,
       categoryId: categoryId || null,
       userId,
@@ -67,6 +69,20 @@ export async function createFixedExpense(formData: FormData) {
   revalidatePath("/rendas");
   revalidatePath("/");
   revalidatePath("/historico");
+}
+
+/**
+ * De onde contam as parcelas: o próximo vencimento a partir de hoje (ou do
+ * início da despesa, quando ela começa depois). Sem parcelas, nada.
+ */
+function installmentsFromFor(
+  cardId: string | null | undefined,
+  dueDay: number | undefined,
+  installmentCount: number | undefined,
+  startsAt: Date = new Date(),
+) {
+  if (cardId || dueDay == null || installmentCount == null) return null;
+  return installmentsStart(dueDay, startsAt);
 }
 
 export async function updateFixedExpense(id: string, formData: FormData) {
@@ -87,6 +103,10 @@ export async function updateFixedExpense(id: string, formData: FormData) {
       dueDay: cardId ? null : (dueDay ?? null),
       // No cartão o parcelamento é da compra, não da despesa.
       installmentCount: cardId ? null : (installmentCount ?? null),
+      // O formulário mostra quantas faltam a partir do próximo vencimento, e é
+      // de lá que o número salvo conta — salvar sem mexer dá na mesma última
+      // parcela.
+      installmentsFrom: installmentsFromFor(cardId, dueDay, installmentCount),
       cardId: cardId || null,
       categoryId: categoryId || null,
     },
