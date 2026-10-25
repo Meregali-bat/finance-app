@@ -50,10 +50,17 @@ export interface FixedExpenseInput {
    */
   pauses?: { start: Date; end?: Date }[];
   /**
-   * Quantas cobranças a despesa tem, a partir do primeiro vencimento em ou
-   * depois do cadastro. Ausente = não termina.
+   * Quantas cobranças a despesa tem, a partir de `installmentsFrom` (ou, sem
+   * ele, do primeiro vencimento em ou depois do cadastro). Ausente = não termina.
    */
   installmentCount?: number;
+  /**
+   * O vencimento da primeira das `installmentCount` parcelas, como dia de
+   * calendário (meia-noite UTC). Gravado ao salvar o número de parcelas, que
+   * a pessoa diz contando do próximo vencimento: editar uma despesa antiga
+   * para "faltam 3" não pode contar desde o cadastro, meses atrás.
+   */
+  installmentsFrom?: Date;
   /** As ocorrências adiadas e para onde cada uma foi. Ver `expenseCharges`. */
   deferrals?: ExpenseDeferralInput[];
   /** When set, this expense is billed on a credit card instead of standing alone. */
@@ -474,21 +481,59 @@ export function isExpenseOccurrenceValid(
   );
 }
 
-/** O primeiro vencimento da despesa: o primeiro dia `dueDay` em ou depois do cadastro. */
-function firstDueDate(expense: FixedExpenseInput): Date | null {
-  if (expense.dueDay == null || !expense.createdAt) return null;
+type InstallmentFields = Pick<
+  FixedExpenseInput,
+  "dueDay" | "createdAt" | "installmentCount" | "installmentsFrom"
+>;
+
+/**
+ * O vencimento da primeira parcela: o gravado ao salvar as parcelas; senão o
+ * primeiro dia `dueDay` em ou depois do cadastro.
+ */
+function firstDueDate(expense: InstallmentFields): Date | null {
+  if (expense.dueDay == null) return null;
+  if (expense.installmentsFrom) return storedDay(expense.installmentsFrom);
+  if (!expense.createdAt) return null;
   return earliestOccurrenceOnOrAfter(expense.dueDay, startOfDay(expense.createdAt));
 }
 
-/** A ocorrência cabe nas parcelas da despesa? Sem número de parcelas, sempre. */
+/**
+ * A ocorrência cabe nas parcelas da despesa? Sem número de parcelas, sempre.
+ * As de antes da primeira parcela também: são meses de antes de a pessoa dizer
+ * quantas faltavam, e continuam cobrados como eram.
+ */
 function withinInstallments(occurrence: Date, expense: FixedExpenseInput): boolean {
   if (expense.installmentCount == null) return true;
   const first = firstDueDate(expense);
   if (!first) return true;
-  const index =
-    (occurrence.getFullYear() - first.getFullYear()) * 12 +
-    (occurrence.getMonth() - first.getMonth());
-  return index < expense.installmentCount;
+  return monthsBetween(first, occurrence) < expense.installmentCount;
+}
+
+/**
+ * Onde as parcelas começam quando a pessoa diz quantas faltam hoje: no
+ * próximo vencimento, o de hoje incluído. Como dia de calendário, meia-noite
+ * UTC, para gravar em `installmentsFrom`.
+ */
+export function installmentsStart(dueDay: number, today: Date): Date {
+  const next = earliestOccurrenceOnOrAfter(dueDay, today);
+  return new Date(Date.UTC(next.getFullYear(), next.getMonth(), next.getDate()));
+}
+
+/**
+ * Quantas parcelas ainda vêm, contando a do próximo vencimento, e quando cai
+ * a última. Nulo para despesa sem número de parcelas.
+ */
+export function installmentsLeft(
+  expense: InstallmentFields,
+  today: Date,
+): { remaining: number; last: Date } | null {
+  if (expense.installmentCount == null || expense.dueDay == null) return null;
+  const first = firstDueDate(expense);
+  if (!first) return null;
+  const next = earliestOccurrenceOnOrAfter(expense.dueDay, today);
+  const remaining = Math.max(0, expense.installmentCount - Math.max(0, monthsBetween(first, next)));
+  const end = addMonths(first.getFullYear(), first.getMonth(), expense.installmentCount - 1);
+  return { remaining, last: dateForDayInMonth(end.year, end.month, expense.dueDay) };
 }
 
 /**

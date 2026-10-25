@@ -259,6 +259,7 @@ export function toFixedExpenseInput(e: {
   endedAt: Date | null;
   cardId: string | null;
   installmentCount?: number | null;
+  installmentsFrom?: Date | null;
   pauses: { startedAt: Date; endedAt: Date | null }[];
   /** Ausente nas telas que só olham assinaturas de cartão, que não se adiam. */
   deferrals?: { dueDate: Date; targetDueDate: Date; amount: unknown; mode: string }[];
@@ -271,6 +272,7 @@ export function toFixedExpenseInput(e: {
     endedAt: e.endedAt ?? undefined,
     pauses: e.pauses.map((p) => ({ start: p.startedAt, end: p.endedAt ?? undefined })),
     installmentCount: e.installmentCount ?? undefined,
+    installmentsFrom: e.installmentsFrom ?? undefined,
     deferrals: (e.deferrals ?? []).map((d) => ({
       dueDate: d.dueDate,
       targetDueDate: d.targetDueDate,

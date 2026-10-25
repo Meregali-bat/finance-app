@@ -15,6 +15,9 @@ import {
   isExpenseOccurrenceValid,
   startAfterCurrentCharge,
   type CardBill,
+  expenseCharges,
+  installmentsLeft,
+  installmentsStart,
 } from "./period";
 
 /**
@@ -1678,5 +1681,55 @@ describe("startAfterCurrentCharge", () => {
     });
     expect(open).toHaveLength(0);
     expect(next).toHaveLength(1);
+  });
+});
+
+describe("parcelas de despesa fixa contadas do próximo vencimento", () => {
+  // Cadastrada em agosto sem parcelas; em 25/out a pessoa diz "faltam 3",
+  // vencendo dia 31: outubro, novembro e dezembro.
+  const expense = {
+    id: "emprestimo",
+    amount: 376.79,
+    dueDay: 31,
+    createdAt: new Date(2026, 7, 5),
+    installmentCount: 3,
+    installmentsFrom: installmentsStart(31, new Date(2026, 9, 25, 15)),
+  };
+
+  it("cobra a partir do vencimento seguinte ao que foi salvo", () => {
+    const charges = [
+      // Um ciclo por vez: a varredura não enxerga além de uns dois meses.
+      ...expenseCharges(expense, new Date(2026, 9, 15), new Date(2026, 10, 15)),
+      ...expenseCharges(expense, new Date(2026, 10, 15), new Date(2026, 11, 15)),
+      ...expenseCharges(expense, new Date(2026, 11, 15), new Date(2027, 0, 15)),
+    ].map((c) => c.dueDate);
+    expect(charges).toEqual([
+      new Date(2026, 9, 31),
+      new Date(2026, 10, 30),
+      new Date(2026, 11, 31),
+    ]);
+    expect(expenseCharges(expense, new Date(2027, 0, 1), new Date(2027, 1, 1))).toEqual([]);
+  });
+
+  it("os meses de antes continuam cobrados como eram", () => {
+    expect(expenseCharges(expense, new Date(2026, 8, 1), new Date(2026, 9, 1))).toHaveLength(1);
+  });
+
+  it("diz quantas faltam e quando é a última", () => {
+    expect(installmentsLeft(expense, new Date(2026, 9, 25))).toEqual({
+      remaining: 3,
+      last: new Date(2026, 11, 31),
+    });
+    expect(installmentsLeft(expense, new Date(2026, 10, 1))?.remaining).toBe(2);
+    expect(installmentsLeft(expense, new Date(2027, 0, 2))?.remaining).toBe(0);
+  });
+
+  it("sem a data gravada, conta do cadastro, como antes", () => {
+    const old = { ...expense, installmentsFrom: undefined };
+    // Ago, set e out: em novembro já acabou — o que a tela de Fixos agora mostra.
+    expect(installmentsLeft(old, new Date(2026, 9, 25))).toEqual({
+      remaining: 1,
+      last: new Date(2026, 9, 31),
+    });
   });
 });

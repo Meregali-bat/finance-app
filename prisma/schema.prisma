@@ -116,11 +116,16 @@ model FixedExpense {
   label            String
   amount           Decimal
   dueDay           Int?
-  /// Quantas cobranças faltam, contadas a partir do primeiro vencimento depois
-  /// do cadastro. Nulo = não termina (aluguel, assinatura). É o que dá sentido
-  /// a adiar uma parcela "para depois da última". Só para despesa avulsa: no
-  /// cartão, o parcelamento é da compra.
+  /// Quantas cobranças a despesa tem, contadas de `installmentsFrom`. Nulo =
+  /// não termina (aluguel, assinatura). É o que dá sentido a adiar uma parcela
+  /// "para depois da última". Só para despesa avulsa: no cartão, o
+  /// parcelamento é da compra.
   installmentCount Int?
+  /// O vencimento da primeira dessas parcelas (dia de calendário, meia-noite
+  /// UTC): o próximo vencimento de quando o número de parcelas foi salvo, que
+  /// é de onde a pessoa conta "faltam 3". Nulo nas antigas = o primeiro
+  /// vencimento depois do cadastro.
+  installmentsFrom DateTime?
   active           Boolean             @default(true)
   /// Quando a despesa deixou de ser cobrada — ao ser pausada ou apagada. É por
   /// esta data que se sabe onde cortar: os ciclos que fecharam antes dela
