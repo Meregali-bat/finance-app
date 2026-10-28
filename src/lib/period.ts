@@ -510,27 +510,45 @@ function withinInstallments(occurrence: Date, expense: FixedExpenseInput): boole
 }
 
 /**
- * Onde as parcelas começam quando a pessoa diz quantas faltam hoje: no
- * próximo vencimento, o de hoje incluído. Como dia de calendário, meia-noite
- * UTC, para gravar em `installmentsFrom`.
+ * O próximo vencimento que ainda falta pagar: o primeiro em ou depois de
+ * hoje, pulando os já quitados — a parcela deste mês paga adiantada já não
+ * "falta". `paidDueDates` são os vencimentos quitados, como o banco guarda
+ * (meia-noite UTC).
  */
-export function installmentsStart(dueDay: number, today: Date): Date {
-  const next = earliestOccurrenceOnOrAfter(dueDay, today);
+function nextUnpaidDue(dueDay: number, today: Date, paidDueDates: Date[]): Date {
+  const paid = new Set(paidDueDates.map((d) => storedDay(d).getTime()));
+  let next = earliestOccurrenceOnOrAfter(dueDay, today);
+  // Um ano basta: ninguém paga doze parcelas adiantadas.
+  for (let i = 0; i < 12 && paid.has(next.getTime()); i++) {
+    const after = addMonths(next.getFullYear(), next.getMonth(), 1);
+    next = dateForDayInMonth(after.year, after.month, dueDay);
+  }
+  return next;
+}
+
+/**
+ * Onde as parcelas começam quando a pessoa diz quantas faltam hoje: no
+ * próximo vencimento ainda não pago, o de hoje incluído. Como dia de
+ * calendário, meia-noite UTC, para gravar em `installmentsFrom`.
+ */
+export function installmentsStart(dueDay: number, today: Date, paidDueDates: Date[] = []): Date {
+  const next = nextUnpaidDue(dueDay, today, paidDueDates);
   return new Date(Date.UTC(next.getFullYear(), next.getMonth(), next.getDate()));
 }
 
 /**
- * Quantas parcelas ainda vêm, contando a do próximo vencimento, e quando cai
- * a última. Nulo para despesa sem número de parcelas.
+ * Quantas parcelas ainda faltam pagar, a partir do próximo vencimento em
+ * aberto, e quando cai a última. Nulo para despesa sem número de parcelas.
  */
 export function installmentsLeft(
   expense: InstallmentFields,
   today: Date,
+  paidDueDates: Date[] = [],
 ): { remaining: number; last: Date } | null {
   if (expense.installmentCount == null || expense.dueDay == null) return null;
   const first = firstDueDate(expense);
   if (!first) return null;
-  const next = earliestOccurrenceOnOrAfter(expense.dueDay, today);
+  const next = nextUnpaidDue(expense.dueDay, today, paidDueDates);
   const remaining = Math.max(0, expense.installmentCount - Math.max(0, monthsBetween(first, next)));
   const end = addMonths(first.getFullYear(), first.getMonth(), expense.installmentCount - 1);
   return { remaining, last: dateForDayInMonth(end.year, end.month, expense.dueDay) };

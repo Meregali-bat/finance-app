@@ -72,17 +72,18 @@ export async function createFixedExpense(formData: FormData) {
 }
 
 /**
- * De onde contam as parcelas: o próximo vencimento a partir de hoje (ou do
- * início da despesa, quando ela começa depois). Sem parcelas, nada.
+ * De onde contam as parcelas: o próximo vencimento ainda não pago a partir de
+ * hoje (ou do início da despesa, quando ela começa depois). Sem parcelas, nada.
  */
 function installmentsFromFor(
   cardId: string | null | undefined,
   dueDay: number | undefined,
   installmentCount: number | undefined,
   startsAt: Date = new Date(),
+  paidDueDates: Date[] = [],
 ) {
   if (cardId || dueDay == null || installmentCount == null) return null;
-  return installmentsStart(dueDay, startsAt);
+  return installmentsStart(dueDay, startsAt, paidDueDates);
 }
 
 export async function updateFixedExpense(id: string, formData: FormData) {
@@ -96,6 +97,17 @@ export async function updateFixedExpense(id: string, formData: FormData) {
     installmentCount: formData.get("installmentCount"),
   });
 
+  // A parcela deste mês paga adiantada não conta entre as que faltam.
+  const paid = await prisma.expensePayment.findMany({
+    where: {
+      userId,
+      fixedExpenseId: id,
+      settled: true,
+      dueDate: { gte: new Date(Date.now() - 40 * 86_400_000) },
+    },
+    select: { dueDate: true },
+  });
+
   await prisma.fixedExpense.update({
     where: { id, userId },
     data: {
@@ -106,7 +118,13 @@ export async function updateFixedExpense(id: string, formData: FormData) {
       // O formulário mostra quantas faltam a partir do próximo vencimento, e é
       // de lá que o número salvo conta — salvar sem mexer dá na mesma última
       // parcela.
-      installmentsFrom: installmentsFromFor(cardId, dueDay, installmentCount),
+      installmentsFrom: installmentsFromFor(
+        cardId,
+        dueDay,
+        installmentCount,
+        new Date(),
+        paid.map((p) => p.dueDate),
+      ),
       cardId: cardId || null,
       categoryId: categoryId || null,
     },

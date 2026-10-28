@@ -29,7 +29,14 @@ export default async function FixedPage() {
     prisma.fixedExpense.findMany({
       where: { userId, deletedAt: null },
       orderBy: { dueDay: "asc" },
-      include: { deferrals: { orderBy: { dueDate: "asc" } } },
+      include: {
+        deferrals: { orderBy: { dueDate: "asc" } },
+        // Os pagos de agora para a frente: a parcela adiantada já não falta.
+        payments: {
+          where: { settled: true, dueDate: { gte: new Date(today.getTime() - 40 * 86_400_000) } },
+          select: { dueDate: true },
+        },
+      },
     }),
     prisma.creditCard.findMany({ where: { userId, active: true, deletedAt: null } }),
     prisma.category.findMany({ where: { userId }, orderBy: { name: "asc" } }),
@@ -108,6 +115,7 @@ export default async function FixedPage() {
                       installmentsFrom: expense.installmentsFrom ?? undefined,
                     },
                     today,
+                    expense.payments.map((p) => p.dueDate),
                   );
                   return (
                     <li key={expense.id} className="rise-in" style={stagger(index, 80, 45)}>

@@ -1724,6 +1724,21 @@ describe("parcelas de despesa fixa contadas do próximo vencimento", () => {
     expect(installmentsLeft(expense, new Date(2027, 0, 2))?.remaining).toBe(0);
   });
 
+  it("a parcela deste mês já paga não está entre as que faltam", () => {
+    // Em 28/out, com a de 31/out paga adiantada: "faltam 3" é nov, dez e jan.
+    const paid = [new Date(Date.UTC(2026, 9, 31))];
+    const from = installmentsStart(31, new Date(2026, 9, 28), paid);
+    expect(from).toEqual(new Date(Date.UTC(2026, 10, 30)));
+    expect(
+      installmentsLeft({ ...expense, installmentsFrom: from }, new Date(2026, 9, 28), paid),
+    ).toEqual({ remaining: 3, last: new Date(2027, 0, 31) });
+    // Gravada antes, a partir de 31/out: com outubro pago, faltam só duas.
+    expect(installmentsLeft(expense, new Date(2026, 9, 28), paid)).toEqual({
+      remaining: 2,
+      last: new Date(2026, 11, 31),
+    });
+  });
+
   it("sem a data gravada, conta do cadastro, como antes", () => {
     const old = { ...expense, installmentsFrom: undefined };
     // Ago, set e out: em novembro já acabou — o que a tela de Fixos agora mostra.
