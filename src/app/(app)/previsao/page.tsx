@@ -1,4 +1,11 @@
-import { AlertTriangle, ArrowDownLeft, ArrowUpRight, CalendarClock, Wallet } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowDownLeft,
+  ArrowUpRight,
+  CalendarClock,
+  Gauge,
+  Wallet,
+} from "lucide-react";
 import { requireUserId } from "@/lib/auth-helpers";
 import { accountBalanceOf, loadBudgetInputs } from "@/lib/budget-inputs";
 import { calculateCurrentBudget } from "@/lib/carry-over";
@@ -19,6 +26,7 @@ import { homeCard } from "@/components/home-card";
 import { ForecastNav } from "@/components/forecast-nav";
 import { LineChart } from "@/components/charts/line-chart";
 import { cn } from "@/lib/utils";
+import { paceAcrossCycles, spendingPace } from "@/lib/spending-pace";
 
 /** Quantos ciclos o gráfico mostra, contando o corrente. */
 const TIMELINE_LENGTH = 9;
@@ -53,6 +61,11 @@ function cycleName(period: PeriodForecast) {
 
 function forecastHref(offset: number) {
   return `/previsao?p=${offset}`;
+}
+
+/** O ciclo fecha no vermelho mesmo sem gastar nada além do comprometido. */
+function isNegativeCycle(period: PeriodForecast) {
+  return period.endBalance < -0.005;
 }
 
 /** O último dia de dentro do ciclo — `periodEnd` é o primeiro de fora. */
@@ -161,6 +174,34 @@ export default async function ForecastPage({
   }
 
   const period = periods[offset];
+  // "Se continuar gastando assim": só no ciclo corrente, que tem um ritmo.
+  // "Se continuar gastando assim": o ritmo do ciclo corrente, levado até o
+  // ciclo que está na tela — a sobra ou a falta de cada um passa adiante.
+  const current = periods[0];
+  const pace = spendingPace({
+    periodStart: current.periodStart,
+    daysLeft: current.daysLeft,
+    freeToSpend: isNegativeCycle(current) ? current.endBalance : current.freeToSpend,
+    today,
+    transactions: inputs.transactions,
+    cardPurchases: inputs.cardPurchases,
+  });
+  const paceLeft = pace ? paceAcrossCycles(pace, periods)[offset] : null;
+  // O mesmo caminho sem gasto nenhum no dia a dia: quando ele já falta, cortar
+  // o dia a dia não fecha a conta, e dizer "gaste R$ X a menos" mentiria.
+  const noSpendLeft = pace
+    ? paceAcrossCycles(
+        {
+          perDay: 0,
+          projectedLeft: isNegativeCycle(current) ? current.endBalance : current.freeToSpend,
+        },
+        periods,
+      )[offset]
+    : 0;
+  // Os dias daqui até o fim do ciclo da tela, para dividir uma falta por eles.
+  const paceDays = pace
+    ? pace.remainingDays + periods.slice(1, offset + 1).reduce((sum, p) => sum + p.totalDays, 0)
+    : 0;
   const isNegative = period.endBalance < -0.005;
   const timeline = periods.slice(0, TIMELINE_LENGTH);
   const timelineShort = timeline.filter((item) => item.endBalance < -0.005);
@@ -308,6 +349,52 @@ export default async function ForecastPage({
           </div>
         </div>
       </section>
+
+      {pace && paceLeft !== null && (
+        <section
+          aria-label="No seu ritmo"
+          className={homeCard("rise-in flex items-start gap-3")}
+          style={{ "--rise-delay": "140ms" } as React.CSSProperties}
+        >
+          <IconSquare tone={paceLeft < -0.005 ? "negative" : "positive"}>
+            <Gauge />
+          </IconSquare>
+          <div className="flex min-w-0 flex-col gap-1.5 pt-0.5">
+            <p className="text-[13px] font-medium text-muted-foreground">
+              {period.offset === 0
+                ? "Se continuar gastando assim"
+                : "Se continuar gastando como neste ciclo"}
+            </p>
+            <p className="font-heading text-[26px] leading-none font-bold tracking-[-0.03em] tabular-nums">
+              <span className={paceLeft < -0.005 ? "text-negative" : undefined}>
+                {formatCurrency(Math.abs(paceLeft))}
+              </span>{" "}
+              <span className="text-base font-semibold tracking-normal text-muted-foreground">
+                {paceLeft < -0.005 ? "faltando" : "sobrando"} em {formatDate(lastDay(period))}
+              </span>
+            </p>
+            <p className="text-[13.5px] leading-relaxed text-muted-foreground">
+              No dia a dia deste ciclo você gasta{" "}
+              <span className="font-semibold text-foreground tabular-nums">
+                {formatCurrency(pace.perDay)} por dia
+              </span>{" "}
+              ({formatCurrency(pace.spent)} em {pace.elapsedDays} dias)
+              {period.offset === 0
+                ? pace.remainingDays > 0
+                  ? `; nesse ritmo saem mais ${formatCurrency(pace.projectedSpending)} até o fim do ciclo`
+                  : ""
+                : `; nesse ritmo, os ${period.totalDays} dias deste ciclo levam ${formatCurrency(pace.perDay * period.totalDays)}, e o que sobrar ou faltar antes passa para ele`}
+              {paceLeft >= -0.005
+                ? "."
+                : noSpendLeft < -0.005
+                  ? `. Mesmo sem gastar nada no dia a dia faltariam ${formatCurrency(-noSpendLeft)}: são as contas que não cabem.`
+                  : paceDays > 0
+                    ? `. Gastar ${formatCurrency(Math.ceil((-paceLeft / paceDays) * 100) / 100)} a menos por dia, a partir de amanhã, fecha a conta.`
+                    : "."}
+            </p>
+          </div>
+        </section>
+      )}
 
       {shortfall && (
         <div
