@@ -68,20 +68,35 @@ export function BalanceAdjustmentDialog({
   const returnFocus = useRef<HTMLElement | null>(null);
   useEffect(() => {
     if (!openOnHash) return;
+    const openFrom = (origin: HTMLElement | null) => {
+      setSign(currentBalance != null && currentBalance < 0 ? "negativo" : "positivo");
+      returnFocus.current = origin;
+      setOpen(true);
+    };
+    // Um link para o "#" abre aqui mesmo, sem trocar o endereço: o navegador
+    // tiraria o foco do link (e rolaria até o card) antes do `hashchange`, e
+    // o Esc não teria para onde voltar. Sem JS, o link só rola até o card.
+    const onClick = (event: MouseEvent) => {
+      if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey) return;
+      const link = (event.target as Element | null)?.closest?.(`a[href="#${openOnHash}"]`);
+      if (!(link instanceof HTMLElement)) return;
+      event.preventDefault();
+      openFrom(link);
+    };
+    // Chegando já com o "#" no endereço (de outra tela), abre na carga.
     const check = () => {
       if (window.location.hash !== `#${openOnHash}`) return;
-      setSign(currentBalance != null && currentBalance < 0 ? "negativo" : "positivo");
-      returnFocus.current =
-        document.activeElement instanceof HTMLElement && document.activeElement !== document.body
-          ? document.activeElement
-          : null;
-      setOpen(true);
+      openFrom(null);
       // Limpo do endereço: o mesmo link precisa abrir de novo no próximo toque.
       window.history.replaceState(null, "", window.location.pathname + window.location.search);
     };
     check();
+    document.addEventListener("click", onClick, true);
     window.addEventListener("hashchange", check);
-    return () => window.removeEventListener("hashchange", check);
+    return () => {
+      document.removeEventListener("click", onClick, true);
+      window.removeEventListener("hashchange", check);
+    };
   }, [openOnHash, currentBalance]);
 
   function handleSubmit(formData: FormData) {
