@@ -126,8 +126,19 @@ function lastDay(period: PeriodForecast) {
   return day;
 }
 
-function periodLabel(period: PeriodForecast) {
-  return `${formatDate(period.periodStart)} – ${formatDate(lastDay(period))}`;
+/**
+ * "15 de nov. – 14 de dez.", "15 de out. – 14 de nov. de 2027": o ano uma vez,
+ * no fim, quando o ciclo não é deste ano; nas duas pontas, se elas são de
+ * anos diferentes e a primeira também não é deste.
+ */
+function periodLabel(period: PeriodForecast, currentYear: number) {
+  const end = lastDay(period);
+  const startYear = period.periodStart.getFullYear();
+  const start =
+    startYear !== currentYear && startYear !== end.getFullYear()
+      ? dateIn(period.periodStart, currentYear)
+      : formatDate(period.periodStart);
+  return `${start} – ${dateIn(end, currentYear)}`;
 }
 
 /** Onde o ciclo está em relação a hoje, dito em palavras. */
@@ -152,7 +163,7 @@ function EntryRow({
     // ocorrência recorrente pode estar projetada ou já ter acontecido. Um
     // lançamento é sempre um registro real.
     entry.confirmed && entry.kind !== "scheduled" && entry.kind !== "jar" && "confirmado",
-    entry.partial && "fatura ainda aberta",
+    entry.partial && "ainda aberta",
     entry.deferredIn && `inclui ${formatCurrency(entry.deferredIn)} adiados`,
     // Mostrado mas fora da conta, como na Início: um salário que ninguém disse
     // ter chegado não pode virar saldo.
@@ -325,7 +336,7 @@ export default async function ForecastPage({
         value,
         valueLabel: formatCurrency(value),
         compactLabel: formatCompactCurrency(value),
-        detail: `${periodLabel(item)} · ${short ? "vai faltar" : "livre"}`,
+        detail: `${periodLabel(item, currentYear)} · ${short ? "vai faltar" : "livre"}`,
         href: forecastHref(item.offset),
         selected: item.offset === offset,
       };
@@ -338,17 +349,41 @@ export default async function ForecastPage({
   // no vermelho é o mais urgente de todos. Senão, o primeiro à frente da tela
   // que fecha no vermelho mesmo guardando tudo o que dá: é nos ciclos até ele
   // que dá para economizar para cobrir.
+  // O do ciclo atual só até o próximo: repetido igual em todos os doze ciclos
+  // à frente, ele virava paisagem.
   const shortfall =
-    offset > 0 && isNegativeCycle(current)
+    offset === 1 && isNegativeCycle(current)
       ? current
       : (periods.find((item) => item.offset > offset && isNegativeCycle(item)) ?? null);
+  // No próprio ciclo atual no vermelho o aviso não aparece (o hero já diz),
+  // mas as saídas sim: é o estado mais urgente.
+  const heroExits = offset === 0 && isNegative ? current : null;
   // A saída do aviso: o adiar de verdade mora nos lembretes da Início, e só
   // vale para o ciclo atual; à frente, o que dá para mexer são as despesas
   // fixas (pausar, encerrar, mudar o valor). E, havendo dinheiro guardado, um
   // resgate.
-  const hasJarBalance = shortfall
-    ? (await prisma.jar.count({ where: { userId, deletedAt: null, balance: { gt: 0 } } })) > 0
-    : false;
+  const hasJarBalance =
+    shortfall || heroExits
+      ? (await prisma.jar.count({ where: { userId, deletedAt: null, balance: { gt: 0 } } })) > 0
+      : false;
+  const exitLinks = (target: PeriodForecast) => (
+    <div className="flex flex-wrap gap-x-4 gap-y-1 text-[13px] font-medium">
+      {target.offset === 0 ? (
+        <Link href="/#lembretes" className={cn(shortfallLink, "-my-2 inline-block py-2")}>
+          Ver o que dá para adiar
+        </Link>
+      ) : (
+        <Link href="/rendas?aba=despesas" className={cn(shortfallLink, "-my-2 inline-block py-2")}>
+          Rever as despesas fixas
+        </Link>
+      )}
+      {hasJarBalance && (
+        <Link href="/caixinhas" className={cn(shortfallLink, "-my-2 inline-block py-2")}>
+          Resgatar de uma caixinha
+        </Link>
+      )}
+    </div>
+  );
 
   const inheritedLabel =
     period.offset > 0
@@ -356,7 +391,9 @@ export default async function ForecastPage({
         ? "Faltou nos ciclos anteriores"
         : "Guardado dos ciclos anteriores"
       : budget.openingSource === "account"
-        ? "Já estava na conta"
+        ? period.inherited < -0.005
+          ? "Faltava na conta"
+          : "Já estava na conta"
         : "Veio dos ciclos anteriores";
 
   return (
@@ -367,7 +404,7 @@ export default async function ForecastPage({
       />
 
       <ForecastNav
-        label={periodLabel(period)}
+        label={periodLabel(period, currentYear)}
         caption={offsetCaption(period.offset)}
         previousHref={offset > 0 ? forecastHref(offset - 1) : null}
         nextHref={offset < MAX_FORECAST_OFFSET ? forecastHref(offset + 1) : null}
@@ -424,6 +461,8 @@ export default async function ForecastPage({
                   ? `${period.daysLeft} ${period.daysLeft === 1 ? "dia restante" : "dias restantes"}`
                   : `${period.totalDays} ${period.totalDays === 1 ? "dia" : "dias"} de ciclo`}
               </p>
+              {/* O ciclo atual no vermelho: as saídas aqui mesmo, no hero. */}
+              {heroExits && exitLinks(heroExits)}
               <div className="grid grid-cols-2 gap-2">
                 {[
                   {
@@ -481,7 +520,7 @@ export default async function ForecastPage({
               {period.reservedForLater > 0.005 && (
                 <div className="flex items-baseline justify-between gap-3">
                   <dt className="text-(--hero-muted)">Guardado para cobrir ciclos à frente</dt>
-                  <dd className="font-medium">− {formatCurrency(period.reservedForLater)}</dd>
+                  <dd className="font-medium">−{formatCurrency(period.reservedForLater)}</dd>
                 </div>
               )}
               <div className="mt-1 flex items-baseline justify-between gap-3 border-t border-(--hero-line) pt-3">
@@ -497,60 +536,12 @@ export default async function ForecastPage({
         </div>
       </section>
 
-      {pace && paceLeft !== null && (
-        <section
-          aria-label="No seu ritmo"
-          className={homeCard("rise-in flex items-start gap-3")}
-          style={{ "--rise-delay": "140ms" } as React.CSSProperties}
-        >
-          <IconSquare tone={paceLeft < -0.005 ? "negative" : "positive"}>
-            <Gauge />
-          </IconSquare>
-          <div className="flex min-w-0 flex-col gap-1.5 pt-0.5">
-            <p className="text-[13px] font-medium text-muted-foreground">
-              {period.offset === 0
-                ? "No seu ritmo atual"
-                : `No seu ritmo atual, levado até ${cycleMonth(period, currentYear)}`}
-            </p>
-            {/* 20px, e não o tamanho de um segundo hero: é uma projeção, e o
-                número da tela é o de cima. */}
-            <p className="font-heading text-[20px] leading-none font-bold tracking-[-0.025em] tabular-nums">
-              <span className={paceLeft < -0.005 ? "text-negative" : undefined}>
-                {formatCurrency(Math.abs(paceLeft))}
-              </span>{" "}
-              <span className="text-[15px] font-semibold tracking-normal text-muted-foreground">
-                {paceLeft < -0.005 ? "faltando" : "sobrando"} em{" "}
-                {dateIn(lastDay(period), currentYear)}
-              </span>
-            </p>
-            {/* Duas frases curtas: o ritmo, e só quando falta, a saída. O ritmo
-                é sempre o de agora, mesmo com um ciclo à frente na tela. */}
-            <p className="text-[13.5px] leading-relaxed text-muted-foreground">
-              No dia a dia, você gasta{" "}
-              <span className="font-semibold text-foreground tabular-nums">
-                {formatCurrency(pace.perDay)} por dia
-              </span>
-              {period.offset === 0
-                ? pace.remainingDays > 0
-                  ? `; nesse ritmo, saem mais ${formatCurrency(pace.projectedSpending)} até o fim do ciclo.`
-                  : "."
-                : `; nesse ritmo, os ${period.totalDays} dias do ciclo de ${cycleMonth(period, currentYear)} levam ${formatCurrency(pace.perDay * period.totalDays)}.`}
-            </p>
-            {paceLeft < -0.005 && (noSpendLeft < -0.005 || paceDays > 0) && (
-              <p className="text-[13.5px] leading-relaxed text-muted-foreground">
-                {noSpendLeft < -0.005
-                  ? `Mesmo sem gastar nada no dia a dia, faltariam ${formatCurrency(-noSpendLeft)}: são as contas que não cabem.`
-                  : `Para fechar, gaste até ${formatCurrency(paceTarget)} por dia a partir de amanhã.`}
-              </p>
-            )}
-          </div>
-        </section>
-      )}
-
+      {/* O aviso vem antes do ritmo: é fato (as contas não cabem), e o
+          ritmo é uma projeção. */}
       {shortfall && (
         <div
           className="rise-in flex items-start gap-3 rounded-[20px] bg-card p-3.5 shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--negative)_30%,transparent)]"
-          style={{ "--rise-delay": "160ms" } as React.CSSProperties}
+          style={{ "--rise-delay": "140ms" } as React.CSSProperties}
         >
           <IconSquare tone="negative">
             <AlertTriangle />
@@ -575,24 +566,61 @@ export default async function ForecastPage({
             {/* As saídas: no ciclo atual, adiar uma conta (nos lembretes da
                 Início); à frente, mexer nas despesas fixas; e, com dinheiro
                 guardado, resgatar. */}
-            <div className="flex flex-wrap gap-x-4 gap-y-1 text-[13px] font-medium">
-              {shortfall.offset === 0 ? (
-                <Link href="/#lembretes" className={cn(shortfallLink, "-my-2 inline-block py-2")}>
-                  Ver o que dá para adiar
-                </Link>
-              ) : (
-                <Link href="/rendas?aba=despesas" className={cn(shortfallLink, "-my-2 inline-block py-2")}>
-                  Rever as despesas fixas
-                </Link>
-              )}
-              {hasJarBalance && (
-                <Link href="/caixinhas" className={cn(shortfallLink, "-my-2 inline-block py-2")}>
-                  Resgatar de uma caixinha
-                </Link>
-              )}
-            </div>
+            {exitLinks(shortfall)}
           </div>
         </div>
+      )}
+
+      {pace && paceLeft !== null && (
+        <section
+          aria-label="No seu ritmo"
+          className={homeCard("rise-in flex items-start gap-3")}
+          style={{ "--rise-delay": "160ms" } as React.CSSProperties}
+        >
+          <IconSquare tone={paceLeft < -0.005 ? "negative" : "positive"}>
+            <Gauge />
+          </IconSquare>
+          <div className="flex min-w-0 flex-col gap-1.5 pt-0.5">
+            {/* Condicional, e com o ritmo no título: é um "e se", subordinado
+                ao número de cima, e não um segundo número da tela. */}
+            <p className="text-[13px] font-medium text-muted-foreground tabular-nums">
+              Se continuar gastando{" "}
+              <span className="whitespace-nowrap">{formatCurrency(pace.perDay)} por dia</span>
+              {period.offset === 0 ? "" : `, até ${cycleMonth(period, currentYear)}`}
+            </p>
+            {/* 20px, e não o tamanho de um segundo hero: é uma projeção, e o
+                número da tela é o de cima. */}
+            <p className="font-heading text-[20px] leading-none font-bold tracking-[-0.025em] tabular-nums">
+              <span className={paceLeft < -0.005 ? "text-negative" : undefined}>
+                {formatCurrency(Math.abs(paceLeft))}
+              </span>{" "}
+              <span className="text-[15px] font-semibold tracking-normal text-muted-foreground">
+                {paceLeft < -0.005 ? "faltando" : "sobrando"} em{" "}
+                {dateIn(lastDay(period), currentYear)}
+              </span>
+            </p>
+            {/* Duas frases curtas: o ritmo, e só quando falta, a saída. O ritmo
+                é sempre o de agora, mesmo com um ciclo à frente na tela. */}
+            {(period.offset > 0 || pace.remainingDays > 0) && (
+              <p className="text-[13.5px] leading-relaxed text-muted-foreground tabular-nums">
+                {period.offset === 0
+                  ? `Nesse ritmo, saem mais ${formatCurrency(pace.projectedSpending)} até o fim do ciclo.`
+                  : `Nesse ritmo, os ${period.totalDays} dias do ciclo de ${cycleMonth(period, currentYear)} levam ${formatCurrency(pace.perDay * period.totalDays)}, e o que faltar antes passa para ele.`}
+              </p>
+            )}
+            {paceLeft < -0.005 && (noSpendLeft < -0.005 || paceDays > 0) && (
+              <p className="text-[13.5px] leading-relaxed text-muted-foreground tabular-nums">
+                {noSpendLeft < -0.005
+                  ? `Mesmo sem gastar nada no dia a dia, faltariam ${formatCurrency(-noSpendLeft)}: são as contas que não cabem.`
+                  : period.offset > 0 && paceTarget < period.dailyAvailable - 0.005
+                    ? // Abaixo do número de cima: diz por quê, senão os dois
+                      // números diários parecem se contradizer.
+                      `Para fechar, gaste até ${formatCurrency(paceTarget)} por dia a partir de amanhã, menos que os ${formatCurrency(period.dailyAvailable)} de cima: o ritmo de agora faz o ciclo atual chegar devendo.`
+                    : `Para fechar, gaste até ${formatCurrency(paceTarget)} por dia a partir de amanhã.`}
+              </p>
+            )}
+          </div>
+        </section>
       )}
 
       {/* Um ciclo por coluna: para cima o que fica livre (turquesa), para
@@ -677,31 +705,47 @@ export default async function ForecastPage({
           hint="Rendas, despesas fixas, faturas e lançamentos futuros aparecem aqui."
         />
       ) : (
-        // Duas colunas a partir de `xl`, como as listas do Início.
-        // `items-start` impede a coluna curta de esticar até a altura da outra.
+        // Duas colunas a partir de `xl`: o que entra de um lado, o que sai do
+        // outro — e não grupos em zigue-zague numa grade, com um vão embaixo
+        // da coluna curta. Cada grupo leva o subtotal, para os chips do hero
+        // serem conferíveis.
         <div className="flex flex-col gap-6 xl:grid xl:grid-cols-2 xl:items-start">
-          {GROUPS.map(({ kind, label, incoming }) => {
-            const entries = period.entries.filter((entry) => entry.kind === kind);
-            if (entries.length === 0) return null;
-            return (
-              <div key={kind} className="flex flex-col gap-3">
-                <SectionLabel>{groupLabel(kind, label, period.offset)}</SectionLabel>
-                {/* Um ciclo pode ter dezenas de lançamentos: as primeiras
-                    linhas, e o resto num toque. */}
-                <CollapsibleList
-                  className="flex flex-col gap-2"
-                  items={entries.map((entry, index) => (
-                    <EntryRow
-                      key={`${entry.kind}-${entry.sourceId}-${entry.date.toISOString()}`}
-                      entry={entry}
-                      incoming={incoming}
-                      index={index}
-                    />
-                  ))}
-                />
-              </div>
-            );
-          })}
+          {[true, false].map((side) => (
+            <div key={String(side)} className="flex flex-col gap-6">
+              {GROUPS.filter((group) => group.incoming === side).map(
+                ({ kind, label, incoming }) => {
+                  const entries = period.entries.filter((entry) => entry.kind === kind);
+                  if (entries.length === 0) return null;
+                  const subtotal = entries
+                    .filter((entry) => !entry.awaiting)
+                    .reduce((sum, entry) => sum + entry.amount, 0);
+                  return (
+                    <div key={kind} className="flex flex-col gap-3">
+                      <div className="flex items-baseline justify-between gap-3">
+                        <SectionLabel>{groupLabel(kind, label, period.offset)}</SectionLabel>
+                        <span className="text-[13px] font-medium text-muted-foreground tabular-nums">
+                          {formatCurrency(Math.abs(subtotal))}
+                        </span>
+                      </div>
+                      {/* Um ciclo pode ter dezenas de lançamentos: as primeiras
+                          linhas, e o resto num toque. */}
+                      <CollapsibleList
+                        className="flex flex-col gap-2"
+                        items={entries.map((entry, index) => (
+                          <EntryRow
+                            key={`${entry.kind}-${entry.sourceId}-${entry.date.toISOString()}`}
+                            entry={entry}
+                            incoming={incoming}
+                            index={index}
+                          />
+                        ))}
+                      />
+                    </div>
+                  );
+                },
+              )}
+            </div>
+          ))}
         </div>
       )}
     </div>
