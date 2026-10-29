@@ -21,7 +21,7 @@ export function iconButton({
    * desktop. lg: 44px sempre (a ação principal de uma tela). xl: 48px,
    * quadrado arredondado, ao lado de um botão principal da mesma altura.
    */
-  size?: "md" | "sm" | "lg" | "xl";
+  size?: "md" | "sm" | "lg" | "xl" | "pill";
   className?: string;
 } = {}) {
   return cn(
@@ -30,6 +30,10 @@ export function iconButton({
     size === "sm" && "size-11 lg:size-[38px] [&_svg]:size-[18px]",
     size === "lg" && "size-11 [&_svg]:size-5",
     size === "xl" && "size-12 rounded-2xl [&_svg]:size-5",
+    // Ícone e texto: a ação que se repete em cada card e precisa se ler
+    // sozinha (o "Pagar" e o "Adiar" dos lembretes). 44px de altura no celular.
+    size === "pill" &&
+      "h-11 gap-1.5 px-4 text-[13.5px] font-semibold lg:h-[38px] lg:px-3.5 [&_svg]:size-4",
     tone === "solid" && "bg-secondary text-foreground hover:bg-(--secondary-hover)",
     tone === "outline" &&
       "border border-(--hairline-strong) bg-(--field) text-foreground hover:border-primary/40",

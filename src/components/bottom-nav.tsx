@@ -23,7 +23,7 @@ export function BottomNav() {
         data-slot="bottom-nav"
         className="fixed inset-x-0 bottom-0 z-20 border-t border-border bg-(--nav-surface) shadow-nav backdrop-blur-[24px] backdrop-saturate-150 pb-[env(safe-area-inset-bottom)] lg:hidden"
       >
-        <ul className="mx-auto flex max-w-lg items-stretch justify-between px-2">
+        <ul className="mx-auto flex max-w-lg items-stretch justify-between px-1">
           {navItems
             .filter((item) => !item.desktopOnly)
             .map(({ href, label, icon: Icon }) => {
@@ -34,7 +34,7 @@ export function BottomNav() {
                     href={href}
                     aria-current={isActive ? "page" : undefined}
                     className={cn(
-                      "relative flex min-h-[58px] flex-col items-center justify-center gap-1 py-2 text-[10.5px] font-semibold transition-colors",
+                      "relative flex min-h-[58px] flex-col items-center justify-center gap-1 py-2 text-[12px] font-semibold tracking-[-0.01em] whitespace-nowrap transition-colors",
                       isActive ? "text-primary" : "text-muted-foreground hover:text-foreground",
                     )}
                   >

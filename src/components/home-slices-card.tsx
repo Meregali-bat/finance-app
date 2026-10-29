@@ -15,18 +15,26 @@ export function HomeSlicesCard({
   configured,
   usage,
   savings,
+  className,
+  style,
 }: {
   configured: boolean;
   usage: SliceUsage[];
   savings: SavingReserve | null;
+  className?: string;
+  style?: React.CSSProperties;
 }) {
   if (!configured) {
     return (
       <Link
         href="/metas"
         className={homeCard(
-          "group/row flex items-center justify-between gap-4 transition-colors duration-150 hover:bg-card-hover",
+          cn(
+            "group/row flex items-center justify-between gap-4 transition-colors duration-150 hover:bg-card-hover",
+            className,
+          ),
         )}
+        style={style}
       >
         <div className="flex min-w-0 flex-col gap-1.5">
           <SectionLabel>Divida a renda em fatias</SectionLabel>
@@ -48,8 +56,12 @@ export function HomeSlicesCard({
     <Link
       href="/metas"
       className={homeCard(
-        "group/row flex flex-col gap-3 transition-colors duration-150 hover:bg-card-hover",
+        cn(
+          "group/row flex flex-col gap-3 transition-colors duration-150 hover:bg-card-hover",
+          className,
+        ),
       )}
+      style={style}
     >
       <div className="flex items-center justify-between gap-2">
         <SectionLabel>Fatias do período</SectionLabel>
@@ -68,9 +80,15 @@ export function HomeSlicesCard({
                 <span className="truncate text-muted-foreground">{slice.name}</span>
                 <span className={cn("tabular-nums font-medium", pct > 100 && "text-negative")}>
                   {Math.round(pct)}%
+                  {/* A barra e o vermelho só se veem; o card inteiro é um link,
+                      então o significado vai como texto dentro dele, e não
+                      como um progressbar, que o nome do link achataria. */}
+                  <span className="sr-only">
+                    {pct > 100 ? " do limite usado, passou do limite" : " do limite usado"}
+                  </span>
                 </span>
               </span>
-              <span className="h-1.5 overflow-hidden rounded-full bg-(--track)">
+              <span aria-hidden="true" className="h-1.5 overflow-hidden rounded-full bg-(--track)">
                 <span
                   className="block h-full rounded-full"
                   style={{

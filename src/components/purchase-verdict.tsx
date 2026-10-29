@@ -3,7 +3,6 @@
 import { AlertTriangle, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { SectionLabel } from "@/components/page-header";
 import { formatCurrency, formatDate, formatDateLong, installmentLabel } from "@/lib/format";
 import type { PeriodImpactView, PurchaseSimulationView } from "@/lib/actions/purchase-simulation";
 
@@ -105,6 +104,19 @@ function PeriodRow({ period }: { period: PeriodImpactView }) {
   );
 }
 
+/**
+ * Os subtítulos do veredito. Não é o `SectionLabel` (18px, título de seção de
+ * uma tela): aqui eles moram dentro de um diálogo cujo título tem 16px, e não
+ * podem falar mais alto que ele. h3 porque o título do diálogo é o h2.
+ */
+function VerdictHeading({ children }: { children: React.ReactNode }) {
+  return (
+    <h3 className="font-heading text-[15px] leading-tight font-semibold tracking-[-0.01em]">
+      {children}
+    </h3>
+  );
+}
+
 function Warning({ children }: { children: React.ReactNode }) {
   return (
     <p className="flex items-start gap-2 rounded-md bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
@@ -157,7 +169,7 @@ export function PurchaseVerdict({
 
       {!result.approved && (result.minInstallments !== null || result.maxAffordableAmount > 0) && (
         <div className="flex flex-col gap-2 rounded-lg border border-border/60 p-3">
-          <SectionLabel>O que caberia</SectionLabel>
+          <VerdictHeading>O que caberia</VerdictHeading>
           {result.minInstallments !== null && (
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="text-sm">Em {result.minInstallments}x, este mesmo valor passaria.</p>
@@ -187,7 +199,7 @@ export function PurchaseVerdict({
 
       {result.periods.length > 0 && (
         <div className="flex flex-col gap-2">
-          <SectionLabel>Ciclo a ciclo</SectionLabel>
+          <VerdictHeading>Ciclo a ciclo</VerdictHeading>
           <ul className="flex flex-col gap-2">
             {result.periods.map((period) => (
               <PeriodRow key={period.offset} period={period} />
@@ -198,7 +210,7 @@ export function PurchaseVerdict({
 
       {result.limitUsage && (
         <div className="flex flex-col gap-2">
-          <SectionLabel>Limite do cartão</SectionLabel>
+          <VerdictHeading>Limite do cartão</VerdictHeading>
           <Progress
             value={result.limitUsage.percentUsed}
             indicatorClassName={result.limitUsage.percentUsed >= 100 ? "bg-negative" : undefined}

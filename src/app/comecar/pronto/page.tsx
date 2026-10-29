@@ -43,11 +43,12 @@ export default async function OnboardingDonePage() {
       >
         <div className="relative z-10 flex flex-col gap-5 p-[22px] lg:p-8">
           <p className="text-sm font-medium text-(--hero-muted)">
-            {isOverBudget ? "Hoje já está no vermelho" : "Você pode gastar hoje"}
+            {isOverBudget ? "Hoje já está no vermelho" : "Por dia, até receber"}
           </p>
           <CountUpCurrency
             value={dailyAvailable}
             split
+            reveal
             duration={1.4}
             delay={0.3}
             className={`flex items-baseline font-heading text-[64px] leading-[0.9] font-bold tracking-[-0.045em] tabular-nums lg:text-[80px] ${
@@ -57,10 +58,13 @@ export default async function OnboardingDonePage() {
             centsClassName="text-[30px] tracking-[-0.03em] opacity-70 lg:text-[36px]"
           />
           <p className="text-[15px] leading-relaxed text-(--hero-muted)">
-            Por dia, até {formatDate(budget.periodEnd)} — {days} {days === 1 ? "dia" : "dias"} até o
-            próximo pagamento. Já contando {countedText}
+            {/* Fora do vermelho, o "por dia" já está no rótulo acima. */}
+            {isOverBudget
+              ? `Por dia, até ${formatDate(budget.periodEnd)} — ${days} ${days === 1 ? "dia" : "dias"} até o próximo pagamento.`
+              : `Você recebe em ${formatDate(budget.periodEnd)}, daqui a ${days} ${days === 1 ? "dia" : "dias"}.`}{" "}
+            Já contando {countedText}
             {budget.periodBalance > 0
-              ? `: ${formatCurrency(budget.periodBalance)} livres no período.`
+              ? `: ${formatCurrency(budget.periodBalance)} livres até receber.`
               : "."}
           </p>
         </div>

@@ -1,8 +1,9 @@
 import { differenceInCalendarDays } from "date-fns";
-import { ChevronRight, CreditCard, Receipt } from "lucide-react";
+import Link from "next/link";
+import { ChevronRight, CreditCard, Receipt, TriangleAlert } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/auth-helpers";
-import { deferralTargetDate, fallsOnDay, type OpeningSource } from "@/lib/period";
+import { deferralTargetDate, fallsOnDay } from "@/lib/period";
 import { cumulativeDailySpending } from "@/lib/spending-trend";
 import { AreaTrend } from "@/components/charts/area-trend";
 import { loadBudgetInputs, registeredMovementOf } from "@/lib/budget-inputs";
@@ -30,22 +31,11 @@ import { todayBudget } from "@/lib/today-budget";
 import { PushSetup } from "@/components/push-setup";
 import { HomeSlicesCard } from "@/components/home-slices-card";
 import { loadSlicesOverview } from "@/lib/slices-data";
-
-/**
- * O que o período herdou, dito do jeito que a pessoa leria.
- *
- * Com o saldo em conta, a herança é o dinheiro que já estava na conta — a
- * sobra de todos os meses e o que havia antes do app —, e chamá-la de "sobra
- * do período anterior" seria dizer outra coisa. Aí a legenda só diz de onde o
- * número parte.
- */
-function openingCaption(opening: number, source: OpeningSource) {
-  if (source === "account") return "a partir do seu saldo em conta";
-  if (Math.abs(opening) < 0.005) return null;
-  return opening > 0
-    ? `inclui ${formatCurrency(opening)} dos períodos anteriores`
-    : `desconta ${formatCurrency(Math.abs(opening))} que faltaram antes`;
-}
+import { SLICES } from "@/lib/slices";
+import { HomePlanLinks } from "@/components/home-plan-links";
+import { ScrollAwayFab } from "@/components/scroll-away-fab";
+import { BudgetBreakdown } from "@/components/budget-breakdown";
+import { cn } from "@/lib/utils";
 
 /** "Quinta-feira" e "16 de outubro": o cabeçalho do desktop. */
 function longHeading(date: Date) {
@@ -69,10 +59,26 @@ function shortHeading(date: Date) {
   return `${weekday.charAt(0).toUpperCase() + weekday.slice(1)}, ${day}`;
 }
 
-/** O atraso de entrada de cada seção, lido pelo `.rise-in` do globals.css. */
+/**
+ * O atraso de entrada de cada seção, lido pelo `.rise-in` do globals.css. A
+ * Início é aberta várias vezes por dia para ler um número: a entrada inteira
+ * (último atraso, 140ms, mais 260ms) acaba em ~400ms, e as linhas da lista
+ * sobem com a coluna em vez de uma por uma.
+ */
 function rise(ms: number) {
-  return { "--rise-delay": `${ms}ms` } as React.CSSProperties;
+  return { "--rise-delay": `${ms}ms`, "--rise-duration": "260ms" } as React.CSSProperties;
 }
+
+/** Os chips do hero: rótulo em cima, valor embaixo. */
+const heroChip =
+  "flex min-w-0 flex-col gap-0.5 rounded-[14px] bg-(--hero-chip) px-3.5 py-2.5 ring-1 ring-(--hero-line) sm:rounded-2xl sm:px-4";
+
+/**
+ * O próximo passo do hero no vermelho. O foco usa a tinta do hero, como o chip
+ * ao lado: o anel do tema some no fundo escuro do estado negativo.
+ */
+const heroLink =
+  "w-fit rounded-sm text-(--hero-muted) underline underline-offset-4 transition-colors duration-150 hover:text-(--hero-fg) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--hero-fg)";
 
 /** "19:05": a hora do cadastro, no fuso do servidor (o do app). */
 const clock = new Intl.DateTimeFormat("pt-BR", {
@@ -160,13 +166,20 @@ export default async function DashboardPage() {
     ].sort((a, b) => (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0));
   const todaysItems = dayItems(today);
   const tomorrowsItems = dayItems(tomorrow);
-  const todaySummary = [
+  const todayParts = [
     {
       label: "na conta",
       total: sumWhere(todaysItems, (i) => i.kind === "transaction" && i.amount > 0),
     },
     { label: "no cartão", total: sumWhere(todaysItems, (i) => i.kind === "card") },
-  ]
+  ];
+  // O que já saiu hoje, na conta e no cartão: o mesmo total do resumo das
+  // movimentações. O número do dia é uma média até o pagamento e já desconta
+  // isso — sem este valor ao lado, ele parece o que ainda resta para hoje.
+  const spentToday = todayParts
+    .filter((part) => part.total >= 0.005)
+    .reduce((sum, part) => sum + part.total, 0);
+  const todaySummary = todayParts
     .filter((part) => part.total >= 0.005)
     .map((part) => `${formatCurrency(part.total)} ${part.label}`)
     .join(" · ");
@@ -175,6 +188,11 @@ export default async function DashboardPage() {
   // Zero porque a reserva de guardar levou o que sobrava, e não porque você
   // gastou demais: a frase tem que dizer isso, senão parece bronca.
   const allToSavings = !isOverBudget && dailyAvailable < 0.005 && (savings?.applied ?? 0) > 0.005;
+  // O número do dia negativo é o estouro do período inteiro dividido pelos
+  // dias que faltam (o `dailyAvailable` do ciclo corrente da previsão, ou
+  // `periodBalance / daysRemaining` sem renda): o período fecha no vermelho
+  // mesmo sem gastar mais nada. Multiplicar de volta dá o tamanho do buraco.
+  const periodDeficit = isOverBudget ? -dailyAvailable * budget.daysRemaining : 0;
 
   const cardOptions = inputs.creditCards
     .filter((c) => c.active)
@@ -186,7 +204,21 @@ export default async function DashboardPage() {
   const cardNameById = new Map(inputs.creditCards.map((c) => [c.id, c.name]));
   const expenseLabelById = new Map(inputs.fixedExpenses.map((e) => [e.id, e.label]));
   const incomeLabelById = new Map(inputs.incomes.map((i) => [i.id, i.label]));
-  const caption = openingCaption(budget.openingBalance, budget.openingSource);
+  // O segundo chip do hero é o que distingue o app: o que o número do dia já
+  // deixa de lado para um ciclo à frente que não se paga. Sem reserva, entra o
+  // que as fatias separam para guardar; sem nenhum dos dois, o saldo fica
+  // sozinho — a data do pagamento já está na unidade do número e na régua.
+  const savingsApplied = savings && savings.applied > 0.005 ? savings.applied : 0;
+  const hasReserve = reservedForLater > 0.005;
+  const sideChip = hasReserve
+    ? { label: "Reservado para depois", value: formatCurrency(reservedForLater), href: "/previsao" }
+    : savingsApplied > 0
+      ? { label: "Separado para guardar", value: formatCurrency(savingsApplied), href: "/metas" }
+      : null;
+  const savingsShortfall =
+    savings && savings.shortfall > 0.005
+      ? `Este período não fecha com tudo guardado: faltam ${formatCurrency(savings.shortfall)}.`
+      : null;
 
   const expenseById = new Map(inputs.fixedExpenses.map((e) => [e.id, e]));
   // Os destinos possíveis do "Adiar", calculados pela mesma função que a
@@ -267,10 +299,29 @@ export default async function DashboardPage() {
         .join(" · "),
     }))
     .sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime());
+  // No vermelho, o próximo passo: adiar uma conta, se alguma deixa; senão,
+  // ver na previsão como ficam os próximos ciclos.
+  const canDefer = reminders.some((r) => r.kind === "due" && r.defer != null);
+  // As duas próximas contas, no hero do desktop: só leitura, apontando para
+  // os lembretes, onde ficam o Pagar e o Adiar. Já vêm em ordem de data.
+  const nextBills = reminders.filter((r) => r.kind === "due").slice(0, 2);
 
-  const movementRows = (list: DayItem[], baseDelay: number) =>
-    list.map((t, i) => (
-      <li key={`${t.kind}-${t.id}`} className="rise-in" style={rise(baseDelay + i * 90)}>
+  // A curva do gasto fica sob a régua, cada ponto embaixo da barra do seu dia:
+  // começa no centro da primeira barra e vai até o centro da de hoje. As contas
+  // repetem as da régua: barras `flex-1` separadas por `--ruler-gap`, que o
+  // bloco da régua define (2,5px; 3px no desktop) e as duas leem.
+  const rulerDays = Math.max(1, totalDays);
+  const trendSpan = Math.min(spendingTrend.length, rulerDays) - 1;
+  const spentInPeriod = spendingTrend.at(-1)?.value ?? 0;
+
+  // O resumo de cada linha do "Planejar" do celular.
+  const slicesOver = slicesOverview.usage.filter(
+    (u) => u.percentUsed > 100 && !SLICES.find((s) => s.key === u.key)?.saving,
+  ).length;
+
+  const movementRows = (list: DayItem[]) =>
+    list.map((t) => (
+      <li key={`${t.kind}-${t.id}`}>
         <MovementFormDialog
           movement={toMovementValues({
             id: t.id,
@@ -329,7 +380,10 @@ export default async function DashboardPage() {
     ));
 
   return (
-    <div className="relative flex flex-col gap-5 lg:gap-6">
+    // O respiro de baixo, só no celular: no fim da rolagem, o botão + (fixo,
+    // 58px a 74px da base) não pode cobrir o "Pagar" nem o "Recebi" do último
+    // card, que ficam na mesma borda direita.
+    <div className="relative flex flex-col gap-5 pb-[calc(env(safe-area-inset-bottom)+3rem)] lg:gap-6 lg:pb-0">
       <PeriodCloseCheck />
 
       {/* Celular: o logo no topo, já que a barra lateral não existe ali. */}
@@ -343,183 +397,252 @@ export default async function DashboardPage() {
       <header className="rise-in hidden items-end justify-between gap-4 lg:flex" style={rise(0)}>
         <div className="flex flex-col gap-1.5">
           <p className="text-[13px] font-medium text-muted-foreground">{heading.weekday}</p>
-          <h1 className="font-heading text-[34px] leading-none font-bold tracking-[-0.035em]">
+          {/* Texto, não título: o h1 da página é a frase do hero, em todos os tamanhos. */}
+          {/* 22px: um degrau acima dos títulos de seção (18px), e bem abaixo
+              do número do hero — a data situa, não compete. */}
+          <p className="font-heading text-[22px] leading-none font-bold tracking-[-0.03em]">
             {heading.day}
-          </h1>
+          </p>
         </div>
       </header>
 
       {/* Fora de `lg` o botão é fixo no canto da viewport, logo acima da
           barra inferior; em `lg` ele sobe para o cabeçalho, alinhado ao
-          título. */}
-      <div className="fixed right-4 bottom-[calc(env(safe-area-inset-bottom)+74px)] z-20 lg:absolute lg:top-1.5 lg:right-0 lg:bottom-auto lg:z-auto">
+          título. No celular ele recolhe ao rolar para baixo. */}
+      <ScrollAwayFab className="fixed right-4 bottom-[calc(env(safe-area-inset-bottom)+74px)] z-20 lg:absolute lg:top-1.5 lg:right-0 lg:bottom-auto lg:z-auto">
         <MovementFormDialog cards={cardOptions} categories={categoryOptions} />
-      </div>
+      </ScrollAwayFab>
 
-      {/* O card de destaque. As duas colunas usam `auto-fit`: lado a lado
-          quando cabem, empilhadas quando não. O divisor é uma sombra de 1px no
-          canto superior esquerdo da segunda coluna, então vira vertical ou
-          horizontal sozinho — o `overflow-hidden` corta a metade que sobra. */}
+      {/* O card de destaque. O número do dia é a única figura grande: à
+          esquerda, ele, a régua do período e, sob ela, a curva do gasto, em
+          tamanho de legenda (é o que já foi). No desktop, a coluna da direita
+          olha para a frente: o que está livre, o que fica reservado e as
+          próximas contas. No celular as duas colunas empilham, na mesma ordem
+          do HTML, e as contas somem — os lembretes vêm logo abaixo. */}
       <section
         aria-label="Orçamento de hoje"
         className="hero-surface rise-in relative overflow-hidden rounded-[26px] lg:rounded-[28px]"
-        style={rise(80)}
+        data-tone={isOverBudget ? "negative" : undefined}
+        style={rise(40)}
       >
         <div className="relative z-10 p-1 lg:px-4 lg:py-3">
-          <div className="grid grid-cols-[repeat(auto-fit,minmax(min(300px,100%),1fr))] overflow-hidden">
-            <div className="flex flex-col gap-5 p-[18px] lg:p-5">
+          <div className="grid lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
+            <div className="flex flex-col gap-4 p-[18px] pb-0 lg:gap-5 lg:p-5">
               <div className="flex flex-col gap-2">
-                <p className="text-sm font-medium text-(--hero-muted)">
+                {/* O título da página, em todos os tamanhos: a pergunta que o app responde. */}
+                <h1 className="flex items-center gap-1.5 text-sm font-medium text-(--hero-muted)">
+                  {/* A cor não pode ser o único sinal do vermelho. */}
+                  {isOverBudget && (
+                    <TriangleAlert aria-hidden className="size-4 shrink-0 text-negative" />
+                  )}
                   {isOverBudget
-                    ? "Você já estourou o orçamento de hoje"
+                    ? "Este período está no vermelho"
                     : allToSavings
                       ? "Hoje, o que sobra vai para guardar"
-                      : "Você pode gastar hoje"}
-                </p>
-                <CountUpCurrency
-                  value={dailyAvailable}
-                  split
-                  duration={1.3}
-                  delay={0.25}
-                  className={`flex items-baseline font-heading text-[64px] leading-[0.9] font-bold tracking-[-0.045em] tabular-nums lg:text-[80px] ${
-                    isOverBudget ? "text-negative" : "text-(--hero-fg)"
-                  }`}
-                  symbolClassName="mr-1.5 text-[24px] tracking-[-0.02em] opacity-70 lg:mr-2 lg:text-[30px]"
-                  centsClassName="text-[30px] tracking-[-0.03em] opacity-70 lg:text-[36px]"
-                />
-              </div>
-
-              <div className="flex flex-col gap-2">
-                <DayRuler totalDays={totalDays} elapsedDays={elapsedDays} />
-                <div className="flex justify-between text-xs font-medium text-(--hero-muted) tabular-nums">
-                  <span>
-                    Dia {Math.max(1, elapsedDays)} de {Math.max(1, totalDays)}
-                  </span>
-                  <span>
-                    {budget.daysRemaining}{" "}
-                    {budget.daysRemaining === 1 ? "dia até receber" : "dias até receber"}
-                  </span>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
-                {[
-                  {
-                    label: "Saldo do período",
-                    value: formatCurrency(budget.periodBalance),
-                  },
-                  { label: "Recebe em", value: formatDate(budget.periodEnd) },
-                ].map((chip) => (
-                  <div
-                    key={chip.label}
-                    className="flex min-w-0 flex-col gap-0.5 rounded-[14px] bg-(--hero-chip) px-3.5 py-2.5 ring-1 ring-(--hero-line) sm:rounded-2xl sm:px-4"
-                  >
-                    <span className="truncate text-[12.5px] font-medium text-(--hero-muted)">
-                      {chip.label}
-                    </span>
-                    <span className="truncate text-[15px] font-semibold tabular-nums">
-                      {chip.value}
-                    </span>
+                      : "Por dia, até receber"}
+                </h1>
+                {/* O número é por dia: a unidade fica colada nele, senão ele
+                    lê como saldo. No estado normal ela já está no título logo
+                    acima, e a linha de baixo só dá a data; nos outros dois o
+                    título diz o estado, e a linha leva a unidade. */}
+                <div className="flex flex-col gap-2">
+                  <CountUpCurrency
+                    value={dailyAvailable}
+                    split
+                    memoryKey="home:daily"
+                    className={`flex items-baseline font-heading text-[64px] leading-[0.9] font-bold tracking-[-0.045em] tabular-nums lg:text-[80px] ${
+                      isOverBudget ? "text-negative" : "text-(--hero-fg)"
+                    }`}
+                    symbolClassName="mr-1.5 text-[24px] tracking-[-0.02em] opacity-70 lg:mr-2 lg:text-[30px]"
+                    centsClassName="text-[30px] tracking-[-0.03em] opacity-70 lg:text-[36px]"
+                  />
+                  <div className="flex flex-col gap-0.5">
+                    <p className="text-[15px] font-medium text-(--hero-muted) tabular-nums">
+                      {isOverBudget || allToSavings
+                        ? `por dia até ${formatDate(budget.periodEnd)}`
+                        : `Você recebe em ${formatDate(budget.periodEnd)}`}
+                    </p>
+                    {/* Sem gasto hoje a linha some: o número já é a média pura. */}
+                    {spentToday >= 0.005 && (
+                      <p className="text-sm text-(--hero-muted) tabular-nums">
+                        Hoje você já gastou{" "}
+                        <span className="font-semibold text-(--hero-fg)">
+                          {formatCurrency(spentToday)}
+                        </span>
+                      </p>
+                    )}
                   </div>
-                ))}
-              </div>
-              {(caption || reservedForLater > 0.005 || savings) && (
-                <div className="flex flex-col gap-0.5 text-xs text-(--hero-muted)">
-                  {caption && <p>{caption}</p>}
-                  {reservedForLater > 0.005 && (
-                    <p>
-                      já contando {formatCurrency(reservedForLater)} que vão faltar mais à frente
-                    </p>
-                  )}
-                  {savings && savings.applied > 0.005 && (
-                    <p>separando {formatCurrency(savings.applied)} para guardar nas caixinhas</p>
-                  )}
-                  {savings && savings.shortfall > 0.005 && (
-                    <p>
-                      este período não fecha com tudo guardado: faltam{" "}
-                      {formatCurrency(savings.shortfall)}
-                    </p>
-                  )}
                 </div>
-              )}
+                {isOverBudget && (
+                  <div className="flex flex-col gap-0.5 text-sm">
+                    {/* A data já está na unidade acima; aqui vem o total do período. */}
+                    <p className="font-medium text-(--hero-fg)">
+                      No total, faltam {formatCurrency(periodDeficit)} até lá, mesmo sem gastar
+                      mais nada.
+                    </p>
+                    {/* Âncora nativa, não `Link`: o `hashchange` é o que faz os
+                        lembretes abrirem por inteiro, para a conta adiável não
+                        ficar escondida no "Mostrar mais". */}
+                    {canDefer ? (
+                      <a href="#lembretes" className={heroLink}>
+                        Veja o que dá para adiar
+                      </a>
+                    ) : (
+                      <Link href="/previsao" className={heroLink}>
+                        Veja como ficam os próximos ciclos
+                      </Link>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex flex-col gap-1.5 [--ruler-gap:2.5px] lg:[--ruler-gap:3px]">
+                <DayRuler totalDays={totalDays} elapsedDays={elapsedDays} />
+                {/* O gasto acumulado, dia a dia, embaixo das barras dos dias
+                    que já passaram. Do primeiro dia não há curva: o gasto dele
+                    é o "Hoje você já gastou" lá em cima. */}
+                {trendSpan > 0 && (
+                  <div
+                    style={{
+                      marginLeft: `calc((100% - ${rulerDays - 1} * var(--ruler-gap)) / ${rulerDays} / 2)`,
+                      width: `calc(${trendSpan} * (100% + var(--ruler-gap)) / ${rulerDays})`,
+                    }}
+                  >
+                    <AreaTrend
+                      points={spendingTrend}
+                      height={40}
+                      className="h-7 lg:h-9"
+                      stroke="var(--hero-chart)"
+                      ring="var(--hero-dot-ring)"
+                      reveal
+                      title="Gasto acumulado no período"
+                    />
+                  </div>
+                )}
+                {/* Uma linha só: à esquerda, embaixo da curva, o total dela; à
+                    direita, embaixo dos dias apagados, quantos faltam — o
+                    mesmo divisor da conta do número. A data do pagamento já
+                    está sob o número, e o dia de hoje, na régua. */}
+                <div className="flex flex-wrap justify-between gap-x-3 gap-y-0.5 pt-0.5 text-xs font-medium text-(--hero-muted) tabular-nums">
+                  <p>
+                    Gasto no período{" "}
+                    <span className="font-semibold text-(--hero-fg)">
+                      {formatCurrency(spentInPeriod)}
+                    </span>
+                  </p>
+                  <p className="ml-auto">
+                    {budget.daysRemaining === 1
+                      ? "falta 1 dia"
+                      : `faltam ${budget.daysRemaining} dias`}
+                  </p>
+                </div>
+              </div>
             </div>
 
-            {/* O ritmo do período: quanto do dia a dia (lançamentos e compras no
-              cartão) já saiu, dia a dia. Uma série só, então sem legenda — o
-              título diz o que é. */}
-            <div className="flex flex-col justify-end gap-3 p-[18px] shadow-[-1px_-1px_0_0_var(--hero-line)] lg:p-5">
-              <div className="flex items-baseline justify-between gap-3">
-                <p className="text-sm text-(--hero-muted)">Gasto no período</p>
-                <CountUpCurrency
-                  value={spendingTrend.at(-1)?.value ?? 0}
-                  duration={1.5}
-                  delay={0.5}
-                  className="font-heading text-[22px] leading-none font-bold tracking-[-0.035em] tabular-nums"
-                />
+            {/* A coluna de olhar para a frente. No desktop, o divisor é uma
+                sombra de 1px à esquerda. */}
+            <div className="flex flex-col gap-4 p-[18px] lg:gap-5 lg:p-5 lg:shadow-[-1px_0_0_0_var(--hero-line)]">
+              <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap lg:grid lg:grid-cols-2">
+                {/* Sozinho, ocupa a linha: meia largura deixava um buraco ao lado. */}
+                <div className={cn(heroChip, !sideChip && "col-span-2")}>
+                  <span className="text-[12.5px] leading-tight font-medium text-(--hero-muted)">
+                    Livre até receber
+                  </span>
+                  <span
+                    className={`truncate text-[15px] font-semibold tabular-nums ${
+                      budget.periodBalance < 0 ? "text-negative" : ""
+                    }`}
+                  >
+                    {formatCurrency(budget.periodBalance)}
+                  </span>
+                </div>
+                {sideChip && (
+                  <Link
+                    href={sideChip.href}
+                    className={`${heroChip} group/chip transition-shadow duration-150 ease-out-quint hover:ring-(--hero-muted) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--hero-fg)`}
+                  >
+                    {/* O rótulo quebra em vez de cortar: no celular o chip
+                        tem meia largura. */}
+                    <span className="flex items-start justify-between gap-1 text-[12.5px] leading-tight font-medium text-(--hero-muted)">
+                      {sideChip.label}
+                      <ChevronRight
+                        aria-hidden="true"
+                        className="mt-px size-3.5 shrink-0 transition-transform duration-150 group-hover/chip:translate-x-0.5"
+                      />
+                    </span>
+                    <span className="truncate text-[15px] font-semibold tabular-nums">
+                      {sideChip.value}
+                    </span>
+                  </Link>
+                )}
               </div>
-              <AreaTrend
-                points={spendingTrend}
-                height={96}
-                className="h-16 lg:h-24"
-                stroke="var(--hero-chart)"
-                ring="var(--hero-dot-ring)"
-                reveal
-                title="Gasto acumulado no período"
-              />
-              <div className="hidden justify-between text-[11px] text-(--hero-faint) tabular-nums lg:flex">
-                <span>{spendingTrend[0]?.label}</span>
-                <span>hoje</span>
+              {/* Só no desktop: no celular os lembretes vêm logo abaixo do
+                  hero, com o Pagar e o Adiar. Aqui é só leitura; cada linha
+                  leva até eles. Âncora nativa pelo mesmo motivo do link do
+                  vermelho: o `hashchange` abre a lista inteira. */}
+              {nextBills.length > 0 && (
+                <div className="hidden flex-col gap-1.5 lg:flex">
+                  <p className="text-[12.5px] font-medium text-(--hero-muted)">Próximas contas</p>
+                  <ul className="flex flex-col">
+                    {nextBills.map((bill) => (
+                      <li key={bill.key}>
+                        <a
+                          href="#lembretes"
+                          className="-mx-2 flex items-baseline gap-3 rounded-lg px-2 py-1.5 transition-colors duration-150 hover:bg-(--hero-chip) focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-(--hero-fg)"
+                        >
+                          <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                            {bill.label}
+                          </span>
+                          <span className="shrink-0 text-xs text-(--hero-muted) tabular-nums">
+                            {bill.overdue ? "venceu em " : ""}
+                            {formatDate(bill.dueDate)}
+                          </span>
+                          <span className="min-w-24 shrink-0 text-right text-sm font-semibold tabular-nums">
+                            {formatCurrency(bill.amount)}
+                          </span>
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {/* A conta do número, aberta só quando pedida: de onde parte, o
+                  que entra e sai no período, o que fica de lado e a divisão
+                  pelos dias. O aviso de falta fica fora dela — é aviso, não
+                  explicação. */}
+              <div className="flex flex-col gap-1 text-[13px] leading-snug text-pretty lg:mt-auto">
+                {savingsShortfall && (
+                  <p className="font-medium text-(--hero-fg)">{savingsShortfall}</p>
+                )}
+                <BudgetBreakdown
+                  budget={budget}
+                  accountBalance={accountBalance}
+                  reservedForLater={reservedForLater}
+                  savingsApplied={savingsApplied}
+                  dailyAvailable={dailyAvailable}
+                />
               </div>
             </div>
           </div>
         </div>
       </section>
 
-      <div
-        className="rise-in grid grid-cols-[repeat(auto-fit,minmax(min(320px,100%),1fr))] gap-2.5 lg:gap-4"
-        style={rise(200)}
-      >
-        <AccountBalanceCard
-          balance={accountBalance}
-          adjustedAt={inputs.account.adjustment?.createdAt ?? null}
-          registeredMovement={registeredMovement}
-        />
-
-        {/* Sem cartão não há o que simular: a compra parcelada entra como uma
-            compra de cartão para usar o fechamento e o vencimento de verdade,
-            e um botão cuja única resposta possível é "cadastre um cartão" é
-            ruído. */}
-        {cardOptions.length > 0 && (
-          <div className={homeCard("flex items-center justify-between gap-4")}>
-            <div className="flex min-w-0 flex-col gap-1.5">
-              <SectionLabel>Posso comprar isso?</SectionLabel>
-              <p className="text-sm text-muted-foreground">
-                Simule uma compra no cartão e veja se ela cabe nos próximos ciclos.
-              </p>
-            </div>
-            <PurchaseSimulationDialog cards={cardOptions} categories={categoryOptions} />
-          </div>
-        )}
-
-        <HomeSlicesCard
-          configured={slicesOverview.configured}
-          usage={slicesOverview.usage}
-          savings={slicesOverview.savings}
-        />
-      </div>
-
-      {/* As duas listas lado a lado quando cabem 340px cada; `items-start`
-          impede que a coluna mais curta estique até a altura da outra. */}
-      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(340px,100%),1fr))] items-start gap-6">
-        <div className="rise-in" style={rise(300)}>
-          <div className="flex flex-col gap-6">
-            <HomeReminders reminders={reminders} />
-            <HomeDebts debts={debts} />
-          </div>
+      {/* Tudo abaixo do hero, na ordem do celular — que é também a ordem do
+          HTML, então leitor de tela e Tab andam como a tela: o que pagar, o
+          que saiu hoje, o saldo em conta, o planejar, o "a receber" e, por
+          último, ligar os avisos. Nada de `order`: no desktop a grade põe os
+          blocos no lugar pelas áreas (as ferramentas numa faixa em cima, as
+          listas em duas colunas embaixo). As colunas dividem as linhas da
+          grade, então o "a receber" e os avisos começam juntos, abaixo do
+          mais alto entre lembretes e movimentações. Cada bloco leva a própria
+          entrada (`rise-in`), com o atraso que tinha. */}
+      <div className="flex flex-col gap-5 lg:grid lg:grid-cols-2 lg:items-start lg:gap-6 lg:[grid-template-areas:'tools_tools'_'reminders_today'_'debts_push']">
+        <div id="lembretes" className="rise-in scroll-mt-4 lg:[grid-area:reminders]" style={rise(120)}>
+          <HomeReminders reminders={reminders} />
         </div>
 
-        <div className="rise-in flex flex-col gap-6" style={rise(380)}>
-          <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-5 lg:gap-6 lg:[grid-area:today]">
+          <div className="rise-in flex flex-col gap-3" style={rise(140)}>
             <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
               <SectionLabel>Movimentações de hoje</SectionLabel>
               {todaySummary && (
@@ -533,21 +656,89 @@ export default async function DashboardPage() {
                 hint="Use o + para lançar a primeira."
               />
             ) : (
-              <ul className="flex flex-col gap-2.5">{movementRows(todaysItems, 520)}</ul>
+              <ul className="flex flex-col gap-2.5">{movementRows(todaysItems)}</ul>
             )}
           </div>
 
           {tomorrowsItems.length > 0 && (
-            <div className="flex flex-col gap-3">
+            <div className="rise-in flex flex-col gap-3" style={rise(140)}>
               <SectionLabel>Amanhã</SectionLabel>
               <ul className="flex flex-col gap-2.5">
-                {movementRows(tomorrowsItems, 520 + todaysItems.length * 90)}
+                {movementRows(tomorrowsItems)}
               </ul>
             </div>
           )}
-
-          {process.env.VAPID_PUBLIC_KEY && <PushSetup publicKey={process.env.VAPID_PUBLIC_KEY} />}
         </div>
+
+        {/* As ferramentas de planejar. No desktop, uma faixa de cards acima das
+            listas, lado a lado quando cabem 320px cada; no celular, o saldo em
+            conta e o grupo "Planejar" (os cards completos somem ali, e o grupo
+            some no desktop: um só de cada vez na árvore de acessibilidade). */}
+        <div className="flex flex-col gap-5 lg:grid lg:grid-cols-[repeat(auto-fit,minmax(min(320px,100%),1fr))] lg:gap-4 lg:[grid-area:tools]">
+          {/* O saldo em conta é um número de conferir, corrigido de tempos em
+              tempos olhando o extrato, e não uma ferramenta de planejar — fica
+              inteiro, fora do grupo. */}
+          <AccountBalanceCard
+            balance={accountBalance}
+            adjustedAt={inputs.account.adjustment?.createdAt ?? null}
+            registeredMovement={registeredMovement}
+            className="rise-in"
+            style={rise(80)}
+          />
+
+          {/* Sem cartão não há o que simular: a compra parcelada entra como uma
+              compra de cartão para usar o fechamento e o vencimento de verdade,
+              e um botão cuja única resposta possível é "cadastre um cartão" é
+              ruído. No celular, a simulação mora no grupo "Planejar". */}
+          {cardOptions.length > 0 && (
+            <div
+              className={homeCard("rise-in hidden items-center justify-between gap-4 lg:flex")}
+              style={rise(80)}
+            >
+              <div className="flex min-w-0 flex-col gap-1.5">
+                <SectionLabel>Posso comprar isso?</SectionLabel>
+                <p className="text-sm text-pretty text-muted-foreground">
+                  Simule uma compra no cartão e veja se ela cabe nos próximos ciclos.
+                </p>
+              </div>
+              <PurchaseSimulationDialog cards={cardOptions} categories={categoryOptions} />
+            </div>
+          )}
+
+          <HomeSlicesCard
+            configured={slicesOverview.configured}
+            usage={slicesOverview.usage}
+            savings={slicesOverview.savings}
+            className="rise-in hidden lg:flex"
+            style={rise(80)}
+          />
+
+          <HomePlanLinks
+            cards={cardOptions}
+            categories={categoryOptions}
+            slicesConfigured={slicesOverview.configured}
+            slicesOver={slicesOver}
+            className="rise-in lg:hidden"
+            style={rise(80)}
+          />
+        </div>
+
+        {/* `empty:hidden`: sem ninguém devendo o `HomeDebts` não desenha nada,
+            e o bloco vazio não pode somar um vão à coluna. */}
+        <div
+          id="a-receber"
+          className="rise-in scroll-mt-4 empty:hidden lg:[grid-area:debts]"
+          style={rise(120)}
+        >
+          <HomeDebts debts={debts} />
+        </div>
+
+        {/* Ligar os avisos é coisa de uma vez: no celular, vai para o fim. */}
+        {process.env.VAPID_PUBLIC_KEY && (
+          <div className="rise-in empty:hidden lg:[grid-area:push]" style={rise(140)}>
+            <PushSetup publicKey={process.env.VAPID_PUBLIC_KEY} />
+          </div>
+        )}
       </div>
     </div>
   );

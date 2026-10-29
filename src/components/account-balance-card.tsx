@@ -3,6 +3,7 @@ import { StatLabel } from "@/components/page-header";
 import { CountUpCurrency } from "@/components/ui/animated-number";
 import { BalanceAdjustmentDialog } from "@/components/forms/balance-adjustment-dialog";
 import { homeCard } from "@/components/home-card";
+import { cn } from "@/lib/utils";
 
 /**
  * Sem nenhum ajuste o card não mostra número: um saldo derivado só das
@@ -13,13 +14,17 @@ export function AccountBalanceCard({
   balance,
   adjustedAt,
   registeredMovement,
+  className,
+  style,
 }: {
   balance: number | null;
   adjustedAt: Date | null;
   registeredMovement: number;
+  className?: string;
+  style?: React.CSSProperties;
 }) {
   return (
-    <div className={homeCard("flex items-center justify-between gap-4")}>
+    <div className={homeCard(cn("flex items-center justify-between gap-4", className))} style={style}>
       <div className="flex min-w-0 flex-col gap-1.5">
         <StatLabel>Saldo em conta</StatLabel>
         {balance == null ? (
@@ -32,8 +37,7 @@ export function AccountBalanceCard({
                 saldo anda até o valor novo em vez de trocar de repente. */}
             <CountUpCurrency
               value={balance}
-              duration={1.2}
-              delay={0.4}
+              memoryKey="account-balance"
               className={`font-heading text-[28px] leading-none font-bold tracking-[-0.035em] tabular-nums lg:text-[32px] ${
                 balance < 0 ? "text-negative" : ""
               }`}
