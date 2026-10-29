@@ -76,9 +76,12 @@ function groupLabel(kind: ForecastEntryKind, label: string, offset: number) {
   return kind === "scheduled" && offset === 0 ? "Lançamentos" : label;
 }
 
-/** "o ciclo atual", "nov" — como um ciclo é chamado numa frase. */
-function cycleName(period: PeriodForecast) {
-  return period.offset === 0 ? "o ciclo atual" : monthLabel(period.periodStart);
+/**
+ * "no ciclo atual", "em nov", "em out de 2027" — um ciclo depois de uma
+ * preposição, com a contração certa e o ano quando é outro.
+ */
+function inNamedCycle(period: PeriodForecast, currentYear: number) {
+  return period.offset === 0 ? "no ciclo atual" : `em ${cycleMonth(period, currentYear)}`;
 }
 
 /**
@@ -89,6 +92,13 @@ function cycleMonth(period: PeriodForecast, currentYear: number) {
   const month = monthLabel(period.periodStart);
   const year = period.periodStart.getFullYear();
   return year === currentYear ? month : `${month} de ${year}`;
+}
+
+/** "14 de nov.", "14 de nov. de 2027": o ano só fora do ano do ciclo atual. */
+function dateIn(date: Date, currentYear: number) {
+  return date.getFullYear() === currentYear
+    ? formatDate(date)
+    : `${formatDate(date)} de ${date.getFullYear()}`;
 }
 
 /** "neste ciclo", "no ciclo de nov" — de qual ciclo a tela está falando. */
@@ -150,17 +160,21 @@ function EntryRow({
   ]
     .filter(Boolean)
     .join(" · ");
+  // Um valor negativo num grupo inverte a direção: um resgate já feito mora
+  // entre os "guardados" com valor negativo, e é dinheiro que entrou. O sinal
+  // vem daqui, uma vez só — senão a linha dizia "−-R$ 2.000,00".
+  const inflow = incoming !== entry.amount < 0;
 
   return (
     <li className="rise-in" style={stagger(index, 80, 45)}>
       <ListRow
-        icon={incoming ? <ArrowDownLeft /> : <ArrowUpRight />}
-        tone={incoming ? "positive" : "negative"}
+        icon={inflow ? <ArrowDownLeft /> : <ArrowUpRight />}
+        tone={inflow ? "positive" : "negative"}
         title={entry.label}
         subtitle={<span className="tabular-nums">{detail}</span>}
-        value={`${incoming ? "+" : "−"}${formatCurrency(entry.amount)}`}
+        value={`${inflow ? "+" : "−"}${formatCurrency(Math.abs(entry.amount))}`}
         valueClassName={cn(
-          incoming ? "text-positive" : "text-foreground",
+          inflow ? "text-positive" : "text-foreground",
           entry.awaiting && "text-muted-foreground line-through",
         )}
       />
@@ -206,7 +220,7 @@ export default async function ForecastPage({
       <div className="flex flex-col gap-6">
         <PageHeader
           title="Previsão"
-          subtitle="Quanto cada ciclo pode gastar, levando em conta os outros"
+          subtitle="Quanto cada ciclo pode gastar"
         />
         <EmptyState
           icon={CalendarClock}
@@ -250,6 +264,25 @@ export default async function ForecastPage({
   const paceDays = pace
     ? pace.remainingDays + periods.slice(1, offset + 1).reduce((sum, p) => sum + p.totalDays, 0)
     : 0;
+  // O alvo diário que fecha a conta, no lugar de "X a menos por dia": o
+  // ritmo de hoje menos o corte, arredondado para baixo no centavo.
+  const paceTarget =
+    pace && paceLeft !== null && paceDays > 0
+      ? Math.max(0, Math.floor((pace.perDay + paceLeft / paceDays) * 100) / 100)
+      : 0;
+  // Os chips do hero fecham com o "Saldo do ciclo": as entradas levam o que
+  // volta das caixinhas, e um resgate já feito (depósito negativo) conta como
+  // entrada, não como saída menor.
+  const jarIn = period.entries
+    .filter((entry) => entry.kind === "jar" && entry.amount < 0)
+    .reduce((sum, entry) => sum - entry.amount, 0);
+  const incomingTotal = period.incomeTotal + period.jarReturnTotal + jarIn;
+  const outgoingTotal =
+    period.fixedExpenseTotal +
+    period.cardBillTotal +
+    period.scheduledTotal +
+    period.jarTotal +
+    jarIn;
   const isNegative = period.endBalance < -0.005;
   // O tom do hero, o mesmo sistema da Início (`data-tone`). O vermelho é o
   // ciclo da tela que fecha negativo. O apertado não sai de `heroTone`: ele
@@ -330,7 +363,7 @@ export default async function ForecastPage({
     <div className="flex flex-col gap-6">
       <PageHeader
         title="Previsão"
-        subtitle="Quanto cada ciclo pode gastar, levando em conta os outros"
+        subtitle="Quanto cada ciclo pode gastar"
       />
 
       <ForecastNav
@@ -357,7 +390,9 @@ export default async function ForecastPage({
                   )}
                   {isNegative
                     ? `Vai faltar ${inCycle(period, currentYear)}`
-                    : `Livre para gastar ${inCycle(period, currentYear)}`}
+                    : isTight
+                      ? `Pouco livre para gastar ${inCycle(period, currentYear)}`
+                      : `Livre para gastar ${inCycle(period, currentYear)}`}
                 </p>
                 {/* Mesmo elemento entre um ciclo e outro (trocar a query não
                     remonta a tela), então o valor conta do anterior até o novo.
@@ -393,18 +428,14 @@ export default async function ForecastPage({
                 {[
                   {
                     label: "Entradas",
-                    value: period.incomeTotal,
+                    value: incomingTotal,
                     icon: (
                       <ArrowDownLeft className="size-4 shrink-0 text-positive" aria-hidden="true" />
                     ),
                   },
                   {
                     label: "Saídas",
-                    value:
-                      period.fixedExpenseTotal +
-                      period.cardBillTotal +
-                      period.scheduledTotal +
-                      period.jarTotal,
+                    value: outgoingTotal,
                     icon: (
                       <ArrowUpRight className="size-4 shrink-0 text-negative" aria-hidden="true" />
                     ),
@@ -434,10 +465,15 @@ export default async function ForecastPage({
                 aparecer negativo — ou menor do que parece — parece erro. O
                 divisor é a mesma sombra de 1px do hero da Início. */}
             <dl className="flex flex-col justify-center gap-2.5 p-[18px] text-[13.5px] tabular-nums shadow-[-1px_-1px_0_0_var(--hero-line)] lg:p-5">
-              <div className="flex items-baseline justify-between gap-3">
-                <dt className="text-(--hero-muted)">{inheritedLabel}</dt>
-                <dd className="font-medium">{formatCurrency(period.inherited)}</dd>
-              </div>
+              {/* Sem nada vindo de antes, a linha some: um "R$ 0,00" guardado
+                  depois de um ciclo que fechou positivo parece erro (a
+                  previsão conta a sobra como gasta). */}
+              {Math.abs(period.inherited) >= 0.005 && (
+                <div className="flex items-baseline justify-between gap-3">
+                  <dt className="text-(--hero-muted)">{inheritedLabel}</dt>
+                  <dd className="font-medium">{formatCurrency(period.inherited)}</dd>
+                </div>
+              )}
               <div className="flex items-baseline justify-between gap-3">
                 <dt className="text-(--hero-muted)">Saldo do ciclo</dt>
                 <dd className="font-medium">{formatCurrency(period.periodResult)}</dd>
@@ -473,15 +509,18 @@ export default async function ForecastPage({
           <div className="flex min-w-0 flex-col gap-1.5 pt-0.5">
             <p className="text-[13px] font-medium text-muted-foreground">
               {period.offset === 0
-                ? "Se continuar gastando assim"
-                : "Se continuar gastando como agora"}
+                ? "No seu ritmo atual"
+                : `No seu ritmo atual, levado até ${cycleMonth(period, currentYear)}`}
             </p>
-            <p className="font-heading text-[26px] leading-none font-bold tracking-[-0.03em] tabular-nums">
+            {/* 20px, e não o tamanho de um segundo hero: é uma projeção, e o
+                número da tela é o de cima. */}
+            <p className="font-heading text-[20px] leading-none font-bold tracking-[-0.025em] tabular-nums">
               <span className={paceLeft < -0.005 ? "text-negative" : undefined}>
                 {formatCurrency(Math.abs(paceLeft))}
               </span>{" "}
-              <span className="text-base font-semibold tracking-normal text-muted-foreground">
-                {paceLeft < -0.005 ? "faltando" : "sobrando"} em {formatDate(lastDay(period))}
+              <span className="text-[15px] font-semibold tracking-normal text-muted-foreground">
+                {paceLeft < -0.005 ? "faltando" : "sobrando"} em{" "}
+                {dateIn(lastDay(period), currentYear)}
               </span>
             </p>
             {/* Duas frases curtas: o ritmo, e só quando falta, a saída. O ritmo
@@ -501,7 +540,7 @@ export default async function ForecastPage({
               <p className="text-[13.5px] leading-relaxed text-muted-foreground">
                 {noSpendLeft < -0.005
                   ? `Mesmo sem gastar nada no dia a dia, faltariam ${formatCurrency(-noSpendLeft)}: são as contas que não cabem.`
-                  : `Gastando ${formatCurrency(Math.ceil((-paceLeft / paceDays) * 100) / 100)} a menos por dia, a partir de amanhã, a conta fecha.`}
+                  : `Para fechar, gaste até ${formatCurrency(paceTarget)} por dia a partir de amanhã.`}
               </p>
             )}
           </div>
@@ -520,9 +559,13 @@ export default async function ForecastPage({
             <p className="text-[13.5px] leading-relaxed">
               {/* "Passa do que você tem", não "do que entra": a conta inclui o
                   que veio dos ciclos anteriores. */}
+              {/* O ciclo atual pelo nome, e não "out": em out de 2027 na
+                  tela, "no ciclo de out" lia como o da tela. */}
               {shortfall.offset === period.offset
                 ? "Neste ciclo"
-                : `No ciclo de ${cycleMonth(shortfall, currentYear)}`}
+                : shortfall.offset === 0
+                  ? "No ciclo atual"
+                  : `No ciclo de ${cycleMonth(shortfall, currentYear)}`}
               , as contas passam do que você tem: faltam{" "}
               <span className="font-semibold tabular-nums">
                 {formatCurrency(Math.abs(shortfall.endBalance))}
@@ -534,16 +577,16 @@ export default async function ForecastPage({
                 guardado, resgatar. */}
             <div className="flex flex-wrap gap-x-4 gap-y-1 text-[13px] font-medium">
               {shortfall.offset === 0 ? (
-                <Link href="/#lembretes" className={shortfallLink}>
+                <Link href="/#lembretes" className={cn(shortfallLink, "-my-2 inline-block py-2")}>
                   Ver o que dá para adiar
                 </Link>
               ) : (
-                <Link href="/rendas?aba=despesas" className={shortfallLink}>
+                <Link href="/rendas?aba=despesas" className={cn(shortfallLink, "-my-2 inline-block py-2")}>
                   Rever as despesas fixas
                 </Link>
               )}
               {hasJarBalance && (
-                <Link href="/caixinhas" className={shortfallLink}>
+                <Link href="/caixinhas" className={cn(shortfallLink, "-my-2 inline-block py-2")}>
                   Resgatar de uma caixinha
                 </Link>
               )}
@@ -562,26 +605,33 @@ export default async function ForecastPage({
       >
         <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
           <div className="flex flex-col gap-1.5">
-            <SectionLabel>Próximos ciclos</SectionLabel>
+            <SectionLabel>Ciclo a ciclo</SectionLabel>
             <p className="text-[13.5px] text-muted-foreground tabular-nums">
               {timelineShort.length > 0 ? (
                 <>
                   <span className="font-semibold text-foreground">
-                    {timelineShort.length} de {timeline.length}
+                    {timelineShort.length} dos {timeline.length}
                   </span>{" "}
-                  {timelineShort.length === 1 ? "ciclo fecha" : "ciclos fecham"} com falta · pior
-                  em{" "}
-                  <span className="font-semibold text-negative">
-                    {cycleName(timelineWorst)} (falta{" "}
+                  {timelineShort.length === 1 ? "ciclos fecha" : "ciclos fecham"} com falta · pior{" "}
+                  {/* O pior ciclo é um link: dá para ir direto a ele. */}
+                  <Link
+                    href={forecastHref(timelineWorst.offset)}
+                    className={cn(shortfallLink, "font-semibold text-negative")}
+                  >
+                    {inNamedCycle(timelineWorst, currentYear)} (falta{" "}
                     {formatCurrency(Math.abs(timelineWorst.endBalance))})
-                  </span>
+                  </Link>
                 </>
               ) : (
                 <>
-                  Todos os {timeline.length} ciclos fecham positivos · menor folga em{" "}
-                  <span className="font-semibold text-foreground">
-                    {cycleName(timelineWorst)} ({formatCurrency(timelineWorst.freeToSpend)})
-                  </span>
+                  Todos os {timeline.length} ciclos fecham positivos · menor folga{" "}
+                  <Link
+                    href={forecastHref(timelineWorst.offset)}
+                    className={cn(shortfallLink, "font-semibold text-foreground")}
+                  >
+                    {inNamedCycle(timelineWorst, currentYear)} (
+                    {formatCurrency(timelineWorst.freeToSpend)})
+                  </Link>
                 </>
               )}
             </p>

@@ -79,6 +79,13 @@ export function LineChart({
   const showValue = (p: LinePoint) =>
     valueLabels === "all" || (valueLabels === "selected" && p.selected);
   const crowded = crowdedLabels(points, y, valueLabels === "all");
+  // Num platô, o mesmo rótulo repetido ("R$ 4,1 mil" oito vezes) esconde em
+  // vez de mostrar: em qualquer largura fica só o primeiro, e o selecionado.
+  const plateau = new Set(
+    points.flatMap((p, i) =>
+      i > 0 && !p.selected && labelText(points[i - 1]) === labelText(p) ? [i] : [],
+    ),
+  );
   const activePoint = points.find((p) => p.key === active);
 
   return (
@@ -174,7 +181,7 @@ export function LineChart({
                     }
                   />
                 )}
-                {showValue(p) && (
+                {showValue(p) && !plateau.has(i) && (
                   <span
                     aria-hidden="true"
                     className={cn(
@@ -272,6 +279,11 @@ export function LineChart({
   );
 }
 
+/** O texto do rótulo de um ponto: o valor inteiro no selecionado, o curto nos outros. */
+function labelText(p: LinePoint) {
+  return p.selected ? p.valueLabel : (p.compactLabel ?? p.valueLabel);
+}
+
 /**
  * Os rótulos que somem no celular para os vizinhos não se atropelarem: um
  * platô repete o mesmo valor ("R$ 3,2 mil" quatro vezes) e fica só o
@@ -285,7 +297,7 @@ function crowdedLabels(
 ): Set<number> {
   const hidden = new Set<number>();
   if (!enabled) return hidden;
-  const text = (p: LinePoint) => (p.selected ? p.valueLabel : (p.compactLabel ?? p.valueLabel));
+  const text = labelText;
   const shown: number[] = points.flatMap((p, i) => (p.selected ? [i] : []));
   points.forEach((p, i) => {
     if (p.selected) return;
