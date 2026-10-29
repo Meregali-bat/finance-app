@@ -516,12 +516,15 @@
  * vermelho sobre vermelho; então o card perde a cor da marca e vira tinta
  * neutra — igual nos dois temas, porque é um estado e não uma superfície —, e
  * o coral fica sozinho: no número, no ícone e no dia de hoje da régua. O
- * `--negative` e o `--ring` são redefinidos aqui dentro porque os do tema
- * claro foram escolhidos para fundo branco e somem na tinta.
- * Contraste conferido: texto ≥ 6,3:1, `--hero-faint` ≥ 5,6:1, coral ≥ 5,2:1.
+ * `--negative`, o `--positive` e o `--ring` são redefinidos aqui dentro porque
+ * os do tema claro foram escolhidos para fundo branco e somem na tinta (o
+ * turquesa claro, na seta de entradas da Previsão, ficava em 2,1:1).
+ * Contraste conferido: texto ≥ 6,3:1, `--hero-faint` ≥ 5,6:1, coral ≥ 5,2:1;
+ * nos chips da Previsão, coral 4,4:1 e turquesa 6,0:1.
  */
 .hero-surface[data-tone="negative"] {
   --negative: #ff7a6b;
+  --positive: #5fd0c0;
   --ring: #f5f1ef;
   --hero-fg: #f5f1ef;
   --hero-muted: rgb(245 241 239 / 0.72);

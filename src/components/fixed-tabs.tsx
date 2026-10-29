@@ -10,7 +10,8 @@ const TABS = [
   { value: "categorias", label: "Categorias" },
 ] as const;
 
-type Tab = (typeof TABS)[number]["value"];
+export type FixedTab = (typeof TABS)[number]["value"];
+type Tab = FixedTab;
 
 /**
  * O cabeçalho e as abas dos Fixos. Ficam juntos porque o + do cabeçalho
@@ -20,11 +21,14 @@ type Tab = (typeof TABS)[number]["value"];
 export function FixedTabs({
   actions,
   panels,
+  initialTab = "rendas",
 }: {
   actions: Record<Tab, React.ReactNode>;
   panels: Record<Tab, React.ReactNode>;
+  /** A aba de chegada: a Previsão abre direto em Despesas (`?aba=despesas`). */
+  initialTab?: Tab;
 }) {
-  const [tab, setTab] = useState<Tab>("rendas");
+  const [tab, setTab] = useState<Tab>(initialTab);
 
   return (
     <>
