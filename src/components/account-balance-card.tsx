@@ -65,8 +65,9 @@ export function AccountBalanceCard({
               <p className="flex items-start gap-1 text-xs text-muted-foreground tabular-nums">
                 <CircleAlert aria-hidden="true" className="mt-px size-3.5 shrink-0 text-foreground" />
                 <span>
-                  <span className="font-semibold text-foreground">Confira com o extrato</span> ·
-                  ajustado há {staleDays} dias
+                  {/* O "·" fica no fim da primeira linha, nunca no começo da segunda. */}
+                  <span className="font-semibold text-foreground">Confira com o extrato</span> ·{" "}
+                  <span className="whitespace-nowrap">ajustado há {staleDays} dias</span>
                 </span>
               </p>
             ) : adjustedAt && (
