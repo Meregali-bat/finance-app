@@ -1,6 +1,7 @@
 import { differenceInCalendarDays } from "date-fns";
 import Link from "next/link";
-import { ChevronRight, CreditCard, Receipt, TriangleAlert } from "lucide-react";
+import { ChevronRight, CircleAlert, CreditCard, Receipt, TriangleAlert } from "lucide-react";
+import { staleAdjustmentDays } from "@/lib/account-balance";
 import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/auth-helpers";
 import { deferralTargetDate, fallsOnDay } from "@/lib/period";
@@ -318,9 +319,11 @@ export default async function DashboardPage() {
   // No vermelho, o próximo passo: adiar uma conta, se alguma deixa; senão,
   // ver na previsão como ficam os próximos ciclos.
   const canDefer = reminders.some((r) => r.kind === "due" && r.defer != null);
-  // As próximas contas, no hero do desktop: só leitura, apontando para os
-  // lembretes, onde ficam o Pagar e o Adiar. Já vêm em ordem de data.
-  const nextBills = reminders.filter((r) => r.kind === "due").slice(0, 3);
+  // Há quantos dias o saldo em conta, de onde o número parte, foi conferido;
+  // nulo enquanto fresco (a mesma regra do card do saldo).
+  const adjustedAt = inputs.account.adjustment?.createdAt ?? null;
+  const staleDays =
+    accountBalance != null && adjustedAt ? staleAdjustmentDays(adjustedAt, today) : null;
 
   // A curva do gasto fica sob a régua, cada ponto embaixo da barra do seu dia:
   // começa no centro da primeira barra e vai até o centro da de hoje. As contas
@@ -493,13 +496,35 @@ export default async function DashboardPage() {
                         Com gasto, ela diz que ele já saiu do número — senão o
                         número parece o que ainda resta para hoje, e a pessoa
                         desconta de novo de cabeça. */}
+                    {/* "O que saiu", e não "você gastou": um empréstimo para
+                        alguém também sai do número, e não é gasto. */}
                     {spentToday >= 0.005 && (
                       <p className="text-sm text-(--hero-muted) tabular-nums">
-                        Já descontado: você gastou{" "}
+                        Já descontado o que saiu hoje:{" "}
                         <span className="font-semibold text-(--hero-fg)">
                           {formatCurrency(spentToday)}
-                        </span>{" "}
-                        hoje
+                        </span>
+                      </p>
+                    )}
+                    {/* O número parte do saldo em conta; com ele velho, o
+                        aviso vem aqui, onde o número é lido — e não só no card
+                        do saldo, abaixo da dobra. É a causa mais provável de um
+                        vermelho que não é de verdade. */}
+                    {staleDays != null && (
+                      <p className="flex items-start gap-1 text-sm text-(--hero-muted) tabular-nums">
+                        <CircleAlert
+                          aria-hidden="true"
+                          className="mt-[3px] size-3.5 shrink-0 text-(--hero-fg)"
+                        />
+                        <span>
+                          Conta feita com o saldo de{" "}
+                          <span className="whitespace-nowrap">
+                            {staleDays} dias atrás ·{" "}
+                            <a href="#saldo" className={heroLink}>
+                              Conferir
+                            </a>
+                          </span>
+                        </span>
                       </p>
                     )}
                   </div>
@@ -527,9 +552,12 @@ export default async function DashboardPage() {
                 {isOverBudget && (
                   <div className="flex flex-col gap-0.5 text-sm">
                     {/* A data já está na unidade acima; aqui vem o total do período. */}
+                    {/* "Fecha no negativo", e não "faltam": o "faltam" da
+                        linha da régua é de dias. É o único lugar do déficit;
+                        no vermelho, a régua não repete o livre até receber. */}
                     <p className="font-medium text-(--hero-fg)">
-                      No total, faltam {formatCurrency(periodDeficit)} até lá, mesmo sem gastar
-                      mais nada.
+                      O período fecha {formatCurrency(periodDeficit)} no negativo, mesmo sem
+                      gastar mais nada.
                     </p>
                     {/* Âncora nativa, não `Link`: o `hashchange` é o que faz os
                         lembretes abrirem por inteiro, para a conta adiável não
@@ -572,8 +600,8 @@ export default async function DashboardPage() {
                 )}
                 {/* A linha de olhar para a frente, embaixo dos dias apagados: o
                     livre até receber e quantos dias faltam — o divisor da
-                    conta do número. É o único lugar do livre até receber, em
-                    todos os estados. No desktop, à esquerda, embaixo da curva,
+                    conta do número. No vermelho fica só o tempo: o total já
+                    está na frase do déficit, acima. No desktop, à esquerda, embaixo da curva,
                     o total dela; e, ao lado do livre, o que o número deixa de
                     lado, como link. No celular os dois ficam na conta do
                     número, aberta só quando pedida: o hero leva um valor a
@@ -589,17 +617,21 @@ export default async function DashboardPage() {
                   <p className="ml-auto text-right">
                     {/* Cada parte inteira: se não couber, quebra entre elas,
                         nunca no meio do valor. */}
-                    <span className="whitespace-nowrap">
-                      Livre até receber{" "}
-                      <span
-                        className={`font-semibold ${
-                          budget.periodBalance < 0 ? "text-negative" : "text-(--hero-fg)"
-                        }`}
-                      >
-                        {formatCurrency(budget.periodBalance)}
-                      </span>
-                      {" ·"}
-                    </span>{" "}
+                    {!isOverBudget && (
+                      <>
+                        <span className="whitespace-nowrap">
+                          Livre até receber{" "}
+                          <span
+                            className={`font-semibold ${
+                              budget.periodBalance < 0 ? "text-negative" : "text-(--hero-fg)"
+                            }`}
+                          >
+                            {formatCurrency(budget.periodBalance)}
+                          </span>
+                          {" ·"}
+                        </span>{" "}
+                      </>
+                    )}
                     <span className="whitespace-nowrap">
                       {budget.daysRemaining === 1
                         ? "falta 1 dia"
@@ -621,62 +653,25 @@ export default async function DashboardPage() {
               </div>
             </div>
 
-            {/* A coluna de olhar para a frente. No desktop, o divisor é uma
-                sombra de 1px à esquerda. */}
-            <div className="flex flex-col gap-4 p-[18px] lg:gap-5 lg:p-5 lg:shadow-[-1px_0_0_0_var(--hero-line)]">
-              {/* Só no desktop: no celular os lembretes vêm logo abaixo do
-                  hero, com o Pagar e o Adiar. Aqui é só leitura; cada linha
-                  leva até eles. Âncora nativa pelo mesmo motivo do link do
-                  vermelho: o `hashchange` abre a lista inteira. */}
-              {/* Sem conta em aberto, o título fica e diz isso: a coluna não
-                  fica só com o link da conta no pé. */}
-              <div className="hidden flex-col gap-1.5 lg:flex">
-                <p className="text-[12.5px] font-medium text-(--hero-muted)">Próximas contas</p>
-                {nextBills.length === 0 ? (
-                  <p className="text-sm font-medium text-(--hero-fg)">
-                    Nenhuma conta a pagar até receber.
-                  </p>
-                ) : (
-                  <ul className="flex flex-col">
-                    {nextBills.map((bill) => (
-                      <li key={bill.key}>
-                        <a
-                          href="#lembretes"
-                          className="-mx-2 flex items-baseline gap-3 rounded-lg px-2 py-1.5 transition-colors duration-150 hover:bg-(--hero-chip) focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-(--hero-fg)"
-                        >
-                          <span className="min-w-0 flex-1 truncate text-sm font-medium">
-                            {bill.label}
-                          </span>
-                          <span className="shrink-0 text-xs text-(--hero-muted) tabular-nums">
-                            {bill.overdue ? "venceu em " : ""}
-                            {formatDate(bill.dueDate)}
-                          </span>
-                          <span className="min-w-24 shrink-0 text-right text-sm font-semibold tabular-nums">
-                            {formatCurrency(bill.amount)}
-                          </span>
-                        </a>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-              {/* A conta do número, aberta só quando pedida: de onde parte, o
-                  que entra e sai no período, o que fica de lado e a divisão
-                  pelos dias. O aviso de falta fica fora dela — é aviso, não
-                  explicação. */}
-              <div className="flex flex-col gap-1 text-[13px] leading-snug text-pretty lg:mt-auto">
-                {savingsShortfall && (
-                  <p className="font-medium text-(--hero-fg)">{savingsShortfall}</p>
-                )}
-                <BudgetBreakdown
-                  budget={budget}
-                  accountBalance={accountBalance}
-                  reservedForLater={reservedForLater}
-                  savingsApplied={savingsApplied}
-                  dailyAvailable={dailyAvailable}
-                  spentInPeriod={spentInPeriod}
-                />
-              </div>
+            {/* A coluna que explica o número. No desktop, o divisor é uma
+                sombra de 1px à esquerda, e a conta vem aberta: há espaço, e as
+                próximas contas que ficavam aqui repetiam os lembretes logo
+                abaixo. No celular ela é um `<details>`, aberto só quando
+                pedido. O aviso de falta fica fora dela — é aviso, não
+                explicação. */}
+            <div className="flex flex-col gap-1 p-[18px] text-[13px] leading-snug text-pretty lg:p-5 lg:shadow-[-1px_0_0_0_var(--hero-line)]">
+              {savingsShortfall && (
+                <p className="font-medium text-(--hero-fg)">{savingsShortfall}</p>
+              )}
+              <BudgetBreakdown
+                budget={budget}
+                accountBalance={accountBalance}
+                accountBalanceDate={staleDays != null ? adjustedAt : null}
+                reservedForLater={reservedForLater}
+                savingsApplied={savingsApplied}
+                dailyAvailable={dailyAvailable}
+                spentInPeriod={spentInPeriod}
+              />
             </div>
           </div>
         </div>
@@ -693,7 +688,7 @@ export default async function DashboardPage() {
           movimentações; o "a receber" e os avisos, abaixo dela, começam
           juntos. Cada bloco leva a própria entrada (`rise-in`), com o atraso
           da sua altura na tela (ver `rise`). */}
-      <div className="flex flex-col gap-5 lg:grid lg:grid-cols-2 lg:items-start lg:gap-6 lg:[grid-template-areas:'reminders_today'_'tools_tools'_'debts_push']">
+      <div className="flex flex-col gap-5 lg:grid lg:grid-cols-2 lg:items-start lg:gap-6 lg:[grid-template-areas:'reminders_today'_'tools_tools'_'bottom_bottom']">
         <div id="lembretes" className="rise-in scroll-mt-4 lg:[grid-area:reminders]" style={rise(120)}>
           <HomeReminders reminders={reminders} />
         </div>
@@ -731,16 +726,26 @@ export default async function DashboardPage() {
             listas do dia e o "a receber", lado a lado quando cabem 320px cada; no celular, o saldo em
             conta e o grupo "Planejar" (os cards completos somem ali, e o grupo
             some no desktop: um só de cada vez na árvore de acessibilidade). */}
-        <div className="flex flex-col gap-5 lg:grid lg:grid-cols-[repeat(auto-fit,minmax(min(320px,100%),1fr))] lg:gap-4 lg:[grid-area:tools]">
+        {/* Colunas contadas, não `auto-fit`: com três cards e espaço para
+            dois, o terceiro ficava sozinho numa linha. Com três, no `lg` o
+            saldo ocupa a linha de cima e as duas ferramentas dividem a de
+            baixo; no `xl` cabem os três lado a lado. */}
+        <div
+          className={`flex flex-col gap-5 lg:grid lg:gap-4 lg:[grid-area:tools] ${
+            cardOptions.length > 0 ? "lg:grid-cols-2 xl:grid-cols-3" : "lg:grid-cols-2"
+          }`}
+        >
           {/* O saldo em conta é um número de conferir, corrigido de tempos em
               tempos olhando o extrato, e não uma ferramenta de planejar — fica
-              inteiro, fora do grupo. */}
+              inteiro, fora do grupo. O `#saldo` é o destino do aviso de saldo
+              velho no hero. */}
           <AccountBalanceCard
+            id="saldo"
             balance={accountBalance}
-            adjustedAt={inputs.account.adjustment?.createdAt ?? null}
+            adjustedAt={adjustedAt}
             registeredMovement={registeredMovement}
             today={today}
-            className="rise-in"
+            className={`rise-in scroll-mt-4 ${cardOptions.length > 0 ? "lg:col-span-2 xl:col-span-1" : ""}`}
             style={rise(120)}
           />
 
@@ -781,22 +786,26 @@ export default async function DashboardPage() {
           />
         </div>
 
-        {/* `empty:hidden`: sem ninguém devendo o `HomeDebts` não desenha nada,
-            e o bloco vazio não pode somar um vão à coluna. */}
-        <div
-          id="a-receber"
-          className="rise-in scroll-mt-4 empty:hidden lg:[grid-area:debts]"
-          style={rise(140)}
-        >
-          <HomeDebts debts={debts} />
-        </div>
-
-        {/* Ligar os avisos é coisa de uma vez: no celular, vai para o fim. */}
-        {process.env.VAPID_PUBLIC_KEY && (
-          <div className="rise-in empty:hidden lg:[grid-area:push]" style={rise(140)}>
-            <PushSetup publicKey={process.env.VAPID_PUBLIC_KEY} />
+        {/* O "a receber" e os avisos dividem a última faixa em partes iguais;
+            se um deles não desenha nada (`empty:hidden`), o outro fica com a
+            faixa inteira, em vez de deixar meia tela vazia ao lado. No
+            celular, uma coluna só, com os avisos no fim. */}
+        <div className="flex flex-col gap-5 lg:flex-row [&:not(:has(>:not(:empty)))]:hidden lg:items-start lg:gap-6 lg:[grid-area:bottom]">
+          <div
+            id="a-receber"
+            className="rise-in scroll-mt-4 empty:hidden lg:min-w-0 lg:flex-1"
+            style={rise(140)}
+          >
+            <HomeDebts debts={debts} />
           </div>
-        )}
+
+          {/* Ligar os avisos é coisa de uma vez: no celular, vai para o fim. */}
+          {process.env.VAPID_PUBLIC_KEY && (
+            <div className="rise-in empty:hidden lg:min-w-0 lg:flex-1" style={rise(140)}>
+              <PushSetup publicKey={process.env.VAPID_PUBLIC_KEY} />
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

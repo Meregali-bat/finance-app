@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import type { PeriodBudget } from "@/lib/period";
-import { formatCurrency } from "@/lib/format";
+import { formatCurrency, formatDate } from "@/lib/format";
 
 type Line = {
   label: string;
@@ -33,6 +33,7 @@ const shows = (amount: number) => Math.abs(amount) >= 0.005;
 function breakdownLines({
   budget,
   accountBalance,
+  accountBalanceDate,
   reservedForLater,
   savingsApplied,
   dailyAvailable,
@@ -44,7 +45,14 @@ function breakdownLines({
       budget.fixedExpenseReminders.reduce((sum, r) => sum + r.amount, 0) +
       budget.cardBillReminders.reduce((sum, r) => sum + r.amount, 0);
     const scheduled = budget.periodBalance - accountBalance + toPay;
-    lines.push({ label: "Saldo em conta", amount: accountBalance, kind: "start" });
+    // Com o saldo velho, a linha diz de quando ele é: o número parte dele.
+    lines.push({
+      label: accountBalanceDate
+        ? `Saldo em conta (de ${formatDate(accountBalanceDate)})`
+        : "Saldo em conta",
+      amount: accountBalance,
+      kind: "start",
+    });
     if (shows(toPay))
       lines.push({ label: "Contas e faturas a pagar", amount: -toPay, kind: "step" });
     if (shows(scheduled))
@@ -116,6 +124,8 @@ function signed(amount: number) {
 type BudgetBreakdownProps = {
   budget: PeriodBudget;
   accountBalance: number | null;
+  /** A data do ajuste, só quando o saldo está velho (`staleAdjustmentDays`). */
+  accountBalanceDate?: Date | null;
   reservedForLater: number;
   savingsApplied: number;
   dailyAvailable: number;
@@ -128,10 +138,12 @@ const lineLink =
   "group/line inline-flex items-center gap-0.5 rounded-sm underline decoration-(--hero-line) underline-offset-4 transition-colors duration-150 hover:text-(--hero-fg) hover:decoration-current focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--hero-fg)";
 
 /**
- * "Como chegamos nesse número": a conta do número do dia, aberta só quando a
- * pessoa pede. Um `<details>` nativo — teclado, leitor de tela e sem JS. O
- * resumo tem 44px de toque, e a margem negativa devolve o espaço: na tela ele
- * ocupa o mesmo que antes.
+ * "Como chegamos nesse número": a conta do número do dia. No celular, aberta
+ * só quando a pessoa pede: um `<details>` nativo — teclado, leitor de tela e
+ * sem JS. O resumo tem 44px de toque, e a margem negativa devolve o espaço: na
+ * tela ele ocupa o mesmo que antes. No desktop, sempre aberta. Só uma das duas
+ * existe por tamanho (a outra é `display: none`), então o leitor de tela lê a
+ * conta uma vez.
  *
  * No celular, é aqui que ficam o reservado, o separado para guardar e o gasto
  * do período: o hero leva só o número, o já descontado e o livre até receber.
@@ -157,15 +169,8 @@ export function BudgetBreakdown(props: BudgetBreakdownProps) {
             }
           : null,
       ].filter((note) => note != null);
-  return (
-    <details className="group/why text-[13px] text-(--hero-muted)">
-      <summary className="-mx-1 flex w-fit cursor-pointer list-none items-center gap-1 -my-2.5 min-h-11 rounded-sm px-1 font-medium transition-colors duration-150 select-none hover:text-(--hero-fg) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--hero-fg) [&::-webkit-details-marker]:hidden">
-        Como chegamos nesse número
-        <ChevronDown
-          aria-hidden="true"
-          className="size-3.5 shrink-0 transition-transform duration-150 group-open/why:rotate-180"
-        />
-      </summary>
+  const body = (
+    <>
       <dl className="mt-2 flex flex-col tabular-nums">
         {lines.map((line) => (
           <div
@@ -204,16 +209,36 @@ export function BudgetBreakdown(props: BudgetBreakdownProps) {
           </Link>
         </p>
       ))}
-      {/* Fora da conta, e só no celular: no desktop ele fica sob a curva. Ele
-          já está dentro das linhas acima (nos lançamentos, nas faturas ou no
-          saldo), então vem como frase, não como mais uma parcela. */}
-      {shows(spentInPeriod) && (
-        <p className="mt-2 border-t border-dashed border-(--hero-line) pt-2 tabular-nums lg:hidden">
-          Para comparar: você já gastou{" "}
-          <span className="font-semibold text-(--hero-fg)">{formatCurrency(spentInPeriod)}</span>{" "}
-          neste período, na conta e no cartão.
-        </p>
-      )}
-    </details>
+    </>
+  );
+  return (
+    <>
+      {/* No celular, aberta só quando pedida. */}
+      <details className="group/why text-[13px] text-(--hero-muted) lg:hidden">
+        <summary className="-mx-1 flex w-fit cursor-pointer list-none items-center gap-1 -my-2.5 min-h-11 rounded-sm px-1 font-medium transition-colors duration-150 select-none hover:text-(--hero-fg) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--hero-fg) [&::-webkit-details-marker]:hidden">
+          Como chegamos nesse número
+          <ChevronDown
+            aria-hidden="true"
+            className="size-3.5 shrink-0 transition-transform duration-150 group-open/why:rotate-180"
+          />
+        </summary>
+        {body}
+        {/* Fora da conta, e só no celular: no desktop ele fica sob a curva.
+            Ele já está dentro das linhas acima (nos lançamentos, nas faturas
+            ou no saldo), então vem como frase, não como mais uma parcela. */}
+        {shows(spentInPeriod) && (
+          <p className="mt-2 border-t border-dashed border-(--hero-line) pt-2 tabular-nums">
+            Para comparar: você já gastou{" "}
+            <span className="font-semibold text-(--hero-fg)">{formatCurrency(spentInPeriod)}</span>{" "}
+            neste período, na conta e no cartão.
+          </p>
+        )}
+      </details>
+      {/* No desktop, aberta: a coluna da direita do hero existe para ela. */}
+      <div className="hidden text-[13px] text-(--hero-muted) lg:block">
+        <p className="text-[12.5px] font-medium">Como chegamos nesse número</p>
+        {body}
+      </div>
+    </>
   );
 }

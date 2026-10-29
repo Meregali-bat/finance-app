@@ -335,7 +335,7 @@ function ReminderCard({
   return (
     <div
       className={homeCard(
-        "flex flex-wrap items-center gap-x-3 gap-y-2 py-3.5 pr-3.5 pl-4 @[31rem]:flex-nowrap lg:py-3.5 lg:pr-3.5 lg:pl-4",
+        "flex flex-wrap items-center gap-x-3 gap-y-2 py-3.5 pr-3.5 pl-4 @[29rem]:flex-nowrap lg:py-3.5 lg:pr-3.5 lg:pl-4",
       )}
     >
       <div
@@ -385,7 +385,7 @@ function ReminderCard({
           da borda): o "Pagar" termina 12px antes dele, em qualquer altura da
           rolagem e com o hero de qualquer tamanho. De `sm` para cima a coluna
           da página (max-w-lg, centrada) já não passa embaixo do botão. */}
-      <div className="flex w-full items-center gap-2 pl-[34px] max-sm:pr-14 @[31rem]:w-auto @[31rem]:shrink-0 @[31rem]:pl-0">
+      <div className="flex w-full items-center gap-2 pl-[34px] max-sm:pr-14 @[29rem]:w-auto @[29rem]:shrink-0 @[29rem]:pl-0">
         {reminder.kind === "due" && reminder.defer && (
           <DeferExpenseDialog
             action={reminder.defer.action}

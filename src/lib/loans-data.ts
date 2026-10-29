@@ -59,10 +59,17 @@ export async function loadDebts(userId: string, today: Date): Promise<DebtView[]
   const nameById = new Map(people.map((p) => [p.id, p.name]));
   return summarizeDebts({ loans, repayments, today }).map((debt) => {
     const next = debt.next;
+    // Ao lado do "te deve R$ X": o valor da próxima parcela vem rotulado, e
+    // some quando é o mesmo total — senão a linha mostra dois valores iguais
+    // sem dizer o que o segundo é.
+    const nextAmount =
+      next && Math.abs(next.amount - debt.remaining) >= 0.005
+        ? `${next.installments > 1 ? "" : "próximo "}${formatCurrency(next.amount)}`
+        : null;
     const detail = next
       ? [
           next.installments > 1 ? `parcela ${next.number}/${next.installments}` : null,
-          formatCurrency(next.amount),
+          nextAmount,
           `${next.overdue ? "venceu" : "vence"} ${formatDate(next.dueDate)}`,
         ]
           .filter(Boolean)

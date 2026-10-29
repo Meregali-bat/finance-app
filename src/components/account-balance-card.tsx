@@ -1,7 +1,6 @@
 import { CircleAlert } from "lucide-react";
 import { formatDate } from "@/lib/format";
 import { staleAdjustmentDays } from "@/lib/account-balance";
-import { StatLabel } from "@/components/page-header";
 import { CountUpCurrency } from "@/components/ui/animated-number";
 import { BalanceAdjustmentDialog } from "@/components/forms/balance-adjustment-dialog";
 import { homeCard } from "@/components/home-card";
@@ -13,6 +12,7 @@ import { cn } from "@/lib/utils";
  * fosse o do banco seria mentir com precisão de centavos.
  */
 export function AccountBalanceCard({
+  id,
   balance,
   adjustedAt,
   registeredMovement,
@@ -20,6 +20,7 @@ export function AccountBalanceCard({
   className,
   style,
 }: {
+  id?: string;
   balance: number | null;
   adjustedAt: Date | null;
   registeredMovement: number;
@@ -32,9 +33,15 @@ export function AccountBalanceCard({
   // fato e passa a pedir conferência com o extrato.
   const staleDays = balance != null && adjustedAt ? staleAdjustmentDays(adjustedAt, today) : null;
   return (
-    <div className={homeCard(cn("flex items-center justify-between gap-4", className))} style={style}>
+    <div
+      id={id}
+      className={homeCard(cn("flex items-center justify-between gap-4", className))}
+      style={style}
+    >
       <div className="flex min-w-0 flex-col gap-1.5">
-        <StatLabel>Saldo em conta</StatLabel>
+        {/* Um título com cara de rótulo: é o número de que o do dia parte, e
+            precisa aparecer na navegação por títulos do leitor de tela. */}
+        <h2 className="text-[12.5px] font-medium text-muted-foreground">Saldo em conta</h2>
         {balance == null ? (
           <p className="text-sm text-muted-foreground">
             Informe o saldo da sua conta para acompanhar quanto você tem agora.
