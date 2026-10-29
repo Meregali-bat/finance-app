@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ForecastArrowKeys } from "@/components/forecast-arrow-keys";
 
 /**
  * As setas são o alvo de toque mais estreito da tela, então valem 44px (o
@@ -38,28 +39,31 @@ export function ForecastNav({
   return (
     <div className="rise-in flex items-center justify-between gap-2 rounded-[18px] bg-card p-1.5 shadow-[inset_0_0_0_1px_var(--hairline)] lg:w-fit lg:min-w-[24rem] lg:self-start">
       {previousHref ? (
-        <Link href={previousHref} className={ARROW_CLASS} aria-label="Período anterior">
+        <Link href={previousHref} className={ARROW_CLASS} aria-label="Ciclo anterior">
           <ChevronLeft className="size-5" aria-hidden="true" />
         </Link>
       ) : (
-        <span className={ARROW_DISABLED_CLASS} aria-hidden="true">
-          <ChevronLeft className="size-5" />
-        </span>
+        // Um botão desativado, e não um enfeite escondido: o leitor de tela
+        // anuncia que não há ciclo antes deste.
+        <button type="button" disabled className={ARROW_DISABLED_CLASS} aria-label="Ciclo anterior">
+          <ChevronLeft className="size-5" aria-hidden="true" />
+        </button>
       )}
 
       <div className="min-w-0 px-2 text-center">
         <p className="truncate font-heading text-base font-semibold tracking-[-0.01em]">{label}</p>
         <p className="truncate text-xs text-muted-foreground">{caption}</p>
       </div>
+      <ForecastArrowKeys previousHref={previousHref} nextHref={nextHref} />
 
       {nextHref ? (
-        <Link href={nextHref} className={ARROW_CLASS} aria-label="Próximo período">
+        <Link href={nextHref} className={ARROW_CLASS} aria-label="Próximo ciclo">
           <ChevronRight className="size-5" aria-hidden="true" />
         </Link>
       ) : (
-        <span className={ARROW_DISABLED_CLASS} aria-hidden="true">
-          <ChevronRight className="size-5" />
-        </span>
+        <button type="button" disabled className={ARROW_DISABLED_CLASS} aria-label="Próximo ciclo">
+          <ChevronRight className="size-5" aria-hidden="true" />
+        </button>
       )}
     </div>
   );

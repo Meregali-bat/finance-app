@@ -50,7 +50,8 @@ export interface BudgetInputs {
   billEstimates: CardBillEstimateInput[];
   expensePayments: ExpensePaymentInput[];
   transactions: NamedTransactionInput[];
-  jarDeposits: JarDepositInput[];
+  /** Com o nome da caixinha, que a Previsão mostra na linha. */
+  jarDeposits: (JarDepositInput & { jarName?: string })[];
   /** O que volta das caixinhas em resgates previstos que ainda não chegaram. */
   jarReturns?: JarReturnInput[];
   /** As fatias da renda, quando configuradas: as de guardar saem do número do dia. */
@@ -171,6 +172,7 @@ export async function loadBudgetInputs(userId: string): Promise<BudgetInputs> {
     })),
     jarDeposits: jarDeposits.map((d) => ({
       amount: Number(d.amount),
+      jarName: d.jar.name,
       date: d.createdAt,
       parked: d.plannedWithdrawalAt !== null,
     })),

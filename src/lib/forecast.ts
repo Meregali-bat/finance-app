@@ -50,6 +50,8 @@ export type ForecastIncomeInput = IncomeInput & { label: string };
 export type ForecastFixedExpenseInput = FixedExpenseInput & { label: string };
 export type ForecastCreditCardInput = CreditCardInput & { name: string };
 export type ForecastTransactionInput = TransactionInput & { id: string; description: string };
+/** O nome da caixinha, para a linha dizer qual é. */
+export type ForecastJarDepositInput = JarDepositInput & { jarName?: string };
 
 export type ForecastEntryKind =
   | "income"
@@ -153,7 +155,7 @@ export interface ForecastInput {
   billEstimates?: CardBillEstimateInput[];
   expensePayments?: ExpensePaymentInput[];
   transactions: ForecastTransactionInput[];
-  jarDeposits?: JarDepositInput[];
+  jarDeposits?: ForecastJarDepositInput[];
   jarReturns?: JarReturnInput[];
   /**
    * O saldo com que o período corrente abre — `openingBalance` do orçamento
@@ -366,10 +368,13 @@ function forecastOnePeriod(
 
   const jarEntries: ForecastEntry[] = jarDeposits
     .filter((deposit) => inPeriod(startOfDay(deposit.date)))
+    // Um depósito negativo é um resgate já feito: a linha diz isso, e qual
+    // caixinha, em vez de sete "Guardado em caixinha" iguais. O valor fica com
+    // o sinal (o total do ciclo depende dele); a tela decide a direção.
     .map((deposit, index) => ({
       kind: "jar" as const,
       sourceId: `jar-${index}`,
-      label: "Guardado em caixinha",
+      label: `${deposit.amount < 0 ? "Resgate de" : "Guardado em"} ${deposit.jarName ?? "caixinha"}`,
       date: startOfDay(deposit.date),
       amount: deposit.amount,
       confirmed: true,

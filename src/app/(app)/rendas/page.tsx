@@ -3,7 +3,7 @@ import { requireUserId } from "@/lib/auth-helpers";
 import { formatCurrency, formatShortDate } from "@/lib/format";
 import { installmentsLeft } from "@/lib/period";
 import { EmptyState } from "@/components/ui/empty-state";
-import { FixedTabs } from "@/components/fixed-tabs";
+import { FixedTabs, type FixedTab } from "@/components/fixed-tabs";
 import { ListRow, stagger } from "@/components/list-row";
 import { IncomeFormDialog } from "@/components/forms/income-form-dialog";
 import { ExpenseFormDialog } from "@/components/forms/expense-form-dialog";
@@ -19,8 +19,21 @@ import {
 import { UndoDeferralButton } from "@/components/undo-deferral-button";
 import { deleteCategory, toggleCategoryActive } from "@/lib/actions/category";
 
-export default async function FixedPage() {
+const FIXED_TABS: readonly FixedTab[] = ["rendas", "despesas", "categorias"];
+
+/** `?aba=despesas` abre direto na aba; qualquer outra coisa, em Rendas. */
+function resolveTab(param: string | string[] | undefined): FixedTab {
+  const raw = Array.isArray(param) ? param[0] : param;
+  return FIXED_TABS.find((tab) => tab === raw) ?? "rendas";
+}
+
+export default async function FixedPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ aba?: string | string[] }>;
+}) {
   const userId = await requireUserId();
+  const { aba } = await searchParams;
   const today = new Date();
 
   const [incomes, expenses, creditCards, categories] = await Promise.all([
@@ -52,6 +65,7 @@ export default async function FixedPage() {
   return (
     <div className="flex flex-col gap-5 lg:gap-6">
       <FixedTabs
+        initialTab={resolveTab(aba)}
         actions={{
           rendas: <IncomeFormDialog />,
           despesas: <ExpenseFormDialog cards={cards} categories={activeCategories} />,
