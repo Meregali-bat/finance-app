@@ -70,7 +70,7 @@ export function AccountBalanceCard({
                   {/* Duas linhas, cada uma inteira: no card estreito, um "·"
                       no meio quebrava a frase de qualquer jeito. "Conferido"
                       é a palavra do hero e da conta para o mesmo momento. */}
-                  <span className="block font-semibold text-foreground">Confira no app do banco</span>
+                  <span className="block font-semibold text-balance text-foreground">Confira no app do banco</span>
                   <span className="block">Conferido há {staleDays} dias</span>
                 </span>
               </p>

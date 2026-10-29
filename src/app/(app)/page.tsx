@@ -599,7 +599,7 @@ export default async function DashboardPage() {
                         ficar escondida no "Mostrar mais". */}
                     {staleDays != null ? (
                       // A única ação desse estado: 44px de toque, sem mudar o desenho.
-                      <a href="#saldo" className={cn(heroLink, "-my-2.5 inline-block w-fit py-2.5")}>
+                      <a href="#saldo" className={cn(heroLink, "-my-3 inline-block w-fit py-3")}>
                         Conferir o saldo
                       </a>
                     ) : canDefer ? (

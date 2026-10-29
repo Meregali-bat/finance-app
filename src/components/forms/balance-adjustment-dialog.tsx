@@ -178,7 +178,7 @@ export function BalanceAdjustmentDialog({
               <Link
                 href={`/historico?range=custom&from=${dayParam(checkedAt)}&to=${dayParam(new Date())}`}
                 onClick={() => setOpen(false)}
-                className="w-fit text-sm font-medium underline decoration-border underline-offset-4 hover:decoration-current"
+                className="-my-3 inline-flex min-h-11 w-fit items-center text-sm font-medium underline decoration-border underline-offset-4 hover:decoration-current"
               >
                 Ver o que entrou e saiu desde {formatDate(checkedAt)}
               </Link>
