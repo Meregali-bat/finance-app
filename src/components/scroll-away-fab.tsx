@@ -68,6 +68,8 @@ export function ScrollAwayFab({
   return (
     <div
       ref={ref}
+      // O toast de desfazer procura isto para subir acima do botão no celular.
+      data-fab=""
       data-hidden={hidden || undefined}
       onFocus={() => setHidden(false)}
       className={cn(

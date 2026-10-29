@@ -62,6 +62,7 @@ export function CountUpCurrency({
   duration = 1.3,
   delay = 0,
   split = false,
+  announce = true,
   className,
   symbolClassName,
   centsClassName,
@@ -76,6 +77,11 @@ export function CountUpCurrency({
   /** Só com `reveal`, em segundos. */
   delay?: number;
   split?: boolean;
+  /**
+   * `false` quando o valor já é dito em outro lugar para o leitor de tela
+   * (o título do hero): o número fica só visual, sem ser lido duas vezes.
+   */
+  announce?: boolean;
   className?: string;
   symbolClassName?: string;
   centsClassName?: string;
@@ -136,7 +142,7 @@ export function CountUpCurrency({
   // O leitor de tela lê só o valor final, como texto: `aria-label` num span
   // genérico é proibido e muitas vezes não é lido, e os dígitos que contam
   // anunciariam valores intermediários.
-  const finalText = <span className="sr-only">{formatCurrency(value)}</span>;
+  const finalText = announce ? <span className="sr-only">{formatCurrency(value)}</span> : null;
   if (!split) {
     return (
       <span className={className}>

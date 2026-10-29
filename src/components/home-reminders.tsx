@@ -62,15 +62,15 @@ type Toast = {
 
 /** O tempo do check turquesa antes de o card começar a sair. */
 const CONFIRM_MS = 380;
-const TOAST_MS = 4000;
 /** Quantos lembretes a Início mostra antes do "Mostrar mais". */
 const COLLAPSED_COUNT = 4;
 
 /**
  * Os lembretes da Início. Confirmar no diálogo não some com o card de
  * repente: o check fica turquesa, o card sai deslizando e encolhendo, e um
- * toast oferece "Desfazer" por 4s. O card some na hora, sem esperar o
- * servidor — quando a página volta revalidada, ele já não vem mais.
+ * toast oferece "Desfazer" (o prazo e a pausa são do `UndoToast`). O card
+ * some na hora, sem esperar o servidor — quando a página volta revalidada,
+ * ele já não vem mais.
  */
 export function HomeReminders({ reminders }: { reminders: HomeReminder[] }) {
   const reduceMotion = useReducedMotion();
@@ -81,24 +81,43 @@ export function HomeReminders({ reminders }: { reminders: HomeReminder[] }) {
   const [toast, setToast] = useState<Toast | null>(null);
   const [undoing, startUndo] = useTransition();
   const timers = useRef<number[]>([]);
+  // O título da lista: para onde o foco volta quando não há card para ele.
+  const heading = useRef<HTMLDivElement>(null);
+  const list = useRef<HTMLUListElement>(null);
+  // O lembrete que recebe o foco se o toast sair com ele dentro. Num ref, e
+  // não no estado do toast: quando o toast sai, o estado já é `null`.
+  const focusAfter = useRef<string | null>(null);
 
   useEffect(() => {
     const pending = timers.current;
     return () => pending.forEach((t) => window.clearTimeout(t));
   }, []);
 
-  useEffect(() => {
-    if (!toast) return;
-    const t = window.setTimeout(() => setToast(null), TOAST_MS);
-    return () => window.clearTimeout(t);
-  }, [toast]);
+  const visible = reminders.filter((r) => !gone.has(r.key));
+
+  /** O primeiro botão de um lembrete, pela chave. */
+  function cardButton(key: string | null) {
+    if (!key) return null;
+    const item = Array.from(list.current?.children ?? []).find(
+      (li) => (li as HTMLElement).dataset.reminderKey === key,
+    );
+    return item?.querySelector<HTMLButtonElement>("button:not(:disabled)") ?? null;
+  }
+
+  /** O lembrete que fica no lugar de `key`: o de baixo, ou o de cima no fim. */
+  function neighbour(key: string) {
+    const i = visible.findIndex((r) => r.key === key);
+    return (visible[i + 1] ?? visible[i - 1])?.key ?? null;
+  }
 
   function finish(key: string, text: string, undo?: () => Promise<void>) {
     setConfirmed((s) => new Set(s).add(key));
+    const nextKey = neighbour(key);
     timers.current.push(
       window.setTimeout(
         () => {
           setGone((s) => new Set(s).add(key));
+          focusAfter.current = nextKey;
           setToast({ id: Date.now(), key, text, undo });
         },
         reduceMotion ? 0 : CONFIRM_MS,
@@ -110,7 +129,12 @@ export function HomeReminders({ reminders }: { reminders: HomeReminder[] }) {
   function partial(key: string, text: string, undo: () => Promise<void>) {
     // No setTimeout, como em `finish`: chamar Date.now() direto no handler
     // a regra de pureza do React não aceita.
-    timers.current.push(window.setTimeout(() => setToast({ id: Date.now(), key, text, undo }), 0));
+    timers.current.push(
+      window.setTimeout(() => {
+        focusAfter.current = key;
+        setToast({ id: Date.now(), key, text, undo });
+      }, 0),
+    );
   }
 
   function undo() {
@@ -128,10 +152,14 @@ export function HomeReminders({ reminders }: { reminders: HomeReminder[] }) {
       };
       setGone(drop);
       setConfirmed(drop);
+      // O foco esperava no título; com o lembrete de volta, vai para ele.
+      timers.current.push(
+        window.setTimeout(() => {
+          if (document.activeElement === heading.current) cardButton(key)?.focus();
+        }, 50),
+      );
     });
   }
-
-  const visible = reminders.filter((r) => !gone.has(r.key));
   // No celular, doze lembretes empurram o resto da Início para longe: os
   // primeiros (os vencidos vêm na frente) ficam à vista, o resto abre num toque.
   const [expanded, setExpanded] = useState(false);
@@ -154,7 +182,11 @@ export function HomeReminders({ reminders }: { reminders: HomeReminder[] }) {
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex items-center gap-2">
+      <div
+        ref={heading}
+        tabIndex={-1}
+        className="-mx-1 flex items-center gap-2 rounded-lg px-1 outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
         <SectionLabel>Lembretes</SectionLabel>
         {visible.length > 0 && (
           <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-secondary px-1.5 text-[11px] font-semibold tabular-nums">
@@ -174,11 +206,12 @@ export function HomeReminders({ reminders }: { reminders: HomeReminder[] }) {
           <p className="text-[13px] text-muted-foreground">Nenhum lembrete pendente.</p>
         </div>
       ) : (
-        <ul className="flex flex-col">
+        <ul ref={list} className="flex flex-col">
           <AnimatePresence initial={false}>
             {shown.map((reminder) => (
               <motion.li
                 key={reminder.key}
+                data-reminder-key={reminder.key}
                 // A saída em duas camadas, como no handoff: some primeiro, e
                 // só então desliza e fecha o espaço que ocupava.
                 exit={{
@@ -250,7 +283,14 @@ export function HomeReminders({ reminders }: { reminders: HomeReminder[] }) {
       <UndoToast
         toast={toast && { id: toast.id, text: toast.text, hasUndo: Boolean(toast.undo) }}
         onUndo={undo}
+        onDismiss={() => setToast(null)}
         undoing={undoing}
+        // Desfez: o lembrete só volta com a resposta do servidor, então o
+        // foco espera no título (e `undo` o leva ao card depois). Acabou o
+        // prazo: o card que ficou no lugar do pago, ou o título.
+        restoreFocus={(reason) =>
+          (reason === "dismiss" ? cardButton(focusAfter.current) : null) ?? heading.current
+        }
       />
     </div>
   );
