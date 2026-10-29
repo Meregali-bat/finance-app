@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -31,11 +31,18 @@ export function BalanceAdjustmentDialog({
   currentBalance,
   registeredMovement,
   stale = false,
+  openOnHash,
 }: {
   currentBalance: number | null;
   registeredMovement: number;
   /** O saldo pede conferência: o lápis ganha o texto "Atualizar" ao lado. */
   stale?: boolean;
+  /**
+   * Abre sozinho quando o endereço chega com esse "#": o "Conferir o saldo" do
+   * hero termina na ação, e não num card a procurar. Sem JS, o link só rola
+   * até o card, que leva o mesmo id.
+   */
+  openOnHash?: string;
 }) {
   const hasBalance = currentBalance != null;
   const triggerLabel = hasBalance ? "Atualizar saldo" : "Informar saldo";
@@ -46,6 +53,20 @@ export function BalanceAdjustmentDialog({
   const [sign, setSign] = useState<"positivo" | "negativo">(
     currentBalance != null && currentBalance < 0 ? "negativo" : "positivo",
   );
+
+  useEffect(() => {
+    if (!openOnHash) return;
+    const check = () => {
+      if (window.location.hash !== `#${openOnHash}`) return;
+      setSign(currentBalance != null && currentBalance < 0 ? "negativo" : "positivo");
+      setOpen(true);
+      // Limpo do endereço: o mesmo link precisa abrir de novo no próximo toque.
+      window.history.replaceState(null, "", window.location.pathname + window.location.search);
+    };
+    check();
+    window.addEventListener("hashchange", check);
+    return () => window.removeEventListener("hashchange", check);
+  }, [openOnHash, currentBalance]);
 
   function handleSubmit(formData: FormData) {
     setError(null);

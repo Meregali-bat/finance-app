@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import type { PeriodBudget } from "@/lib/period";
 import { formatCurrency, formatDate } from "@/lib/format";
+import { cn } from "@/lib/utils";
 
 type Line = {
   label: string;
@@ -9,6 +10,8 @@ type Line = {
   kind: "start" | "step" | "total" | "divide";
   /** O que fica de lado leva para onde ele é decidido: a previsão ou as metas. */
   href?: string;
+  /** Um total que falta: o rótulo já diz, o valor vai sem sinal e em coral. */
+  negative?: boolean;
 };
 
 /** Abaixo de meio centavo a linha não diz nada: some. */
@@ -48,7 +51,7 @@ function breakdownLines({
     // Com o saldo velho, a linha diz de quando ele é: o número parte dele.
     lines.push({
       label: accountBalanceDate
-        ? `Saldo em conta (conferido em ${formatDate(accountBalanceDate)})`
+        ? `Saldo em conta (estimado; conferido em ${formatDate(accountBalanceDate)})`
         : "Saldo em conta",
       amount: accountBalance,
       kind: "start",
@@ -57,7 +60,7 @@ function breakdownLines({
       lines.push({ label: "Contas e faturas a pagar", amount: -toPay, kind: "step" });
     if (shows(scheduled))
       lines.push({
-        label: scheduled > 0 ? "Entradas ainda previstas" : "Lançamentos agendados",
+        label: scheduled > 0 ? "Recebimentos e resgates por vir" : "Lançamentos com data futura",
         amount: scheduled,
         kind: "step",
         // A diferença que fecha a conta junta várias coisas (resgates,
@@ -88,7 +91,15 @@ function breakdownLines({
       if (shows(amount)) lines.push({ label, amount, kind: "step" });
   }
 
-  lines.push({ label: "Livre até receber", amount: budget.periodBalance, kind: "total" });
+  // No vermelho, o rótulo diz o lado: "livre" negativo não é coisa que se lê.
+  // O valor vai sem sinal, em coral, como no hero.
+  const short = budget.periodBalance < -0.005;
+  lines.push({
+    label: short ? "Falta até receber" : "Livre até receber",
+    amount: short ? -budget.periodBalance : budget.periodBalance,
+    kind: "total",
+    negative: short,
+  });
 
   const days = budget.daysRemaining;
   const spendable = dailyAvailable * days;
@@ -114,8 +125,9 @@ function breakdownLines({
     lines.push({ label: "Para gastar até receber", amount: spendable, kind: "total" });
   lines.push({
     label: `÷ ${days} ${days === 1 ? "dia" : "dias"}`,
-    amount: dailyAvailable,
+    amount: Math.abs(dailyAvailable),
     kind: "divide",
+    negative: dailyAvailable < -0.005,
   });
   return { lines, reconciles };
 }
@@ -194,12 +206,12 @@ export function BudgetBreakdown(props: BudgetBreakdownProps) {
                   />
                 </Link>
               ) : line.kind === "divide" ? (
-                `Por dia (${line.label})`
+                `${line.negative ? "Falta por dia" : "Por dia"} (${line.label})`
               ) : (
                 line.label
               )}
             </dt>
-            <dd className="shrink-0 text-right">
+            <dd className={cn("shrink-0 text-right", line.negative && "text-negative")}>
               {line.kind === "step" ? signed(line.amount) : formatCurrency(line.amount)}
             </dd>
           </div>

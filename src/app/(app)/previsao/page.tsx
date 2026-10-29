@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   ArrowDownLeft,
   ArrowUpRight,
+  ChevronDown,
   ChevronRight,
   CalendarClock,
   Gauge,
@@ -101,7 +102,8 @@ const GROUPS: {
 function groupLabel(kind: ForecastEntryKind, label: string, offset: number) {
   if (offset !== 0) return label;
   if (kind === "scheduled") return "Lançamentos";
-  if (kind === "income") return "Entradas";
+  // Não "Entradas": é o nome do chip do hero, que soma também as caixinhas.
+  if (kind === "income") return "Rendas e recebimentos";
   return label;
 }
 
@@ -198,17 +200,35 @@ function EntryRow({
   entry,
   incoming,
   index,
+  current,
 }: {
   entry: ForecastEntry;
   incoming: boolean;
   index: number;
+  /** No ciclo corrente, passado e futuro se misturam: cada linha diz o seu. */
+  current: boolean;
 }) {
+  // Uma ocorrência que pode estar só projetada (renda, conta, fatura, resgate
+  // agendado) diz se já aconteceu, com a palavra do seu lado.
+  const projectable = entry.kind !== "scheduled" && entry.kind !== "jar";
+  const status = !projectable
+    ? null
+    : entry.confirmed
+      ? entry.kind === "income"
+        ? "recebido"
+        : entry.kind === "jarReturn"
+          ? "resgatado"
+          : "pago"
+      : current && !entry.awaiting
+        ? incoming
+          ? "previsto"
+          : "a pagar"
+        : null;
   const detail = [
     formatDate(entry.date),
-    // "Confirmado" só distingue alguma coisa onde existe o contrário: uma
-    // ocorrência recorrente pode estar projetada ou já ter acontecido. Um
-    // lançamento é sempre um registro real.
-    entry.confirmed && entry.kind !== "scheduled" && entry.kind !== "jar" && "confirmado",
+    // Só onde existe o contrário: um lançamento é sempre um registro real. À
+    // frente, tudo é previsão, e só o que já foi pago ganha palavra.
+    status,
     entry.partial && "ainda aberta",
     entry.deferredIn && `inclui ${formatCurrency(entry.deferredIn)} adiados`,
     // Mostrado mas fora da conta, como na Início: um salário que ninguém disse
@@ -323,12 +343,15 @@ export default async function ForecastPage({
   // O que chega ao ciclo da tela vindo do anterior, no ritmo: só uma falta
   // herdada merece a frase "o que faltar antes passa para ele".
   const prevCycle = offset > 0 ? periods[offset - 1] : null;
-  const carriesShortfall =
+  const carryIn =
     paceByCycle && prevCycle
       ? paceByCycle[offset - 1] -
-          Math.min(0, isNegativeCycle(prevCycle) ? prevCycle.endBalance : prevCycle.freeToSpend) <
-        -0.005
-      : false;
+        Math.min(0, isNegativeCycle(prevCycle) ? prevCycle.endBalance : prevCycle.freeToSpend)
+      : 0;
+  const carriesShortfall = carryIn < -0.005;
+  // O par: no ritmo, a sobra de antes passa adiante (o hero a conta como
+  // gasta). Sem dizer, a conta do card não fecha de cabeça.
+  const carriesSurplus = Math.max(0, carryIn);
   // O mesmo caminho sem gasto nenhum no dia a dia: quando ele já falta, cortar
   // o dia a dia não fecha a conta, e dizer "gaste R$ X a menos" mentiria.
   const noSpendLeft = pace
@@ -371,6 +394,8 @@ export default async function ForecastPage({
     .filter((entry) => entry.kind === "jar" && entry.amount < 0)
     .reduce((sum, entry) => sum - entry.amount, 0);
   const incomingTotal = period.incomeTotal + period.jarReturnTotal + jarIn;
+  // O que foi guardado e voltou dentro do mesmo ciclo: o menor dos dois lados.
+  const jarRoundTrip = Math.min(period.jarTotal + jarIn, period.jarReturnTotal + jarIn);
   // As listas por grupo, com o subtotal positivo dos dois lados (o sinal é o
   // lado). Um agendado que só espera confirmação não entra na conta.
   const groupLists = GROUPS.map((group) => {
@@ -486,14 +511,39 @@ export default async function ForecastPage({
 
   const inheritedLabel =
     period.offset > 0
-      ? period.inherited < -0.005
-        ? "Faltou nos ciclos anteriores"
-        : "Guardado dos ciclos anteriores"
+      ? period.offset === 1
+        ? // O anterior é o corrente, que nem terminou: "faltou" seria passado.
+          period.inherited < -0.005
+          ? "Falta do ciclo atual"
+          : "Guardado do ciclo atual"
+        : period.inherited < -0.005
+          ? "Faltou nos ciclos anteriores"
+          : "Guardado dos ciclos anteriores"
       : budget.openingSource === "account"
         ? period.inherited < -0.005
           ? "Faltava na conta"
           : "Já estava na conta"
         : "Veio dos ciclos anteriores";
+
+  // Os subtotais somados até o "Saldo do ciclo" do hero. Só aparece quando a
+  // soma bate: uma conta que não fecha seria pior que nenhuma.
+  const showSummary = summaryReconciles && groupLists.length > 1;
+  const summaryLedger = (
+    <dl className="flex flex-col gap-1.5">
+      {groupLists.map((group) => (
+        <div key={group.key} className="flex justify-between gap-3">
+          <dt className="text-muted-foreground">{groupLabel(group.kind, group.label, period.offset)}</dt>
+          <dd className="shrink-0">
+            {group.incoming ? "+" : "−"} {formatCurrency(group.subtotal)}
+          </dd>
+        </div>
+      ))}
+      <div className="mt-1 flex justify-between gap-3 border-t border-border pt-2 font-semibold">
+        <dt>Saldo do ciclo</dt>
+        <dd>{formatCurrency(period.periodResult)}</dd>
+      </div>
+    </dl>
+  );
 
   return (
     <div className="flex flex-col gap-6">
@@ -562,7 +612,9 @@ export default async function ForecastPage({
               </p>
               {/* O ciclo atual no vermelho: as saídas aqui mesmo, no hero. */}
               {heroExits && exitLinks(heroExits)}
-              <div className="grid grid-cols-2 gap-2">
+              {/* Uma coluna nos celulares estreitos: são os números a conferir,
+                  e cortados não se conferem. */}
+              <div className="grid grid-cols-1 gap-2 min-[400px]:grid-cols-2">
                 {[
                   {
                     label: "Entradas",
@@ -595,6 +647,14 @@ export default async function ForecastPage({
                   </div>
                 ))}
               </div>
+              {/* Guardar e resgatar no mesmo ciclo passa pelos dois chips: a
+                  soma está certa, mas "entrou 15 mil" com renda de 10 assusta
+                  sem a nota. */}
+              {jarRoundTrip > 0.005 && (
+                <p className="text-[12.5px] text-(--hero-muted) tabular-nums">
+                  Os dois incluem {formatCurrency(jarRoundTrip)} que foram e voltaram das caixinhas.
+                </p>
+              )}
             </div>
 
             {/* A conta por trás do número grande, como uma fita: o que veio de
@@ -699,23 +759,22 @@ export default async function ForecastPage({
                 <span className={paceLeft < -0.005 ? "text-negative" : undefined}>
                   {paceLeft < -0.005 ? "faltando" : "sobrando"}
                 </span>{" "}
-                em {dateIn(lastDay(period), currentYear)}
+                em{" "}
+                <span className="whitespace-nowrap">{dateIn(lastDay(period), currentYear)}</span>
               </span>
-            </p>
-            {/* De onde vem o ritmo: sem isso, o valor por dia é um número solto. */}
-            <p className="text-[12.5px] text-muted-foreground tabular-nums">
-              É a média do ciclo atual: {formatCurrency(pace.spent)} em {pace.elapsedDays}{" "}
-              {pace.elapsedDays === 1 ? "dia" : "dias"}, na conta e no cartão.
             </p>
             {/* Duas frases curtas: o ritmo, e só quando falta, a saída. O ritmo
                 é sempre o de agora, mesmo com um ciclo à frente na tela. */}
-            {(period.offset > 0 || pace.remainingDays > 0) && (
-              <p className="text-[13.5px] leading-relaxed text-muted-foreground tabular-nums">
-                {period.offset === 0
-                  ? `Nesse ritmo, saem mais ${formatCurrency(pace.projectedSpending)} até o fim do ciclo.`
-                  : `Nesse ritmo, os ${period.totalDays} dias do ciclo de ${cycleMonth(period, currentYear)} levam ${formatCurrency(pace.perDay * period.totalDays)}${carriesShortfall ? ", e o que faltar antes passa para ele" : ""}.`}
-              </p>
-            )}
+            {/* De onde vem o ritmo, e o que ele leva: sem a origem, o valor
+                por dia é um número solto. */}
+            <p className="text-[13.5px] leading-relaxed text-muted-foreground tabular-nums">
+              {`É a média do ciclo atual (${formatCurrency(pace.spent)} em ${pace.elapsedDays} ${pace.elapsedDays === 1 ? "dia" : "dias"}, na conta e no cartão)`}
+              {period.offset === 0
+                ? pace.remainingDays > 0
+                  ? `: saem mais ${formatCurrency(pace.projectedSpending)} até o fim do ciclo.`
+                  : "."
+                : `: os ${period.totalDays} dias do ciclo de ${cycleMonth(period, currentYear)} levam ${formatCurrency(pace.perDay * period.totalDays)}${carriesShortfall ? ", e o que faltar antes passa para ele" : carriesSurplus > 0.005 ? `, somando ${formatCurrency(carriesSurplus)} que sobram ${offset === 1 ? "do ciclo atual" : "dos ciclos antes"}, nesse ritmo` : ""}.`}
+            </p>
             {paceLeft < -0.005 && (noSpendLeft < -0.005 || paceDays > 0) && (
               <p className="text-[13.5px] leading-relaxed text-muted-foreground tabular-nums">
                 {noSpendLeft < -0.005
@@ -723,7 +782,7 @@ export default async function ForecastPage({
                   : targetFromNext !== null
                     ? // O ciclo atual já fecha no vermelho: o número de hoje é
                       // zero, então o alvo só vale do próximo ciclo em diante.
-                      `Para fechar, não gaste mais nada no ciclo atual e, a partir de ${dateIn(periods[1].periodStart, currentYear)}, até ${formatCurrency(targetFromNext)} por dia.`
+                      `Para fechar, não gaste mais nada no ciclo atual e, a partir de ${dateIn(periods[1].periodStart, currentYear)}, até ${formatCurrency(Math.abs(targetFromNext - periods[1].dailyAvailable) < 0.01 ? periods[1].dailyAvailable : targetFromNext)} por dia.`
                   : period.offset > 0 && paceTarget < period.dailyAvailable - 0.005
                     ? // Abaixo do número de cima: diz por quê, senão os dois
                       // números diários parecem se contradizer.
@@ -752,7 +811,7 @@ export default async function ForecastPage({
                   <span className="font-semibold text-foreground">
                     {timelineShort.length} dos {timeline.length}
                   </span>{" "}
-                  {timelineShort.length === 1 ? "ciclos fecha" : "ciclos fecham"} com falta · pior{" "}
+                  {timelineShort.length === 1 ? "ciclos fecha com falta:" : "ciclos fecham com falta · pior"}{" "}
                   {/* O pior ciclo é um link: dá para ir direto a ele. */}
                   <Link
                     href={forecastHref(timelineWorst.offset)}
@@ -850,37 +909,34 @@ export default async function ForecastPage({
                           entry={entry}
                           incoming={group.incoming}
                           index={index}
+                          current={period.offset === 0}
                         />
                       ))}
                     />
                   </div>
                 ))}
-              {/* Os subtotais somados até o "Saldo do ciclo" do hero. Só
-                  aparece quando a soma bate: uma conta que não fecha seria
-                  pior que nenhuma. */}
-              {side && summaryReconciles && groupLists.length > 1 && (
+              {side && showSummary && (
                 <div className="hidden flex-col gap-2 rounded-[18px] p-4 text-[13.5px] tabular-nums ring-1 ring-border xl:flex">
                   <SectionLabel>Resumo do ciclo</SectionLabel>
-                  <dl className="flex flex-col gap-1.5">
-                    {groupLists.map((group) => (
-                      <div key={group.key} className="flex justify-between gap-3">
-                        <dt className="text-muted-foreground">
-                          {groupLabel(group.kind, group.label, period.offset)}
-                        </dt>
-                        <dd>
-                          {group.incoming ? "+" : "−"} {formatCurrency(group.subtotal)}
-                        </dd>
-                      </div>
-                    ))}
-                    <div className="mt-1 flex justify-between gap-3 border-t border-border pt-2 font-semibold">
-                      <dt>Saldo do ciclo</dt>
-                      <dd>{formatCurrency(period.periodResult)}</dd>
-                    </div>
-                  </dl>
+                  {summaryLedger}
                 </div>
               )}
             </div>
           ))}
+          {/* Abaixo do xl as colunas se empilham: o resumo vem depois das
+              duas, fechado, para conferir os chips sem somar de cabeça. */}
+          {showSummary && (
+            <details className="group/sum rounded-[18px] p-4 text-[13.5px] tabular-nums ring-1 ring-border xl:hidden">
+              <summary className="-my-2.5 flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 font-medium select-none [&::-webkit-details-marker]:hidden">
+                Como chega ao saldo do ciclo
+                <ChevronDown
+                  aria-hidden="true"
+                  className="size-4 shrink-0 text-muted-foreground transition-transform duration-150 group-open/sum:rotate-180"
+                />
+              </summary>
+              <div className="mt-3">{summaryLedger}</div>
+            </details>
+          )}
         </div>
       )}
     </div>

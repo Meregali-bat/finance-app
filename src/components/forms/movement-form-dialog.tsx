@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, type ReactNode } from "react";
+import { useEffect, useState, useTransition, type ReactNode } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -38,11 +38,17 @@ export function MovementFormDialog({
   categories = [],
   movement,
   children,
+  shortcut,
 }: {
   cards: { id: string; name: string }[];
   categories?: { id: string; name: string }[];
   movement?: MovementValues;
   children?: ReactNode;
+  /**
+   * Uma tecla que abre o diálogo de nova movimentação, para quem lança pelo
+   * computador. Fora de campos e diálogos, e sem modificador.
+   */
+  shortcut?: string;
 }) {
   const isEdit = !!movement;
   const [open, setOpen] = useState(false);
@@ -54,6 +60,21 @@ export function MovementFormDialog({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!shortcut || isEdit) return;
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return;
+      if (event.key.toLowerCase() !== shortcut) return;
+      const target = event.target as HTMLElement | null;
+      if (target?.closest("input, textarea, select, [contenteditable], [role=dialog]")) return;
+      if (document.querySelector("[role=dialog]")) return;
+      event.preventDefault();
+      setOpen(true);
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [shortcut, isEdit]);
 
   function handleOpenChange(next: boolean) {
     setOpen(next);
@@ -124,6 +145,7 @@ export function MovementFormDialog({
               // canto da tela larga fica desligado do conteúdo.
               <button
                 type="button"
+                aria-keyshortcuts={shortcut?.toUpperCase()}
                 className="cta-surface fab-in flex size-[58px] items-center justify-center rounded-full text-white transition-[transform,box-shadow] duration-150 ease-out-quint active:scale-[0.97] lg:h-11 lg:w-auto lg:gap-2 lg:rounded-[14px] lg:pr-[18px] lg:pl-[14px] lg:text-sm lg:font-semibold lg:hover:-translate-y-px"
               />
             )
@@ -135,6 +157,15 @@ export function MovementFormDialog({
             <>
               <Plus className="size-[26px] lg:size-[18px]" aria-hidden="true" />
               <span className="sr-only lg:not-sr-only">Nova movimentação</span>
+              {/* A dica da tecla, só onde há teclado. */}
+              {shortcut && (
+                <kbd
+                  aria-hidden="true"
+                  className="hidden rounded-md bg-white/18 px-1.5 font-sans text-xs leading-5 font-semibold uppercase lg:inline"
+                >
+                  {shortcut}
+                </kbd>
+              )}
             </>
           )}
         </DialogTrigger>
