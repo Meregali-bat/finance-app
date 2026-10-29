@@ -67,7 +67,7 @@ function shortHeading(date: Date) {
  * (último atraso, 140ms, mais 260ms) acaba em ~400ms, e as linhas da lista
  * sobem com a coluna em vez de uma por uma. Os atrasos seguem a ordem de cima
  * para baixo, que é a do HTML nos dois tamanhos: cabeçalho 0, hero 40,
- * lembretes 80, o dia 100, as ferramentas 120, o "a receber" e os avisos 140.
+ * o dia 100, lembretes e ferramentas 120, o "a receber" e os avisos 140.
  */
 function rise(ms: number) {
   return { "--rise-delay": `${ms}ms`, "--rise-duration": "260ms" } as React.CSSProperties;
@@ -509,8 +509,9 @@ export default async function DashboardPage() {
                     {/* O número parte do saldo em conta; com ele velho, o
                         aviso vem aqui, onde o número é lido — e não só no card
                         do saldo, abaixo da dobra. É a causa mais provável de um
-                        vermelho que não é de verdade. */}
-                    {staleDays != null && (
+                        vermelho que não é de verdade: no vermelho, ele vira
+                        a própria frase do déficit, mais abaixo. */}
+                    {staleDays != null && !isOverBudget && (
                       <p className="flex items-start gap-1 text-sm text-(--hero-muted) tabular-nums">
                         <CircleAlert
                           aria-hidden="true"
@@ -554,15 +555,23 @@ export default async function DashboardPage() {
                     {/* A data já está na unidade acima; aqui vem o total do período. */}
                     {/* "Fecha no negativo", e não "faltam": o "faltam" da
                         linha da régua é de dias. É o único lugar do déficit;
-                        no vermelho, a régua não repete o livre até receber. */}
+                        no vermelho, a régua não repete o livre até receber.
+                        Com o saldo velho, o déficit vira condicional e a
+                        única saída é conferir o saldo: adiar uma conta por um
+                        vermelho que pode não existir seria agir pela mentira. */}
                     <p className="font-medium text-(--hero-fg)">
-                      O período fecha {formatCurrency(periodDeficit)} no negativo, mesmo sem
-                      gastar mais nada.
+                      {staleDays != null
+                        ? `O período fecharia ${formatCurrency(periodDeficit)} no negativo, mas a conta usa o saldo de ${staleDays} dias atrás.`
+                        : `O período fecha ${formatCurrency(periodDeficit)} no negativo, mesmo sem gastar mais nada.`}
                     </p>
                     {/* Âncora nativa, não `Link`: o `hashchange` é o que faz os
                         lembretes abrirem por inteiro, para a conta adiável não
                         ficar escondida no "Mostrar mais". */}
-                    {canDefer ? (
+                    {staleDays != null ? (
+                      <a href="#saldo" className={heroLink}>
+                        Conferir o saldo
+                      </a>
+                    ) : canDefer ? (
                       <a href="#lembretes" className={heroLink}>
                         Veja o que dá para adiar
                       </a>
@@ -579,7 +588,7 @@ export default async function DashboardPage() {
                 <DayRuler totalDays={totalDays} elapsedDays={elapsedDays} />
                 {/* O gasto acumulado, dia a dia, embaixo das barras dos dias
                     que já passaram. Do primeiro dia não há curva: o gasto dele
-                    é o "Já descontado: você gastou…" lá em cima. */}
+                    está no "Já descontado o que saiu hoje" lá em cima. */}
                 {trendSpan > 0 && (
                   <div
                     style={{
@@ -607,7 +616,14 @@ export default async function DashboardPage() {
                     número, aberta só quando pedida: o hero leva um valor a
                     menos. A data do pagamento já está sob o número, e o dia de
                     hoje, na régua. */}
-                <div className="flex flex-wrap justify-between gap-x-3 gap-y-0.5 pt-0.5 text-xs font-medium text-(--hero-muted) tabular-nums">
+                {/* No vermelho, no celular, a linha teria só o "faltam N
+                    dias", que repete a data da unidade: some, e o hero
+                    encurta. No desktop fica, com o gasto do período. */}
+                <div
+                  className={`flex flex-wrap justify-between gap-x-3 gap-y-0.5 pt-0.5 text-xs font-medium text-(--hero-muted) tabular-nums ${
+                    isOverBudget ? "max-lg:hidden" : ""
+                  }`}
+                >
                   <p className="hidden lg:block">
                     Gasto no período{" "}
                     <span className="font-semibold text-(--hero-fg)">

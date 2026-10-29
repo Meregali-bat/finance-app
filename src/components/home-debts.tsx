@@ -45,7 +45,7 @@ export function HomeDebts({ debts }: { debts: DebtView[] }) {
   const total = debts.reduce((sum, d) => sum + d.remaining, 0);
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="@container flex flex-col gap-3">
       <div
         ref={heading}
         tabIndex={-1}
@@ -58,7 +58,9 @@ export function HomeDebts({ debts }: { debts: DebtView[] }) {
           </span>
         )}
       </div>
-      <ul ref={list} className="flex flex-col gap-2.5">
+      {/* Com a faixa toda do desktop (sem os avisos ao lado), duas colunas:
+          uma linha de 980px deixava o "Recebi" longe do nome. */}
+      <ul ref={list} className="grid items-start gap-2.5 @3xl:grid-cols-2 @3xl:gap-x-4">
         {debts.map((debt) => (
           <li key={debt.personId} data-person-id={debt.personId}>
             <DebtCard

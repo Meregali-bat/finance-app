@@ -121,6 +121,11 @@ function signed(amount: number) {
   return `${amount < 0 ? "−" : "+"} ${formatCurrency(Math.abs(amount))}`;
 }
 
+/** Os totais com o mesmo "−" das parcelas, e não o hífen do Intl: é uma coluna só. */
+function withMinus(amount: number) {
+  return amount < 0 ? `−${formatCurrency(Math.abs(amount))}` : formatCurrency(amount);
+}
+
 type BudgetBreakdownProps = {
   budget: PeriodBudget;
   accountBalance: number | null;
@@ -197,7 +202,7 @@ export function BudgetBreakdown(props: BudgetBreakdownProps) {
               )}
             </dt>
             <dd className="shrink-0 text-right">
-              {line.kind === "step" ? signed(line.amount) : formatCurrency(line.amount)}
+              {line.kind === "step" ? signed(line.amount) : withMinus(line.amount)}
             </dd>
           </div>
         ))}

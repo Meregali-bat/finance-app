@@ -5,16 +5,18 @@ export function formatCurrency(amount: number): string {
   }).format(amount);
 }
 
+// Em prosa, "8 de nov.", como se escreve, e não "08 de nov.": o zero à
+// esquerda é de data numérica ("08/11/26", em `formatShortDate`).
 export function formatDate(date: Date): string {
   return new Intl.DateTimeFormat("pt-BR", {
-    day: "2-digit",
+    day: "numeric",
     month: "short",
   }).format(date);
 }
 
 export function formatDateLong(date: Date): string {
   return new Intl.DateTimeFormat("pt-BR", {
-    day: "2-digit",
+    day: "numeric",
     month: "long",
     year: "numeric",
   }).format(date);
@@ -28,7 +30,7 @@ export function formatDateLong(date: Date): string {
 /** O dia de uma data de lançamento, já formatado. */
 export function formatDateOnly(date: Date): string {
   return new Intl.DateTimeFormat("pt-BR", {
-    day: "2-digit",
+    day: "numeric",
     month: "short",
     timeZone: "UTC",
   }).format(date);
