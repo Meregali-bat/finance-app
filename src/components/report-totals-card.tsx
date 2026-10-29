@@ -12,7 +12,6 @@ import { cn } from "@/lib/utils";
 export function ReportTotalsCard({
   totals,
   carried = 0,
-  periodLabel,
 }: {
   totals: ReportTotals;
   /**
@@ -20,8 +19,6 @@ export function ReportTotalsCard({
    * resto do app — o que faltou num mês não some no outro.
    */
   carried?: number;
-  /** "Outubro de 2026", para dizer de onde vem cada parte do saldo. */
-  periodLabel?: string;
 }) {
   const hasCarry = Math.abs(carried) >= 0.005;
   const balance = totals.balance + carried;
@@ -58,16 +55,14 @@ export function ReportTotalsCard({
             </p>
             {/* A caixinha não é gasto nem receita, mas sai do saldo: sem dizer
                 isso, o saldo pareceria não bater com as duas colunas. */}
-            {/* De onde vem o saldo: o período mais o que veio dos anteriores. */}
+            {/* De onde vem o saldo: só o que veio dos anteriores, como parcela.
+                A parte do período sai da conta, e com ela a nota passava de
+                quatro linhas no celular. */}
             {figure.label === "Saldo" && hasCarry && (
               <p className="text-xs text-muted-foreground tabular-nums">
-                {formatCurrency(totals.balance)}{" "}
-                {periodLabel
-                  ? `de ${periodLabel.toLocaleLowerCase("pt-BR").replace(/ de \d{4}$/, "")}`
-                  : "do período"}
-                {" · "}
+                {carried < 0 ? "− " : "+ "}
                 <span className={carried < 0 ? "text-negative" : undefined}>
-                  {formatCurrency(carried)}
+                  {formatCurrency(Math.abs(carried))}
                 </span>{" "}
                 {carried < 0 ? "que faltou antes" : "que sobrou antes"}
               </p>
@@ -75,8 +70,8 @@ export function ReportTotalsCard({
             {figure.label === "Saldo" && Math.abs(totals.saved) >= 0.005 && (
               <p className="text-xs text-muted-foreground tabular-nums">
                 {totals.saved > 0
-                  ? `descontados ${formatCurrency(totals.saved)} guardados`
-                  : `somados ${formatCurrency(-totals.saved)} resgatados`}
+                  ? `− ${formatCurrency(totals.saved)} guardados`
+                  : `+ ${formatCurrency(-totals.saved)} resgatados`}
               </p>
             )}
           </div>

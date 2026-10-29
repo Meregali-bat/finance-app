@@ -1,3 +1,4 @@
+import { ChevronDown } from "lucide-react";
 import { homeCard } from "@/components/home-card";
 import { ListRow, stagger } from "@/components/list-row";
 import { SectionLabel } from "@/components/page-header";
@@ -15,6 +16,9 @@ export type ProjectedBill = {
   dueDateIso: string;
   dueDate: Date;
   amount: number;
+  /** As três partes do total, para a linha dizer de onde ele vem. */
+  purchaseAmount: number;
+  fixedExpenseAmount: number;
   estimateAmount: number;
   paid: boolean;
   paidAmount?: number;
@@ -31,6 +35,17 @@ export type ListedEstimate = {
   amount: number;
 };
 
+/** "compras R$ 1.750,59 · assinaturas R$ 209,00 · previsto R$ 100,00". */
+function billParts(bill: ProjectedBill): string | null {
+  const parts = [
+    ["compras", bill.purchaseAmount],
+    ["assinaturas", bill.fixedExpenseAmount],
+    ["previsto", bill.estimateAmount],
+  ].filter(([, amount]) => (amount as number) >= 0.005) as [string, number][];
+  if (parts.length < 2) return null;
+  return parts.map(([label, amount]) => `${label} ${formatCurrency(amount)}`).join(" · ");
+}
+
 export function CardBillProjection({
   cardId,
   bills,
@@ -40,6 +55,26 @@ export function CardBillProjection({
   bills: ProjectedBill[];
   estimates: ListedEstimate[];
 }) {
+  const paidDue = new Set(bills.filter((b) => b.paid).map((b) => b.dueDate.getTime()));
+  const firstDue = bills[0]?.dueDate.getTime() ?? 0;
+  const isPast = (e: ListedEstimate) =>
+    paidDue.has(e.dueDate.getTime()) || e.dueDate.getTime() < firstDue;
+  const upcoming = estimates.filter((e) => !isPast(e));
+  const past = estimates.filter(isPast);
+  const estimateRow = (estimate: ListedEstimate) => (
+    <ListRow
+      key={estimate.id}
+      title={estimate.description}
+      subtitle={`Na fatura de ${formatDate(estimate.dueDate)}`}
+      value={formatCurrency(estimate.amount)}
+      trailing={
+        <DeleteIconButton
+          action={deleteCardBillEstimate.bind(null, estimate.id, cardId)}
+          confirmMessage={`Excluir a previsão "${estimate.description}"? A fatura volta a mostrar só o que as compras somam.`}
+        />
+      }
+    />
+  );
   return (
     <div className="flex flex-col gap-6">
       {/* As próximas faturas lado a lado, em rosé; a já paga fica de fundo.
@@ -85,9 +120,10 @@ export function CardBillProjection({
                   bill.partialPaid
                     ? `pago ${formatCurrency(bill.partialPaid)} · falta ${formatCurrency(Math.max(0, bill.amount - bill.partialPaid))}`
                     : null,
-                  bill.estimateAmount > 0
-                    ? `inclui ${formatCurrency(bill.estimateAmount)} previstos`
-                    : null,
+                  // A composição, quando há mais de uma parte: só "inclui
+                  // R$ 100 previstos" escondia as assinaturas, e a soma das
+                  // compras não chegava no total.
+                  billParts(bill),
                 ]
                   .filter(Boolean)
                   .join(" · ") || undefined
@@ -123,20 +159,26 @@ export function CardBillProjection({
       {estimates.length > 0 && (
         <div className="flex flex-col gap-2">
           <SectionLabel>Previsões lançadas</SectionLabel>
-          {estimates.map((estimate) => (
-            <ListRow
-              key={estimate.id}
-              title={estimate.description}
-              subtitle={`Na fatura de ${formatDate(estimate.dueDate)}`}
-              value={formatCurrency(estimate.amount)}
-              trailing={
-                <DeleteIconButton
-                  action={deleteCardBillEstimate.bind(null, estimate.id, cardId)}
-                  confirmMessage={`Excluir a previsão "${estimate.description}"? A fatura volta a mostrar só o que as compras somam.`}
+          {/* As de faturas já pagas não mudam mais nada: ficam recolhidas, e
+              a lista à vista é só a que ainda pesa numa fatura em aberto. */}
+          {upcoming.map(estimateRow)}
+          {upcoming.length === 0 && (
+            <p className="text-[13px] text-muted-foreground">
+              Nenhuma previsão numa fatura em aberto.
+            </p>
+          )}
+          {past.length > 0 && (
+            <details className="group/past">
+              <summary className="flex min-h-11 w-fit cursor-pointer list-none items-center gap-1 rounded-sm text-[13px] font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring [&::-webkit-details-marker]:hidden">
+                Anteriores, de faturas pagas ({past.length})
+                <ChevronDown
+                  aria-hidden="true"
+                  className="size-3.5 transition-transform duration-150 group-open/past:rotate-180"
                 />
-              }
-            />
-          ))}
+              </summary>
+              <div className="flex flex-col gap-2">{past.map(estimateRow)}</div>
+            </details>
+          )}
         </div>
       )}
     </div>

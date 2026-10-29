@@ -28,7 +28,7 @@ export interface CalendarDay {
 }
 
 export interface SpendingCalendar {
-  /** Semanas de domingo a sábado; nulo é um dia fora do período. */
+  /** Semanas de segunda a domingo; nulo é um dia fora do período. */
   weeks: (CalendarDay | null)[][];
   total: number;
   /** Quantos dias tiveram algum gasto. */
@@ -92,7 +92,8 @@ export function spendingCalendar(input: {
   for (const day of days) day.level = levelOf(day.total, max);
 
   const weeks: (CalendarDay | null)[][] = [];
-  let week: (CalendarDay | null)[] = Array(first.getUTCDay()).fill(null);
+  // Segunda primeiro, como no calendário brasileiro: o fim de semana fica junto.
+  let week: (CalendarDay | null)[] = Array((first.getUTCDay() + 6) % 7).fill(null);
   for (const day of days) {
     week.push(day);
     if (week.length === 7) {

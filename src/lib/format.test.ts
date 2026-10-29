@@ -59,8 +59,10 @@ describe("installmentLabel", () => {
     expect(installmentLabel(300, 0)).toBeNull();
   });
 
-  it("anuncia a primeira parcela quando os centavos não fecham", () => {
+  it("separa a primeira parcela quando os centavos não fecham", () => {
     // A sobra vai para a primeira parcela — ver installmentSlices em period.ts.
-    expect(installmentLabel(1000, 3)).toBe(`3x de ${formatCurrency(333.34)}`);
+    expect(installmentLabel(1000, 3)).toBe(
+      `1ª de ${formatCurrency(333.34)} + 2x de ${formatCurrency(333.33)}`,
+    );
   });
 });

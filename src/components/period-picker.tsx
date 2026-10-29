@@ -125,7 +125,7 @@ export function PeriodPicker({ range }: { range: ResolvedRange }) {
                   onClick={() => setMode(option.value)}
                   aria-pressed={mode === option.value}
                   className={cn(
-                    "rounded-lg py-2 text-sm font-medium transition-colors duration-150",
+                    "rounded-lg py-2 text-sm font-medium transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring",
                     mode === option.value
                       ? "bg-card text-foreground shadow-surface ring-1 ring-foreground/10"
                       : "text-muted-foreground",
