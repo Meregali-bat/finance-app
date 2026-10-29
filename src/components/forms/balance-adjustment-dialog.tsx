@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
-import { Pencil } from "lucide-react";
+import { useEffect, useRef, useState, useTransition } from "react";
+import { ChevronRight, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -63,11 +63,18 @@ export function BalanceAdjustmentDialog({
     currentBalance != null && currentBalance < 0 ? "negativo" : "positivo",
   );
 
+  // Aberto por um link de longe (o hero), o foco volta para ele ao fechar, e
+  // não para o botão do card lá embaixo: quem usa teclado não perde o lugar.
+  const returnFocus = useRef<HTMLElement | null>(null);
   useEffect(() => {
     if (!openOnHash) return;
     const check = () => {
       if (window.location.hash !== `#${openOnHash}`) return;
       setSign(currentBalance != null && currentBalance < 0 ? "negativo" : "positivo");
+      returnFocus.current =
+        document.activeElement instanceof HTMLElement && document.activeElement !== document.body
+          ? document.activeElement
+          : null;
       setOpen(true);
       // Limpo do endereço: o mesmo link precisa abrir de novo no próximo toque.
       window.history.replaceState(null, "", window.location.pathname + window.location.search);
@@ -119,7 +126,13 @@ export function BalanceAdjustmentDialog({
             conferência, e o botão diz o que fazer com ela. */}
         {showText && "Conferir"}
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent
+        finalFocus={() => {
+          const target = returnFocus.current;
+          returnFocus.current = null;
+          return target ?? true;
+        }}
+      >
         <DialogHeader>
           <DialogTitle>{showText ? "Conferir saldo em conta" : "Saldo em conta"}</DialogTitle>
         </DialogHeader>
@@ -178,9 +191,13 @@ export function BalanceAdjustmentDialog({
               <Link
                 href={`/historico?range=custom&from=${dayParam(checkedAt)}&to=${dayParam(new Date())}`}
                 onClick={() => setOpen(false)}
-                className="-my-3 inline-flex min-h-11 w-fit items-center text-sm font-medium underline decoration-border underline-offset-4 hover:decoration-current"
+                className="group/hist -my-3 inline-flex min-h-11 w-fit items-center gap-0.5 text-sm font-medium underline decoration-current/40 underline-offset-4 transition-colors duration-150 hover:decoration-current"
               >
                 Ver o que entrou e saiu desde {formatDate(checkedAt)}
+                <ChevronRight
+                  aria-hidden="true"
+                  className="size-3.5 shrink-0 transition-transform duration-150 group-hover/hist:translate-x-0.5"
+                />
               </Link>
             )}
           </div>

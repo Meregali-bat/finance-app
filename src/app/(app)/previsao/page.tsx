@@ -136,8 +136,11 @@ function inNamedCycle(period: PeriodForecast, currentYear: number) {
  * "nov", "nov de 2027" — o nome de um ciclo numa frase. O ano entra quando não
  * é o do ciclo atual: com 13 ciclos à frente, o mesmo mês aparece duas vezes.
  */
+/** Em frase, o mês por extenso: "ciclo de nov" lia como abreviação solta. */
+const monthLong = new Intl.DateTimeFormat("pt-BR", { month: "long" });
+
 function cycleMonth(period: PeriodForecast, currentYear: number) {
-  const month = monthLabel(period.periodStart);
+  const month = monthLong.format(period.periodStart);
   const year = period.periodStart.getFullYear();
   return year === currentYear ? month : `${month} de ${year}`;
 }
@@ -357,18 +360,14 @@ export default async function ForecastPage({
   });
   const paceByCycle = pace ? paceAcrossCycles(pace, periods) : null;
   const paceLeft = paceByCycle ? paceByCycle[offset] : null;
-  // O que chega ao ciclo da tela vindo do anterior, no ritmo: só uma falta
-  // herdada merece a frase "o que faltar antes passa para ele".
+  // O que chega ao ciclo da tela vindo do anterior, no ritmo, além do que a
+  // previsão já desconta: a linha "a mais" da conta do card.
   const prevCycle = offset > 0 ? periods[offset - 1] : null;
   // A falta do anterior que a previsão já desconta (sem gastar mais).
   const prevBase = prevCycle
     ? Math.min(0, isNegativeCycle(prevCycle) ? prevCycle.endBalance : prevCycle.freeToSpend)
     : 0;
   const carryIn = paceByCycle && prevCycle ? paceByCycle[offset - 1] - prevBase : 0;
-  const carriesShortfall = carryIn < -0.005;
-  // O par: no ritmo, a sobra de antes passa adiante (o hero a conta como
-  // gasta). Sem dizer, a conta do card não fecha de cabeça.
-  const carriesSurplus = Math.max(0, carryIn);
   // O mesmo caminho sem gasto nenhum no dia a dia: quando ele já falta, cortar
   // o dia a dia não fecha a conta, e dizer "gaste R$ X a menos" mentiria.
   const noSpendLeft = pace
@@ -386,22 +385,36 @@ export default async function ForecastPage({
     : 0;
   // O alvo diário que fecha a conta, no lugar de "X a menos por dia": o
   // ritmo de hoje menos o corte, arredondado para baixo no centavo.
+  //
+  // O alvo vale para todos os ciclos até o da tela, e não só para a soma
+  // deles: a média de quatro ciclos deixaria os do meio no vermelho (uma
+  // folga que só chega em março não paga dezembro). Por isso é o menor dos
+  // alvos de cada trecho — até o ciclo 1, até o 2, … até o da tela.
+  const floorCents = (value: number) => Math.max(0, Math.floor(value * 100) / 100);
+  const cycleDays = (k: number) =>
+    periods.slice(1, k + 1).reduce((sum, p) => sum + p.totalDays, 0);
   const paceTarget =
-    pace && paceLeft !== null && paceDays > 0
-      ? Math.max(0, Math.floor((pace.perDay + paceLeft / paceDays) * 100) / 100)
+    pace && paceByCycle && paceDays > 0
+      ? Math.min(
+          ...Array.from({ length: offset + 1 }, (_, k) => {
+            const days = pace.remainingDays + cycleDays(k);
+            return days > 0 ? floorCents(pace.perDay + paceByCycle[k] / days) : Infinity;
+          }),
+        )
       : 0;
   // Com o ciclo atual no vermelho, o número de hoje é zero (a Início diz isso):
   // um alvo que valesse desde amanhã mandaria gastar o salário antes de ele
   // cair. Aí o alvo só começa no próximo ciclo, supondo que o atual pare onde
   // está, e se divide só pelos dias dos ciclos à frente.
-  const futureDays = periods.slice(1, offset + 1).reduce((sum, p) => sum + p.totalDays, 0);
   const targetFromNext =
-    pace && paceLeft !== null && offset > 0 && isNegativeCycle(current) && futureDays > 0
-      ? Math.max(
-          0,
-          Math.floor(
-            (pace.perDay + (paceLeft + pace.perDay * pace.remainingDays) / futureDays) * 100,
-          ) / 100,
+    pace && paceByCycle && offset > 0 && isNegativeCycle(current)
+      ? Math.min(
+          ...Array.from({ length: offset }, (_, i) => {
+            const k = i + 1;
+            return floorCents(
+              pace.perDay + (paceByCycle[k] + pace.perDay * pace.remainingDays) / cycleDays(k),
+            );
+          }),
         )
       : null;
   // Os chips do hero fecham com o "Saldo do ciclo": as entradas levam o que
@@ -542,16 +555,16 @@ export default async function ForecastPage({
   const exitLinks = (target: PeriodForecast) => (
     <div className="flex flex-wrap gap-x-4 gap-y-1 text-[13px] font-medium">
       {target.offset === 0 ? (
-        <Link href="/#lembretes" className={cn(shortfallLink, "-my-2 inline-block py-2")}>
+        <Link href="/#lembretes" className={cn(shortfallLink, "-my-3 inline-block py-3")}>
           Ver o que dá para adiar
         </Link>
       ) : (
-        <Link href="/rendas?aba=despesas" className={cn(shortfallLink, "-my-2 inline-block py-2")}>
+        <Link href="/rendas?aba=despesas" className={cn(shortfallLink, "-my-3 inline-block py-3")}>
           Rever as despesas fixas
         </Link>
       )}
       {hasJarBalance && (
-        <Link href="/caixinhas" className={cn(shortfallLink, "-my-2 inline-block py-2")}>
+        <Link href="/caixinhas" className={cn(shortfallLink, "-my-3 inline-block py-3")}>
           Resgatar de uma caixinha
         </Link>
       )}
@@ -860,12 +873,49 @@ export default async function ForecastPage({
                 por dia é um número solto. */}
             <p className="text-[13.5px] leading-relaxed text-muted-foreground tabular-nums">
               {`É a média do ciclo atual (${formatCurrency(pace.spent)} em ${pace.elapsedDays} ${pace.elapsedDays === 1 ? "dia" : "dias"}, na conta e no cartão)`}
-              {period.offset === 0
-                ? pace.remainingDays > 0
-                  ? `: saem mais ${formatCurrency(pace.projectedSpending)} nos ${pace.remainingDays} ${pace.remainingDays === 1 ? "dia" : "dias"} depois de hoje (hoje já entra na média).`
-                  : "."
-                : `: os ${period.totalDays} dias do ciclo de ${cycleMonth(period, currentYear)} levam ${formatCurrency(pace.perDay * period.totalDays)}${carriesShortfall ? `, e chegam mais ${formatCurrency(-carryIn)} de falta dos ciclos antes, nesse ritmo${prevBase < -0.005 ? ` (os ${formatCurrency(-prevBase)} de falta sem gastar já estão na conta de cima)` : ""}` : carriesSurplus > 0.005 ? `, somando ${formatCurrency(carriesSurplus)} que sobram ${offset === 1 ? "do ciclo atual" : "dos ciclos antes"}, se cada sobra for passando adiante nesse ritmo` : ""}.`}
+              {period.offset === 0 && pace.remainingDays > 0
+                ? `: saem mais ${formatCurrency(pace.projectedSpending)} nos ${pace.remainingDays} ${pace.remainingDays === 1 ? "dia" : "dias"} depois de hoje (hoje já entra na média).`
+                : "."}
             </p>
+            {/* À frente, a conta em linhas, partindo do número de cima: numa
+                frase só, eram três valores e um parêntese para refazer de
+                cabeça. */}
+            {period.offset > 0 && (
+              <dl className="flex max-w-sm flex-col gap-1 text-[13.5px] tabular-nums">
+                <div className="flex justify-between gap-3">
+                  <dt className="text-muted-foreground">
+                    {isNegative ? "Vai faltar, sem gastar" : "Livre para gastar"}
+                  </dt>
+                  <dd className="shrink-0">
+                    {formatCurrency(isNegative ? period.endBalance : period.freeToSpend)}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <dt className="text-muted-foreground">
+                    {period.totalDays} dias no seu ritmo
+                  </dt>
+                  <dd className="shrink-0">−{formatCurrency(pace.perDay * period.totalDays)}</dd>
+                </div>
+                {Math.abs(carryIn) >= 0.005 && (
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-muted-foreground">
+                      {carryIn < 0 ? "Falta a mais" : "Sobra"}{" "}
+                      {offset === 1 ? "do ciclo atual" : "dos ciclos antes"}, no ritmo
+                    </dt>
+                    <dd className="shrink-0">
+                      {carryIn < 0 ? "−" : "+"}
+                      {formatCurrency(Math.abs(carryIn))}
+                    </dd>
+                  </div>
+                )}
+                <div className="mt-0.5 flex justify-between gap-3 border-t border-border pt-1.5 font-semibold">
+                  <dt>{paceLeft < -0.005 ? "Faltando" : "Sobrando"}</dt>
+                  <dd className={cn("shrink-0", paceLeft < -0.005 && "text-negative")}>
+                    {formatCurrency(Math.abs(paceLeft))}
+                  </dd>
+                </div>
+              </dl>
+            )}
             {paceLeft < -0.005 && (noSpendLeft < -0.005 || paceDays > 0) && (
               <p className="text-[13.5px] leading-relaxed text-muted-foreground tabular-nums">
                 {noSpendLeft < -0.005
@@ -936,6 +986,11 @@ export default async function ForecastPage({
                   </Link>
                 </>
               )}
+            </p>
+            {/* O gráfico e o ritmo tratam a sobra de jeitos diferentes: sem
+                a frase, o livre parado mês após mês parece esquecer dela. */}
+            <p className="text-[12.5px] text-muted-foreground">
+              Cada ciclo sem a sobra dos anteriores; a falta, sim, passa adiante.
             </p>
           </div>
           <div className="flex items-center gap-3 text-xs text-muted-foreground">
