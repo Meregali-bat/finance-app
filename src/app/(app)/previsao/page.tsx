@@ -427,14 +427,14 @@ export default async function ForecastPage({
     );
     // No ciclo atual, o que ainda vai acontecer vem antes: é o que pesa, e
     // não pode ficar atrás do "Mostrar mais", embaixo do que já foi pago.
-    // Os lançamentos do ciclo atual já aconteceram: o mais recente primeiro,
-    // que é o que se procura.
+    // Uma regra para todos os grupos: o que ainda vai acontecer primeiro, na
+    // ordem em que vem; depois o que já aconteceu, do mais recente.
+    const pendingFirst = (entry: ForecastEntry) =>
+      entry.kind !== "scheduled" && entry.kind !== "jar" && !entry.confirmed;
     const entries =
       period.offset !== 0
         ? picked
-        : group.kind === "scheduled"
-          ? [...picked].reverse()
-          : [...picked.filter((e) => !e.confirmed), ...picked.filter((e) => e.confirmed)];
+        : [...picked.filter(pendingFirst), ...picked.filter((e) => !pendingFirst(e)).reverse()];
     const subtotal = Math.abs(
       entries.filter((entry) => !entry.awaiting).reduce((sum, entry) => sum + entry.amount, 0),
     );
@@ -508,7 +508,8 @@ export default async function ForecastPage({
         value,
         valueLabel: formatCurrency(value),
         compactLabel: formatCompactCurrency(value),
-        detail: `${periodLabel(item, currentYear)} · ${short ? "vai faltar" : "livre"}`,
+        // "Vai faltar −R$ X" dizia o negativo duas vezes: o valor já leva o sinal.
+        detail: `${periodLabel(item, currentYear)} · ${short ? "no vermelho" : "livre"}`,
         href: forecastHref(item.offset),
         selected: item.offset === offset,
       };
@@ -750,16 +751,18 @@ export default async function ForecastPage({
               {/* Sem nada vindo de antes, a linha some: um "R$ 0,00" guardado
                   depois de um ciclo que fechou positivo parece erro (a
                   previsão conta a sobra como gasta). */}
+              {/* O saldo do ciclo primeiro, depois o que veio de antes: a
+                  mesma ordem do resumo embaixo das listas. */}
+              <div className="flex items-baseline justify-between gap-3">
+                <dt className="text-(--hero-muted)">Saldo do ciclo</dt>
+                <dd className="font-medium">{formatCurrency(period.periodResult)}</dd>
+              </div>
               {Math.abs(period.inherited) >= 0.005 && (
                 <div className="flex items-baseline justify-between gap-3">
                   <dt className="text-(--hero-muted)">{inheritedLabel}</dt>
                   <dd className="font-medium">{formatCurrency(period.inherited)}</dd>
                 </div>
               )}
-              <div className="flex items-baseline justify-between gap-3">
-                <dt className="text-(--hero-muted)">Saldo do ciclo</dt>
-                <dd className="font-medium">{formatCurrency(period.periodResult)}</dd>
-              </div>
               {period.reservedForLater > 0.005 && (
                 <div className="flex items-baseline justify-between gap-3">
                   <dt className="text-(--hero-muted)">Guardado para cobrir ciclos à frente</dt>
@@ -861,14 +864,14 @@ export default async function ForecastPage({
                 ? pace.remainingDays > 0
                   ? `: saem mais ${formatCurrency(pace.projectedSpending)} nos ${pace.remainingDays} ${pace.remainingDays === 1 ? "dia" : "dias"} depois de hoje (hoje já entra na média).`
                   : "."
-                : `: os ${period.totalDays} dias do ciclo de ${cycleMonth(period, currentYear)} levam ${formatCurrency(pace.perDay * period.totalDays)}${carriesShortfall ? `, e os ${formatCurrency(-carryIn)} a mais que faltarem antes, nesse ritmo, passam para ele${prevBase < -0.005 ? ` (os ${formatCurrency(-prevBase)} de falta sem gastar já estão na conta de cima)` : ""}` : carriesSurplus > 0.005 ? `, somando ${formatCurrency(carriesSurplus)} que sobram ${offset === 1 ? "do ciclo atual" : "dos ciclos antes"}, se cada sobra for passando adiante nesse ritmo` : ""}.`}
+                : `: os ${period.totalDays} dias do ciclo de ${cycleMonth(period, currentYear)} levam ${formatCurrency(pace.perDay * period.totalDays)}${carriesShortfall ? `, e chegam mais ${formatCurrency(-carryIn)} de falta dos ciclos antes, nesse ritmo${prevBase < -0.005 ? ` (os ${formatCurrency(-prevBase)} de falta sem gastar já estão na conta de cima)` : ""}` : carriesSurplus > 0.005 ? `, somando ${formatCurrency(carriesSurplus)} que sobram ${offset === 1 ? "do ciclo atual" : "dos ciclos antes"}, se cada sobra for passando adiante nesse ritmo` : ""}.`}
             </p>
             {paceLeft < -0.005 && (noSpendLeft < -0.005 || paceDays > 0) && (
               <p className="text-[13.5px] leading-relaxed text-muted-foreground tabular-nums">
                 {noSpendLeft < -0.005
                   ? period.offset === 0
                     ? // O valor já é o número do hero: aqui, só a causa.
-                      "Não é o dia a dia: mesmo sem gastar nada, são as contas que não cabem."
+                      `Os ${formatCurrency(Math.abs(period.endBalance))} do topo não vêm do dia a dia: mesmo sem gastar nada, as contas não cabem.`
                     : `Mesmo sem gastar nada no dia a dia, faltariam ${formatCurrency(-noSpendLeft)}: são as contas que não cabem.`
                   : targetFromNext !== null
                     ? // O ciclo atual já fecha no vermelho: o número de hoje é
@@ -999,9 +1002,11 @@ export default async function ForecastPage({
                 .filter((group) => group.incoming === side)
                 .map((group) => (
                   <div key={group.key} className="flex flex-col gap-3">
-                    <div className="flex items-baseline justify-between gap-3">
+                    {/* No celular, o subtotal desce para baixo do título em vez
+                        de partir os dois. */}
+                    <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
                       <SectionLabel>{groupLabel(group.kind, group.label, period.offset)}</SectionLabel>
-                      <span className="text-right text-[13px] font-medium text-muted-foreground tabular-nums">
+                      <span className="text-[13px] whitespace-nowrap font-medium text-muted-foreground tabular-nums">
                         {group.pending > 0.005 && group.pending < group.subtotal - 0.005 ? (
                           <>
                             <span className="font-semibold text-foreground">
