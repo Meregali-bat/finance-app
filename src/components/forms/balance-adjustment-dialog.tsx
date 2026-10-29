@@ -14,7 +14,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { CurrencyInput } from "@/components/currency-input";
 import { setAccountBalance } from "@/lib/actions/account-balance";
-import { formatCurrency } from "@/lib/format";
+import { formatCurrency, formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { iconButton } from "@/components/ui/icon-button";
 import { errorMessage } from "@/lib/error-message";
@@ -32,6 +32,7 @@ export function BalanceAdjustmentDialog({
   registeredMovement,
   stale = false,
   openOnHash,
+  checkedAt = null,
 }: {
   currentBalance: number | null;
   registeredMovement: number;
@@ -43,10 +44,14 @@ export function BalanceAdjustmentDialog({
    * até o card, que leva o mesmo id.
    */
   openOnHash?: string;
+  /** Quando o saldo foi conferido pela última vez, para o diálogo dizer. */
+  checkedAt?: Date | null;
 }) {
   const hasBalance = currentBalance != null;
-  const triggerLabel = hasBalance ? "Atualizar saldo" : "Informar saldo";
   const showText = stale && hasBalance;
+  // Com o saldo velho, o verbo é o do aviso ("Conferir o saldo", "Confira com
+  // o extrato"): o mesmo diálogo não pode ter dois nomes.
+  const triggerLabel = showText ? "Conferir saldo" : hasBalance ? "Atualizar saldo" : "Informar saldo";
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -108,18 +113,22 @@ export function BalanceAdjustmentDialog({
         <Pencil aria-hidden="true" />
         {/* Com o saldo velho, a ação se lê sozinha: o aviso ao lado pede
             conferência, e o botão diz o que fazer com ela. */}
-        {showText && "Atualizar"}
+        {showText && "Conferir"}
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Saldo em conta</DialogTitle>
+          <DialogTitle>{showText ? "Conferir saldo em conta" : "Saldo em conta"}</DialogTitle>
         </DialogHeader>
         <form action={handleSubmit} className="flex flex-col gap-4">
           <div className="flex flex-col gap-2">
             <Label htmlFor="balance">Quanto o banco mostra agora</Label>
             <p className="text-sm text-muted-foreground tabular-nums">
+              {/* Aberto pelo aviso, o diálogo diz por que abriu: o valor
+                  preenchido é uma estimativa, não o que o banco mostra. */}
               {currentBalance != null
-                ? `O app calculou ${formatCurrency(currentBalance)}.`
+                ? stale && checkedAt
+                  ? `O app calculou ${formatCurrency(currentBalance)} a partir do saldo conferido em ${formatDate(checkedAt)}. Confira no app do banco.`
+                  : `O app calculou ${formatCurrency(currentBalance)}.`
                 : `Movimentação registrada até hoje: ${formatCurrency(registeredMovement)} — não é o saldo do banco, só o que passou pelo app.`}
             </p>
             <div className="grid grid-cols-2 gap-1 rounded-xl bg-muted p-1">

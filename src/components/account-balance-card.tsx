@@ -56,7 +56,7 @@ export function AccountBalanceCard({
               value={balance}
               memoryKey="account-balance"
               className={`font-heading text-[22px] leading-none font-bold tracking-[-0.035em] tabular-nums lg:text-[32px] ${
-                balance < 0 ? "text-negative" : ""
+                balance < 0 ? "text-negative" : staleDays != null ? "text-foreground/70" : ""
               }`}
             />
             {/* O ícone e o peso, não só a cor: o app não tem um tom de aviso,
@@ -86,6 +86,7 @@ export function AccountBalanceCard({
         registeredMovement={registeredMovement}
         stale={staleDays != null}
         openOnHash={id}
+        checkedAt={adjustedAt}
       />
     </div>
   );

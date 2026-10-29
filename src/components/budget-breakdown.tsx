@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import type { PeriodBudget } from "@/lib/period";
-import { formatCurrency, formatDate } from "@/lib/format";
+import { formatCurrency } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 type Line = {
@@ -36,7 +36,7 @@ const shows = (amount: number) => Math.abs(amount) >= 0.005;
 function breakdownLines({
   budget,
   accountBalance,
-  accountBalanceDate,
+  accountBalanceStaleDays,
   reservedForLater,
   savingsApplied,
   dailyAvailable,
@@ -50,8 +50,8 @@ function breakdownLines({
     const scheduled = budget.periodBalance - accountBalance + toPay;
     // Com o saldo velho, a linha diz de quando ele é: o número parte dele.
     lines.push({
-      label: accountBalanceDate
-        ? `Saldo em conta (estimado; conferido em ${formatDate(accountBalanceDate)})`
+      label: accountBalanceStaleDays != null
+        ? `Saldo estimado (conferido há ${accountBalanceStaleDays} dias)`
         : "Saldo em conta",
       amount: accountBalance,
       kind: "start",
@@ -139,8 +139,8 @@ function signed(amount: number) {
 type BudgetBreakdownProps = {
   budget: PeriodBudget;
   accountBalance: number | null;
-  /** A data do ajuste, só quando o saldo está velho (`staleAdjustmentDays`). */
-  accountBalanceDate?: Date | null;
+  /** Há quantos dias o saldo foi conferido, só quando ele está velho (`staleAdjustmentDays`). */
+  accountBalanceStaleDays?: number | null;
   reservedForLater: number;
   savingsApplied: number;
   dailyAvailable: number;

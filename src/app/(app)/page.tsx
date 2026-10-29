@@ -590,7 +590,7 @@ export default async function DashboardPage() {
                         vermelho que pode não existir seria agir pela mentira. */}
                     <p className="font-medium text-(--hero-fg)">
                       {staleDays != null
-                        ? `O período fecharia ${formatCurrency(periodDeficit)} no negativo se o saldo ainda for o mesmo.`
+                        ? `Se o saldo não mudou, o período fecha ${formatCurrency(periodDeficit)} no negativo.`
                         : `O período fecha ${formatCurrency(periodDeficit)} no negativo, mesmo sem gastar mais nada.`}
                     </p>
                     {/* Âncora nativa, não `Link`: o `hashchange` é o que faz os
@@ -711,7 +711,7 @@ export default async function DashboardPage() {
               <BudgetBreakdown
                 budget={budget}
                 accountBalance={accountBalance}
-                accountBalanceDate={staleDays != null ? adjustedAt : null}
+                accountBalanceStaleDays={staleDays}
                 reservedForLater={reservedForLater}
                 savingsApplied={savingsApplied}
                 dailyAvailable={dailyAvailable}
