@@ -48,7 +48,7 @@ function breakdownLines({
     // Com o saldo velho, a linha diz de quando ele é: o número parte dele.
     lines.push({
       label: accountBalanceDate
-        ? `Saldo em conta (de ${formatDate(accountBalanceDate)})`
+        ? `Saldo em conta (conferido em ${formatDate(accountBalanceDate)})`
         : "Saldo em conta",
       amount: accountBalance,
       kind: "start",
@@ -60,6 +60,10 @@ function breakdownLines({
         label: scheduled > 0 ? "Entradas ainda previstas" : "Lançamentos agendados",
         amount: scheduled,
         kind: "step",
+        // A diferença que fecha a conta junta várias coisas (resgates,
+        // recebimentos, lançamentos com data); a Previsão do ciclo atual lista
+        // cada uma. Sem o link, é a linha que ninguém consegue conferir.
+        href: "/previsao?p=0",
       });
   } else {
     // Sem herança (o primeiro período acompanhado), a conta começa na renda.
@@ -120,12 +124,6 @@ function breakdownLines({
 function signed(amount: number) {
   return `${amount < 0 ? "−" : "+"} ${formatCurrency(Math.abs(amount))}`;
 }
-
-/** Os totais com o mesmo "−" das parcelas, e não o hífen do Intl: é uma coluna só. */
-function withMinus(amount: number) {
-  return amount < 0 ? `−${formatCurrency(Math.abs(amount))}` : formatCurrency(amount);
-}
-
 type BudgetBreakdownProps = {
   budget: PeriodBudget;
   accountBalance: number | null;
@@ -202,7 +200,7 @@ export function BudgetBreakdown(props: BudgetBreakdownProps) {
               )}
             </dt>
             <dd className="shrink-0 text-right">
-              {line.kind === "step" ? signed(line.amount) : withMinus(line.amount)}
+              {line.kind === "step" ? signed(line.amount) : formatCurrency(line.amount)}
             </dd>
           </div>
         ))}

@@ -70,7 +70,7 @@ export async function loadDebts(userId: string, today: Date): Promise<DebtView[]
       ? [
           next.installments > 1 ? `parcela ${next.number}/${next.installments}` : null,
           nextAmount,
-          `${next.overdue ? "venceu" : "vence"} ${formatDate(next.dueDate)}`,
+          `${next.overdue ? "venceu em" : "vence em"} ${formatDate(next.dueDate)}`,
         ]
           .filter(Boolean)
           .join(" · ")

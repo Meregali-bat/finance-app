@@ -720,6 +720,12 @@
   animation: popIn 520ms cubic-bezier(0.34, 1.56, 0.64, 1) var(--rise-delay, 0ms) backwards;
 }
 
+/* Os pontos de um gráfico: sem overshoot. É dado, e um ponto que passa do
+   lugar e volta parece um valor que mudou. */
+.dot-in {
+  animation: popIn 360ms cubic-bezier(0.22, 1, 0.36, 1) var(--rise-delay, 0ms) backwards;
+}
+
 /* Colunas de gráfico crescendo a partir da base. */
 @keyframes growUp {
   from {
@@ -750,6 +756,7 @@
   .slide-in,
   .page-in,
   .pop-in,
+  .dot-in,
   .grow-up,
   .grow-down,
   .grow-right,

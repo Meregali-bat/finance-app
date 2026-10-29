@@ -65,6 +65,7 @@ export function CountUpCurrency({
   announce = true,
   className,
   symbolClassName,
+  signClassName,
   centsClassName,
 }: {
   value: number;
@@ -84,6 +85,8 @@ export function CountUpCurrency({
   announce?: boolean;
   className?: string;
   symbolClassName?: string;
+  /** Só com `split`: o "−" de um valor negativo, separado do "R$". */
+  signClassName?: string;
   centsClassName?: string;
 }) {
   const reduceMotion = useReducedMotion();
@@ -167,8 +170,14 @@ export function CountUpCurrency({
   return (
     <span className={className}>
       {finalText}
+      {/* O sinal fora do "R$" apagado, com o "−" tipográfico: é o glifo que
+          mais importa no número, e dentro do símbolo ele saía pequeno e a 70%. */}
+      {sign && (
+        <span aria-hidden="true" className={signClassName}>
+          −
+        </span>
+      )}
       <span aria-hidden="true" className={symbolClassName}>
-        {sign}
         {symbol}
       </span>
       <span aria-hidden="true">{integer}</span>
