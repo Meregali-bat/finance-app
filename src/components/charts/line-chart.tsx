@@ -263,18 +263,22 @@ export function LineChart({
         ))}
       </div>
 
-      {/* Os mesmos valores sem depender do hover nem da cor. */}
-      <table className="sr-only">
-        <caption>{title}</caption>
-        <tbody>
-          {points.map((p) => (
-            <tr key={p.key}>
-              <th scope="row">{p.detail ?? p.label}</th>
-              <td>{p.valueLabel}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      {/* Os mesmos valores sem depender do hover nem da cor. O sr-only vai num
+          div: uma tabela ignora a largura de 1px e empurrava a página para o
+          lado no celular. */}
+      <div className="sr-only">
+        <table>
+          <caption>{title}</caption>
+          <tbody>
+            {points.map((p) => (
+              <tr key={p.key}>
+                <th scope="row">{p.detail ?? p.label}</th>
+                <td>{p.valueLabel}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </figure>
   );
 }

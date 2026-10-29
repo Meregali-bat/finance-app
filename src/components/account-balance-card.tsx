@@ -66,7 +66,8 @@ export function AccountBalanceCard({
                 <CircleAlert aria-hidden="true" className="mt-px size-3.5 shrink-0 text-foreground" />
                 <span>
                   {/* O "·" fica no fim da primeira linha, nunca no começo da segunda. */}
-                  <span className="font-semibold text-foreground">Confira com o extrato</span> ·{" "}
+                  <span className="font-semibold text-foreground">Confira com o extrato</span>
+                  {" · "}
                   <span className="whitespace-nowrap">ajustado há {staleDays} dias</span>
                 </span>
               </p>
@@ -83,6 +84,7 @@ export function AccountBalanceCard({
         currentBalance={balance}
         registeredMovement={registeredMovement}
         stale={staleDays != null}
+        openOnHash={id}
       />
     </div>
   );

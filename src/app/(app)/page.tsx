@@ -430,7 +430,7 @@ export default async function DashboardPage() {
           barra inferior; em `lg` ele sobe para o cabeçalho, alinhado ao
           título. No celular ele recolhe ao rolar para baixo. */}
       <ScrollAwayFab className="fixed right-4 bottom-[calc(env(safe-area-inset-bottom)+74px)] z-20 lg:absolute lg:top-1.5 lg:right-0 lg:bottom-auto lg:z-auto">
-        <MovementFormDialog cards={cardOptions} categories={categoryOptions} />
+        <MovementFormDialog cards={cardOptions} categories={categoryOptions} shortcut="n" />
       </ScrollAwayFab>
 
       {/* O card de destaque. O número do dia é a única figura grande: à
@@ -461,7 +461,10 @@ export default async function DashboardPage() {
                       talvez não exista. */}
                   {isOverBudget
                     ? staleDays != null
-                      ? `Pode estar no vermelho: o saldo é de ${staleDays} dias atrás`
+                      ? <>
+                          Pode estar no vermelho: o saldo é de{" "}
+                          <span className="whitespace-nowrap">{staleDays} dias atrás</span>
+                        </>
                       : "Este período está no vermelho"
                     : allToSavings
                       ? "Hoje, o que sobra vai para guardar"
@@ -691,7 +694,7 @@ export default async function DashboardPage() {
                 abaixo. No celular ela é um `<details>`, aberto só quando
                 pedido. O aviso de falta fica fora dela — é aviso, não
                 explicação. */}
-            <div className="flex flex-col gap-1 p-[18px] text-[13px] leading-snug text-pretty lg:justify-center lg:p-5 lg:shadow-[-1px_0_0_0_var(--hero-line)]">
+            <div className="flex flex-col gap-1 p-[18px] text-[13px] leading-snug text-pretty lg:p-5 lg:shadow-[-1px_0_0_0_var(--hero-line)]">
               {savingsShortfall && (
                 <p className="font-medium text-(--hero-fg)">{savingsShortfall}</p>
               )}

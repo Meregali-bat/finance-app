@@ -150,7 +150,9 @@ function DebtCard({
             </span>
           </span>
         </button>
-        <div className="flex max-sm:w-full max-sm:justify-end max-sm:pr-14">
+        {/* No celular, o "Recebi" desce alinhado ao nome, como o "Adiar" dos
+            lembretes: longe do "+" fixo, sem precisar de uma margem para ele. */}
+        <div className="flex max-sm:w-full max-sm:pl-[50px]">
           <ReceiveDialog debt={debt} onReceived={onReceived} />
         </div>
       </div>
