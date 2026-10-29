@@ -22,7 +22,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { createCreditCard, updateCreditCard } from "@/lib/actions/card";
-import { CARD_BANKS, cardGradient, cardStyleOption } from "@/lib/card-look";
+import { CARD_BANKS, cardStyleOption, cardSurface } from "@/lib/card-look";
 import { cn } from "@/lib/utils";
 import { iconButton } from "@/components/ui/icon-button";
 import { errorMessage } from "@/lib/error-message";
@@ -122,7 +122,7 @@ export function CardFormDialog({ card }: { card?: CardValues }) {
                 >
                   <span
                     className={cn(
-                      "absolute top-0.5 left-0.5 size-4 rounded-full transition-[translate,background-color] duration-[280ms] ease-[cubic-bezier(0.34,1.56,0.64,1)]",
+                      "absolute top-0.5 left-0.5 size-4 rounded-full transition-[translate,background-color] duration-200 ease-out-quint",
                       custom ? "translate-x-3.5 bg-background" : "bg-muted-foreground",
                     )}
                   />
@@ -178,12 +178,12 @@ export function CardFormDialog({ card }: { card?: CardValues }) {
             <div
               aria-hidden="true"
               className="flex h-[88px] flex-col justify-between rounded-[18px] p-4 text-white shadow-[inset_0_0_0_1px_rgb(255_255_255/0.09)] transition-[background] duration-300"
-              style={{ background: cardGradient(card?.id ?? "novo", style) }}
+              style={{ background: cardSurface(card?.id ?? "novo", style) }}
             >
               <span className="truncate font-heading text-lg leading-tight font-bold tracking-[-0.03em]">
                 {name || "Seu cartão"}
               </span>
-              <span className="text-xs text-white/70">
+              <span className="text-xs text-white/85">
                 {custom ? cardStyleOption(model)?.model : "Cor automática"}
               </span>
             </div>

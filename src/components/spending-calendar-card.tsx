@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { CreditCard } from "lucide-react";
 import { homeCard } from "@/components/home-card";
 import { useHistoryDay } from "@/components/history-day";
@@ -9,7 +8,7 @@ import { formatCurrency } from "@/lib/format";
 import type { CalendarDay, SpendingCalendar } from "@/lib/spending-calendar";
 import { cn } from "@/lib/utils";
 
-const WEEKDAYS = ["D", "S", "T", "Q", "Q", "S", "S"];
+const WEEKDAYS = ["S", "T", "Q", "Q", "S", "S", "D"];
 
 /** O rosé do gasto em quatro forças; o nível 0 é o trilho vazio. */
 const LEVEL_BG = [
@@ -38,19 +37,13 @@ function dayLabel(key: string) {
 
 /**
  * Cada dia do período pintado pelo quanto saiu nele, no dia a dia. Tocar um
- * dia abre o que foi gasto nele logo abaixo.
+ * dia abre o que foi gasto nele ao lado e filtra a listagem por ele; tocar de
+ * novo solta. O dia é um só, o da listagem: o calendário não guarda outro, e
+ * limpar o filtro lá embaixo apaga a marca aqui.
  */
-export function SpendingCalendarCard({
-  calendar,
-  initialDay,
-}: {
-  calendar: SpendingCalendar;
-  /** O dia aberto de saída: hoje, se estiver no período; senão, o mais pesado. */
-  initialDay: string | null;
-}) {
+export function SpendingCalendarCard({ calendar }: { calendar: SpendingCalendar }) {
   const days = calendar.weeks.flat().filter((d): d is CalendarDay => d !== null);
-  const [selectedKey, setSelectedKey] = useState(initialDay);
-  const { setDay } = useHistoryDay();
+  const { day: selectedKey, setDay } = useHistoryDay();
   const selected = days.find((d) => d.key === selectedKey) ?? null;
 
   return (
@@ -62,7 +55,7 @@ export function SpendingCalendarCard({
         <SectionLabel>Calendário de gastos</SectionLabel>
         <p className="text-[12.5px] text-muted-foreground">
           {calendar.activeDays > 0
-            ? `${formatCurrency(calendar.total)} no dia a dia, em ${calendar.activeDays} ${calendar.activeDays === 1 ? "dia" : "dias"}. Contas fixas e faturas ficam de fora.`
+            ? `${formatCurrency(calendar.total)} no dia a dia, em ${calendar.activeDays} ${calendar.activeDays === 1 ? "dia" : "dias"}: o cartão no dia da compra, sem contas fixas nem faturas. Por isso não bate com o Gasto.`
             : "Nenhum gasto do dia a dia neste período."}
         </p>
       </div>
@@ -86,11 +79,9 @@ export function SpendingCalendarCard({
                 <button
                   key={day.key}
                   type="button"
-                  onClick={() => {
-                    setSelectedKey(day.key);
-                    // A listagem embaixo passa a mostrar só este dia.
-                    setDay(day.key);
-                  }}
+                  // A listagem embaixo passa a mostrar só este dia; o mesmo
+                  // dia de novo volta a mostrar o período todo.
+                  onClick={() => setDay(day.key === selectedKey ? null : day.key)}
                   aria-pressed={day.key === selectedKey}
                   aria-label={`${dayLabel(day.key)}: ${day.total > 0 ? formatCurrency(day.total) : "nada gasto"}`}
                   className={cn(
@@ -105,7 +96,11 @@ export function SpendingCalendarCard({
                   <span
                     className={cn(
                       "text-[11px] leading-none font-medium tabular-nums lg:text-xs",
-                      day.level >= 3 ? "text-white" : "text-muted-foreground",
+                      day.level === 4
+                        ? "text-[#2a1210]"
+                        : day.level === 3
+                          ? "text-foreground"
+                          : "text-muted-foreground",
                     )}
                   >
                     {day.day}
@@ -113,8 +108,10 @@ export function SpendingCalendarCard({
                   {day.total > 0 && (
                     <span
                       className={cn(
-                        "truncate text-[10.5px] leading-none font-semibold tabular-nums lg:text-[12.5px]",
-                        day.level >= 3 && "text-white",
+                        "truncate text-[11px] leading-none font-semibold tabular-nums lg:text-[12.5px]",
+                        // O rosé cheio é o mesmo nos dois temas: tinta escura
+                        // nele (branco dava 3,4:1). No nível 3, a cor do tema.
+                        day.level === 4 && "text-[#2a1210]",
                       )}
                     >
                       {cellAmount(day.total)}
@@ -136,7 +133,7 @@ export function SpendingCalendarCard({
           </div>
         </div>
 
-        {selected && (
+        {selected ? (
           <div
             className="flex flex-col gap-2 border-t border-(--hairline) pt-3 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-6"
             aria-live="polite"
@@ -174,6 +171,10 @@ export function SpendingCalendarCard({
               </ul>
             )}
           </div>
+        ) : (
+          <p className="border-t border-(--hairline) pt-3 text-[12.5px] text-muted-foreground lg:border-t-0 lg:border-l lg:pt-0 lg:pl-6">
+            Toque num dia para ver o que saiu nele e filtrar a lista abaixo.
+          </p>
         )}
       </div>
     </div>

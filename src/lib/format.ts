@@ -97,16 +97,17 @@ export function todayInputValue(): string {
 /**
  * "12x de R$ 100,00", ou nulo numa compra à vista.
  *
- * A parcela anunciada é a PRIMEIRA, que é onde a sobra dos centavos cai — ver
- * installmentSlices em src/lib/period.ts. Dizer "3x de R$ 333,33" quando a
- * primeira fatura vai cobrar R$ 333,34 seria mentir por um centavo.
+ * Quando os centavos não fecham, a sobra cai na PRIMEIRA parcela — ver
+ * installmentSlices em src/lib/period.ts — e o rótulo diz as duas: "3x de
+ * R$ 333,34" errava as outras duas, e quem multiplicasse não chegava no total.
  */
 export function installmentLabel(total: number, installments: number): string | null {
   if (!Number.isInteger(installments) || installments <= 1) return null;
   const cents = Math.round(total * 100);
   const base = Math.floor(cents / installments);
   const first = base + (cents - base * installments);
-  return `${installments}x de ${formatCurrency(first / 100)}`;
+  if (first === base) return `${installments}x de ${formatCurrency(base / 100)}`;
+  return `1ª de ${formatCurrency(first / 100)} + ${installments - 1}x de ${formatCurrency(base / 100)}`;
 }
 
 /** "R$ 1,4 mil" — para rótulos de gráfico, onde o valor exato não cabe. */

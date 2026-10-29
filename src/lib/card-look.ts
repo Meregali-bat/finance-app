@@ -89,6 +89,16 @@ export function isCardStyle(style: string): boolean {
   return BY_ID.has(style);
 }
 
+/**
+ * O fundo do cartão com um véu escuro por cima, mais forte no canto claro do
+ * degradê: o teal do Sicoob e o dourado davam 2 a 3:1 com o texto branco. Com
+ * o véu, o branco a 85% passa de 4,5:1 em todo o catálogo, e o cartão ainda
+ * tem a cor do banco.
+ */
+export function cardSurface(id: string, style?: string | null): string {
+  return `linear-gradient(140deg,rgb(0 0 0/0.45) 0%,rgb(0 0 0/0.2) 100%),${cardGradient(id, style)}`;
+}
+
 export function cardGradient(id: string, style?: string | null): string {
   const custom = cardStyleOption(style);
   if (custom) return custom.gradient;

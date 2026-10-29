@@ -6,7 +6,6 @@ import { resolveRange, type RangeParams } from "@/lib/date-range";
 import { calculateReportTotals, countsAsSpending, spendingBuckets } from "@/lib/report-totals";
 import { LineChart } from "@/components/charts/line-chart";
 import { homeCard } from "@/components/home-card";
-import { stagger } from "@/components/list-row";
 import { SectionLabel } from "@/components/page-header";
 import { formatCurrency, formatDate, todayInputValue } from "@/lib/format";
 import { PeriodPicker } from "@/components/period-picker";
@@ -14,9 +13,8 @@ import { ReportTotalsCard } from "@/components/report-totals-card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/page-header";
-import { HistoryRow } from "@/components/movement-row";
 import { CategoryBreakdown, type CategoryGroup } from "@/components/category-breakdown";
-import { historyItemKey, lentNames, type HistoryItem } from "@/lib/history-item";
+import { lentNames, type HistoryItem } from "@/lib/history-item";
 import { loadHistoryItems } from "@/lib/history-items";
 import { carriedBalance } from "@/lib/history-carry";
 import { prisma } from "@/lib/prisma";
@@ -76,10 +74,24 @@ export default async function HistoryPage({
             : (categoryNameById.get(key) ?? "Sem categoria"),
       amount: group.amount,
       items: group.items,
-      percent:
-        totals.spent !== 0 ? Math.max(0, Math.round((group.amount / totals.spent) * 100)) : 0,
+      percent: 0,
     }))
     .sort((a, b) => b.amount - a.amount);
+  // Pelo maior resto: arredondar cada uma sozinha fazia a soma dar 101%.
+  if (totals.spent > 0) {
+    const shares = categoryGroups.map((g) => Math.max(0, (g.amount / totals.spent) * 100));
+    const floors = shares.map(Math.floor);
+    let left = Math.round(shares.reduce((a, b) => a + b, 0)) - floors.reduce((a, b) => a + b, 0);
+    const byRemainder = shares
+      .map((share, i) => ({ i, rest: share - floors[i] }))
+      .sort((a, b) => b.rest - a.rest);
+    for (const { i } of byRemainder) {
+      if (left <= 0) break;
+      floors[i] += 1;
+      left -= 1;
+    }
+    categoryGroups.forEach((g, i) => (g.percent = floors[i]));
+  }
 
   // O calendário troca a linha diária: num período de dias, ele mostra o mesmo
   // ritmo e ainda diz o que saiu em cada dia. Só o dia a dia entra nele — os
@@ -148,11 +160,11 @@ export default async function HistoryPage({
           action={
             <Link
               href="/historico/importar"
-              aria-label="Importar extrato"
               title="Importar extrato"
-              className={iconButton({ tone: "outline", size: "lg" })}
+              className={iconButton({ tone: "outline", size: "pill" })}
             >
               <FileUp aria-hidden="true" />
+              Importar
             </Link>
           }
         />
@@ -161,19 +173,12 @@ export default async function HistoryPage({
           ganha uma superfície própria em vez de flutuar solto sobre o fundo. */}
         <PeriodPicker range={range} />
 
-        <ReportTotalsCard totals={totals} carried={carried} periodLabel={range.label} />
+        <ReportTotalsCard totals={totals} carried={carried} />
 
         {/* O gasto do período no tempo: uma série só, em rosé, sem legenda — o
           título diz o que é. As colunas somam o "Gasto" do resumo. */}
         {calendar && (
-          <SpendingCalendarCard
-            calendar={calendar}
-            initialDay={
-              today >= range.firstDay && today <= range.lastDay
-                ? today
-                : (calendar.peak?.key ?? null)
-            }
-          />
+          <SpendingCalendarCard calendar={calendar} />
         )}
 
         {buckets.length > 1 && !daily && (

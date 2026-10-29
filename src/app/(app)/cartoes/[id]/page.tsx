@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { CreditCard, Receipt } from "lucide-react";
+import { ChevronDown, CreditCard, Receipt } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/auth-helpers";
 import { formatCurrency, formatDate, formatDateTime, installmentLabel } from "@/lib/format";
@@ -99,6 +99,8 @@ export default async function CardDetailPage({ params }: { params: Promise<{ id:
     dueDateIso: bill.dueDate.toISOString(),
     dueDate: bill.dueDate,
     amount: bill.amount,
+    purchaseAmount: bill.purchaseAmount,
+    fixedExpenseAmount: bill.fixedExpenseAmount,
     estimateAmount: bill.estimateAmount,
     paid: bill.paid,
     paidAmount: bill.paidAmount,
@@ -122,6 +124,37 @@ export default async function CardDetailPage({ params }: { params: Promise<{ id:
     dueDate: e.dueDate,
     amount: Number(e.amount),
   }));
+
+  // As mais recentes à vista; o resto recolhido. Com mais de cem compras, a
+  // lista empurrava as faturas para muito longe no celular.
+  const SHOWN_PURCHASES = 12;
+  const purchaseItem = (purchase: (typeof card.purchases)[number], index: number) => (
+    <li key={purchase.id} className="rise-in" style={stagger(Math.min(index, 10), 260)}>
+      <MovementRow
+        icon={<CreditCard />}
+        movement={toMovementValues({
+          id: purchase.id,
+          kind: "card",
+          description: purchase.description,
+          amount: Number(purchase.amount),
+          date: purchase.date,
+          categoryId: purchase.categoryId,
+          cardId: card.id,
+          installments: purchase.installments,
+        })}
+        subtitle={[
+          formatDateTime(purchase.date, purchase.createdAt),
+          // O valor da linha é o total da compra; sem isto um 12x se
+          // leria como se tudo tivesse saído no mês em que foi comprado.
+          installmentLabel(Number(purchase.amount), purchase.installments),
+        ]
+          .filter(Boolean)
+          .join(" · ")}
+        cards={[{ id: card.id, name: card.name }]}
+        categories={categoryOptions}
+      />
+    </li>
+  );
 
   return (
     <div className="flex flex-col gap-5 lg:gap-6">
@@ -161,7 +194,8 @@ export default async function CardDetailPage({ params }: { params: Promise<{ id:
           <StatLabel>Próxima fatura</StatLabel>
           {nextBill ? (
             <>
-              <p className="truncate font-heading text-[23px] leading-tight font-bold tracking-[-0.03em] text-negative tabular-nums lg:text-[28px]">
+              <p className="truncate font-heading text-[23px] leading-tight font-bold tracking-[-0.03em] tabular-nums lg:text-[28px]">
+                {/* Neutro, como na lista: uma fatura é conta a pagar, não prejuízo. */}
                 {formatCurrency(Math.max(0, nextBill.amount - (nextBill.partialPaid ?? 0)))}
               </p>
               <p className="text-[12.5px] text-muted-foreground">
@@ -195,11 +229,12 @@ export default async function CardDetailPage({ params }: { params: Promise<{ id:
                   style={{ width: `${Math.min(100, Math.max(0, limitUsage.percentUsed))}%` }}
                 />
               </span>
-              <p
-                className="text-[12px] text-muted-foreground tabular-nums"
-                title="Considera as faturas em aberto dos últimos 3 meses e as parcelas futuras."
-              >
+              <p className="text-[12px] text-muted-foreground tabular-nums">
                 {formatCurrency(limitUsage.available)} de {formatCurrency(limitUsage.limit)} livres
+              </p>
+              {/* À vista, e não num `title`: no toque, o `title` não existe. */}
+              <p className="text-[11px] text-muted-foreground">
+                Faturas em aberto e parcelas que ainda vão cair.
               </p>
               {limitUsage.overdueBillCount > 0 && (
                 <p className="text-[11px] text-muted-foreground">
@@ -233,35 +268,25 @@ export default async function CardDetailPage({ params }: { params: Promise<{ id:
           {card.purchases.length === 0 ? (
             <EmptyState icon={Receipt} text="Nenhuma compra lançada ainda." />
           ) : (
-            <ul className="flex flex-col gap-2">
-              {card.purchases.map((purchase, index) => (
-                <li key={purchase.id} className="rise-in" style={stagger(Math.min(index, 10), 260)}>
-                  <MovementRow
-                    icon={<CreditCard />}
-                    movement={toMovementValues({
-                      id: purchase.id,
-                      kind: "card",
-                      description: purchase.description,
-                      amount: Number(purchase.amount),
-                      date: purchase.date,
-                      categoryId: purchase.categoryId,
-                      cardId: card.id,
-                      installments: purchase.installments,
-                    })}
-                    subtitle={[
-                      formatDateTime(purchase.date, purchase.createdAt),
-                      // O valor da linha é o total da compra; sem isto um 12x se
-                      // leria como se tudo tivesse saído no mês em que foi comprado.
-                      installmentLabel(Number(purchase.amount), purchase.installments),
-                    ]
-                      .filter(Boolean)
-                      .join(" · ")}
-                    cards={[{ id: card.id, name: card.name }]}
-                    categories={categoryOptions}
-                  />
-                </li>
-              ))}
-            </ul>
+            <>
+              <ul className="flex flex-col gap-2">
+                {card.purchases.slice(0, SHOWN_PURCHASES).map(purchaseItem)}
+              </ul>
+              {card.purchases.length > SHOWN_PURCHASES && (
+                <details className="group/more">
+                  <summary className="flex min-h-11 w-fit cursor-pointer list-none items-center gap-1 rounded-sm text-[13px] font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring [&::-webkit-details-marker]:hidden">
+                    Ver as outras {card.purchases.length - SHOWN_PURCHASES} compras
+                    <ChevronDown
+                      aria-hidden="true"
+                      className="size-3.5 transition-transform duration-150 group-open/more:rotate-180"
+                    />
+                  </summary>
+                  <ul className="flex flex-col gap-2">
+                    {card.purchases.slice(SHOWN_PURCHASES).map((p, i) => purchaseItem(p, i + SHOWN_PURCHASES))}
+                  </ul>
+                </details>
+              )}
+            </>
           )}
         </div>
       </div>

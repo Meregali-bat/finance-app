@@ -9,15 +9,16 @@ const october = {
 };
 
 describe("spendingCalendar", () => {
-  it("monta semanas de domingo a sábado, com vazios fora do período", () => {
+  it("monta semanas de segunda a domingo, com vazios fora do período", () => {
     const { weeks } = spendingCalendar({ ...october, entries: [] });
     // 01/10/2026 é uma quinta.
-    expect(weeks[0].slice(0, 4)).toEqual([null, null, null, null]);
-    expect(weeks[0][4]?.day).toBe(1);
+    expect(weeks[0].slice(0, 3)).toEqual([null, null, null]);
+    expect(weeks[0][3]?.day).toBe(1);
     expect(weeks.every((w) => w.length === 7)).toBe(true);
     expect(weeks.flat().filter(Boolean)).toHaveLength(31);
-    // E 31/10 é um sábado: a última semana fecha cheia.
-    expect(weeks.at(-1)!.at(-1)?.day).toBe(31);
+    // E 31/10 é um sábado: sobra o domingo vazio no fim.
+    expect(weeks.at(-1)![5]?.day).toBe(31);
+    expect(weeks.at(-1)![6]).toBeNull();
   });
 
   it("soma o dia e ordena os lançamentos do maior para o menor", () => {

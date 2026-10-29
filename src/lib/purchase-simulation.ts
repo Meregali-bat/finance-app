@@ -134,7 +134,7 @@ export interface PurchaseSimulation {
   approved: boolean;
   /** Vazio quando aprovada. Na ordem em que a tela os explica. */
   blockers: SimulationBlocker[];
-  /** O valor da primeira parcela, que é o que `installmentLabel` anuncia. */
+  /** O valor da primeira parcela, a que leva a sobra dos centavos. */
   installmentAmount: number;
   /** O vencimento da fatura que cobra a primeira parcela. */
   firstDueDate: Date | null;

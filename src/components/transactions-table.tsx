@@ -46,10 +46,22 @@ const editable = (item: HistoryItem) => item.kind === "transaction" || item.kind
 const incoming = (item: HistoryItem) =>
   item.amount < 0 && item.kind !== "jarDeposit" && item.kind !== "cardBillAdjustment";
 
+/** Lançamentos e compras inteiras guardam o dia em UTC; confirmações e
+ *  parcelas (pelo vencimento da fatura), instantes locais. */
+const storedInUtc = (item: HistoryItem) =>
+  item.kind === "transaction" || (item.kind === "card" && !item.installmentNumber);
+
+/** "2026-10-21", o dia que a linha mostra: a ordem por data segue ele, e não
+ *  o instante, que mistura meia-noite UTC com hora local. */
+function shownDayKey(item: HistoryItem) {
+  const d = item.date;
+  return storedInUtc(item)
+    ? d.toISOString().slice(0, 10)
+    : `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 function dayLabel(item: HistoryItem) {
-  // Lançamentos e compras inteiras guardam o dia em UTC; confirmações e
-  // parcelas (pelo vencimento da fatura), instantes locais.
-  const utc = item.kind === "transaction" || (item.kind === "card" && !item.installmentNumber);
+  const utc = storedInUtc(item);
   return new Intl.DateTimeFormat("pt-BR", {
     day: "2-digit",
     month: "2-digit",
@@ -67,7 +79,8 @@ function dayChipLabel(key: string) {
 
 function accountOf(item: HistoryItem) {
   if (item.cardName) return item.cardName;
-  if (item.kind === "jarDeposit") return "Caixinha";
+  // O sentido, que o valor sem sinal não diz: guardar tira da conta, resgatar põe.
+  if (item.kind === "jarDeposit") return item.amount < 0 ? "Caixinha → Conta" : "Conta → Caixinha";
   return "Conta";
 }
 
@@ -130,7 +143,9 @@ export function TransactionsTable({
       if (sort.key === "amount") return (Math.abs(a.amount) - Math.abs(b.amount)) * factor;
       if (sort.key === "description")
         return a.description.localeCompare(b.description, "pt-BR") * factor;
-      return (a.date.getTime() - b.date.getTime()) * factor;
+      const byDay = shownDayKey(a).localeCompare(shownDayKey(b));
+      if (byDay !== 0) return byDay * factor;
+      return ((a.createdAt?.getTime() ?? 0) - (b.createdAt?.getTime() ?? 0)) * factor;
     });
   }, [items, purchases, query, direction, category, account, sort, day]);
 
@@ -144,7 +159,17 @@ export function TransactionsTable({
     return { received, spent, result: received - spent };
   }, [filtered]);
 
-  const selectedItems = items.filter((i) => selected.has(historyItemKey(i)));
+  // Só o que está na lista filtrada conta como selecionado: uma seleção feita
+  // antes de um filtro não pode ser apagada sem estar à vista. E da mesma
+  // fonte da lista, senão uma compra marcada no filtro de um dia não aparecia.
+  const selectedItems = filtered.filter((i) => selected.has(historyItemKey(i)));
+  // Sem fatias, a coluna delas sai da grade em vez de ficar vazia.
+  const tableGrid = cn(
+    "grid items-center gap-3 border-b border-(--hairline) px-4",
+    slicesActive
+      ? "grid-cols-[1.5rem_5rem_minmax(0,1fr)_7.5rem_10.5rem_10.5rem_6.5rem_2.5rem]"
+      : "grid-cols-[1.5rem_5rem_minmax(0,1fr)_7.5rem_10.5rem_6.5rem_2.5rem]",
+  );
   const selectable = visible.filter(editable);
   const allVisibleSelected =
     selectable.length > 0 && selectable.every((i) => selected.has(historyItemKey(i)));
@@ -153,6 +178,8 @@ export function TransactionsTable({
     return (value: T) => {
       set(value);
       setPage(0);
+      // Filtro novo, seleção nova: o que estava marcado pode ter saído da vista.
+      setSelected(new Set());
     };
   }
 
@@ -262,6 +289,7 @@ export function TransactionsTable({
     if (item.kind === "incomeReceipt" && item.incomeId) {
       return (
         <DeleteIconButton
+          undo
           action={unmarkIncomeReceived.bind(null, item.incomeId, item.date)}
           confirmMessage={`Desfazer o recebimento de "${item.description}"? O lembrete volta a aparecer no início.`}
         />
@@ -270,6 +298,7 @@ export function TransactionsTable({
     if (item.kind === "fixedExpensePayment" || item.kind === "cardBillPayment") {
       return (
         <DeleteIconButton
+          undo
           action={unmarkExpensePayment.bind(null, item.id)}
           confirmMessage={`Desfazer o pagamento de "${item.description}"? O lembrete volta a aparecer no início.`}
         />
@@ -374,7 +403,7 @@ export function TransactionsTable({
             ]}
             // Três menus lado a lado no celular: "Todas as categorias" não
             // cabe e virava "Todas as cat".
-            display={category === ALL ? "Categorias" : undefined}
+            display={category === ALL ? "Categoria" : undefined}
             className="w-full lg:w-auto"
           />
           <ChoiceSelect
@@ -468,7 +497,7 @@ export function TransactionsTable({
             <div role="table" aria-label="Lançamentos do período" className="min-w-0">
               <div
                 role="row"
-                className="grid grid-cols-[1.5rem_5rem_minmax(0,1fr)_7.5rem_10.5rem_10.5rem_6.5rem_2.5rem] items-center gap-3 border-b border-(--hairline) px-4 py-3"
+                className={cn(tableGrid, "py-3")}
               >
                 <span role="columnheader">
                   <input
@@ -484,12 +513,14 @@ export function TransactionsTable({
                 <span role="columnheader" className="text-right">
                   {sortHeader("Valor", "amount", "right")}
                 </span>
-                <span
-                  role="columnheader"
-                  className="text-[11.5px] font-semibold text-muted-foreground"
-                >
-                  {slicesActive ? "Fatia" : ""}
-                </span>
+                {slicesActive && (
+                  <span
+                    role="columnheader"
+                    className="text-[11.5px] font-semibold text-muted-foreground"
+                  >
+                    Fatia
+                  </span>
+                )}
                 <span
                   role="columnheader"
                   className="text-[11.5px] font-semibold text-muted-foreground"
@@ -511,7 +542,8 @@ export function TransactionsTable({
                   role="row"
                   key={historyItemKey(item)}
                   className={cn(
-                    "grid grid-cols-[1.5rem_5rem_minmax(0,1fr)_7.5rem_10.5rem_10.5rem_6.5rem_2.5rem] items-center gap-3 border-b border-(--hairline) px-4 py-2.5 transition-colors last:border-b-0 hover:bg-card-hover",
+                    tableGrid,
+                    "py-2.5 transition-colors last:border-b-0 hover:bg-card-hover",
                     selected.has(historyItemKey(item)) && "bg-primary/6",
                   )}
                 >
@@ -542,9 +574,11 @@ export function TransactionsTable({
                   <span role="cell" className="text-right text-sm">
                     {amount(item)}
                   </span>
-                  <span role="cell" className="min-w-0">
-                    {slicesActive && sliceCell(item)}
-                  </span>
+                  {slicesActive && (
+                    <span role="cell" className="min-w-0">
+                      {sliceCell(item)}
+                    </span>
+                  )}
                   <span role="cell" className="min-w-0">
                     {categoryCell(item)}
                   </span>
@@ -626,7 +660,7 @@ export function TransactionsTable({
                 Saídas <b className="text-foreground">{formatCurrency(totals.spent)}</b>
               </span>
               <span>
-                Resultado{" "}
+                Entradas − saídas{" "}
                 <b className={totals.result < 0 ? "text-negative" : "text-foreground"}>
                   {formatCurrency(totals.result)}
                 </b>

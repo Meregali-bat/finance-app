@@ -4,10 +4,14 @@ import { ChevronRight, CreditCard as CardIcon } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/auth-helpers";
 import { formatCurrency } from "@/lib/format";
+
+/** "25/11": o vencimento e o fechamento da fatura, curtos. */
+const dayMonth = (date: Date) =>
+  new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit" }).format(date);
 import { toFixedExpenseInput } from "@/lib/budget-inputs";
 import { buildCardBillSeries, findNextOpenBill, getCardLimitUsage } from "@/lib/period";
 import { stagger } from "@/components/list-row";
-import { cardGradient } from "@/lib/card-look";
+import { cardSurface } from "@/lib/card-look";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/page-header";
 import { CardFormDialog } from "@/components/forms/card-form-dialog";
@@ -137,6 +141,8 @@ export default async function CardsPage() {
             });
 
             const overdue = nextBill && nextBill.dueDate.getTime() < todayStart.getTime();
+            // Aberta: o ciclo ainda não fechou, e a fatura ainda pode crescer.
+            const billOpen = nextBill && today.getTime() <= nextBill.cycleEnd.getTime();
 
             return (
               // Um bloco com cara de cartão de crédito, com o degradê do
@@ -145,19 +151,22 @@ export default async function CardsPage() {
                 key={card.id}
                 href={`/cartoes/${card.id}`}
                 className="group/card rise-in flex h-full flex-col gap-3.5 rounded-[22px] p-[18px] text-white shadow-[inset_0_0_0_1px_rgb(255_255_255/0.09),0_1px_2px_rgb(0_0_0/0.4)] transition-transform duration-150 ease-out-quint hover:-translate-y-0.5 active:scale-[0.98]"
-                style={{ background: cardGradient(card.id, card.style), ...stagger(index, 80, 60) }}
+                style={{ background: cardSurface(card.id, card.style), ...stagger(index, 80, 60) }}
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="truncate font-heading text-xl leading-tight font-bold tracking-[-0.03em]">
                       {card.name}
                     </p>
-                    <p className="text-[12.5px] text-white/70">
-                      Fecha dia {card.closingDay} · vence dia {card.dueDay}
-                    </p>
+                    {/* Com fatura, as datas dela vão junto do valor; sem, a regra. */}
+                    {!nextBill && (
+                      <p className="text-[12.5px] text-white/85">
+                        Fecha dia {card.closingDay} · vence dia {card.dueDay}
+                      </p>
+                    )}
                   </div>
                   <ChevronRight
-                    className="mt-1 size-5 shrink-0 text-white/60 transition-transform duration-150 group-hover/card:translate-x-0.5"
+                    className="mt-1 size-5 shrink-0 text-white/75 transition-transform duration-150 group-hover/card:translate-x-0.5"
                     aria-hidden="true"
                   />
                 </div>
@@ -165,7 +174,7 @@ export default async function CardsPage() {
                   <div className="flex flex-col gap-0.5">
                     {/* Cores fixas, e não os tokens do tema: o fundo é a cor do cartão,
                         escura nos dois temas. */}
-                    <span className="text-[12.5px] font-medium text-white/75">
+                    <span className="text-[12.5px] font-medium text-white/85">
                       {overdue ? "Fatura vencida" : "Próxima fatura"}
                     </span>
                     <p
@@ -177,13 +186,22 @@ export default async function CardsPage() {
                       {formatCurrency(Math.max(0, nextBill.amount - (nextBill.partialPaid ?? 0)))}
                     </p>
                     {nextBill.partialPaid ? (
-                      <p className="text-xs text-white/70 tabular-nums">
+                      <p className="text-xs text-white/85 tabular-nums">
                         falta pagar · já pago {formatCurrency(nextBill.partialPaid)}
                       </p>
                     ) : null}
+                    {/* Quando vence e se ainda cresce: "aberta" é a fatura
+                        que ainda recebe compras. */}
+                    <p className="text-xs text-white/85 tabular-nums">
+                      {overdue
+                        ? `venceu ${dayMonth(nextBill.dueDate)}`
+                        : billOpen
+                          ? `vence ${dayMonth(nextBill.dueDate)} · aberta, fecha ${dayMonth(nextBill.cycleEnd)}`
+                          : `vence ${dayMonth(nextBill.dueDate)} · fechada`}
+                    </p>
                   </div>
                 ) : (
-                  <p className="text-[13px] text-white/70">Sem fatura em aberto.</p>
+                  <p className="text-[13px] text-white/85">Sem fatura em aberto.</p>
                 )}
                 {limitUsage && (
                   <div className="flex flex-col gap-1.5">
@@ -203,9 +221,10 @@ export default async function CardsPage() {
                         }
                       />
                     </span>
-                    <p className="text-xs text-white/70 tabular-nums">
-                      {formatCurrency(limitUsage.available)} de {formatCurrency(limitUsage.limit)}{" "}
-                      livres
+                    {/* A barra enche com o usado, e o texto fala dele também. */}
+                    <p className="text-xs text-white/85 tabular-nums">
+                      {formatCurrency(limitUsage.used)} de {formatCurrency(limitUsage.limit)}{" "}
+                      usados · {formatCurrency(limitUsage.available)} livres
                     </p>
                   </div>
                 )}
