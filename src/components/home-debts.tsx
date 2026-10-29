@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import { ChevronDown, HandCoins } from "lucide-react";
+import { Check, ChevronDown, HandCoins } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -101,12 +101,16 @@ function DebtCard({
     <div
       className={homeCard("flex flex-col gap-2.5 py-3.5 pr-3.5 pl-4 lg:py-3.5 lg:pr-3.5 lg:pl-4")}
     >
-      <div className="flex items-center gap-3">
+      {/* No celular o "Recebi" desce para uma linha só dele, na ponta direita,
+          como o "Pagar" dos lembretes: deixa livre a coluna do "+" fixo (58px
+          a 16px da borda) e devolve ao texto a largura toda. Ao lado do texto,
+          com o recuo do "+", o "te deve…" ficaria com menos de 90px em 360. */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 sm:flex-nowrap">
         <button
           type="button"
           onClick={() => setExpanded(!expanded)}
           aria-expanded={expanded}
-          className="flex min-w-0 flex-1 items-center gap-3 text-left"
+          className="flex min-w-0 flex-1 items-center gap-3 rounded-xl text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring max-sm:basis-full"
         >
           <span
             aria-hidden="true"
@@ -135,7 +139,9 @@ function DebtCard({
             </span>
           </span>
         </button>
-        <ReceiveDialog debt={debt} onReceived={onReceived} />
+        <div className="flex max-sm:w-full max-sm:justify-end max-sm:pr-14">
+          <ReceiveDialog debt={debt} onReceived={onReceived} />
+        </div>
       </div>
       {expanded && (
         <ul className="flex flex-col gap-2 border-t border-border/60 pt-2.5 pl-[50px] text-[13px]">
@@ -179,15 +185,17 @@ function ReceiveDialog({
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger
         render={
+          // O mesmo "Recebi" com texto dos lembretes: só o ícone se confundia
+          // com o avatar da linha. O nome acessível começa pelo texto visível.
           <button
             type="button"
-            className={iconButton({ size: "sm" })}
-            aria-label={`Recebi de ${debt.name}`}
-            title={`Recebi de ${debt.name}`}
+            className={iconButton({ size: "pill" })}
+            aria-label={`Recebi: ${debt.name}`}
           />
         }
       >
-        <HandCoins aria-hidden="true" />
+        <Check aria-hidden="true" strokeWidth={2.5} />
+        Recebi
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>

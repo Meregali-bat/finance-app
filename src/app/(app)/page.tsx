@@ -28,6 +28,7 @@ import { SubtitleParts } from "@/components/list-row";
 import { HomeDebts } from "@/components/home-debts";
 import { loadDebts } from "@/lib/loans-data";
 import { todayBudget } from "@/lib/today-budget";
+import { heroTone } from "@/lib/hero-tone";
 import { PushSetup } from "@/components/push-setup";
 import { HomeSlicesCard } from "@/components/home-slices-card";
 import { loadSlicesOverview } from "@/lib/slices-data";
@@ -35,7 +36,6 @@ import { SLICES } from "@/lib/slices";
 import { HomePlanLinks } from "@/components/home-plan-links";
 import { ScrollAwayFab } from "@/components/scroll-away-fab";
 import { BudgetBreakdown } from "@/components/budget-breakdown";
-import { cn } from "@/lib/utils";
 
 /** "Quinta-feira" e "16 de outubro": o cabeçalho do desktop. */
 function longHeading(date: Date) {
@@ -145,6 +145,7 @@ export default async function DashboardPage() {
     value: point.total,
     valueLabel: formatCurrency(point.total),
   }));
+  const spentInPeriod = spendingTrend.at(-1)?.value ?? 0;
 
   // `fallsOnDay`, e não uma comparação de meia-noite local dos dois lados:
   // `Transaction.date` guarda um dia de calendário na parte UTC, e lê-lo no
@@ -184,10 +185,21 @@ export default async function DashboardPage() {
     .map((part) => `${formatCurrency(part.total)} ${part.label}`)
     .join(" · ");
 
-  const isOverBudget = dailyAvailable < 0;
-  // Zero porque a reserva de guardar levou o que sobrava, e não porque você
-  // gastou demais: a frase tem que dizer isso, senão parece bronca.
-  const allToSavings = !isOverBudget && dailyAvailable < 0.005 && (savings?.applied ?? 0) > 0.005;
+  // Vermelho > tudo para guardar > apertado > normal; a regra está em
+  // `heroTone`. O `allToSavings` é zero porque a reserva de guardar levou o
+  // que sobrava, e não porque você gastou demais: a frase tem que dizer isso,
+  // senão parece bronca. O apertado é um dia magro: o hero se acalma.
+  const tone = heroTone({
+    dailyAvailable,
+    daysRemaining: budget.daysRemaining,
+    totalDays,
+    spentInPeriod,
+    spentToday,
+    savingsApplied: savings?.applied ?? 0,
+  });
+  const isOverBudget = tone === "negative";
+  const allToSavings = tone === "allToSavings";
+  const isTight = tone === "tight";
   // O número do dia negativo é o estouro do período inteiro dividido pelos
   // dias que faltam (o `dailyAvailable` do ciclo corrente da previsão, ou
   // `periodBalance / daysRemaining` sem renda): o período fecha no vermelho
@@ -302,9 +314,10 @@ export default async function DashboardPage() {
   // No vermelho, o próximo passo: adiar uma conta, se alguma deixa; senão,
   // ver na previsão como ficam os próximos ciclos.
   const canDefer = reminders.some((r) => r.kind === "due" && r.defer != null);
-  // As duas próximas contas, no hero do desktop: só leitura, apontando para
-  // os lembretes, onde ficam o Pagar e o Adiar. Já vêm em ordem de data.
-  const nextBills = reminders.filter((r) => r.kind === "due").slice(0, 2);
+  // As próximas contas, no hero do desktop: só leitura, apontando para os
+  // lembretes, onde ficam o Pagar e o Adiar. Já vêm em ordem de data. Sem os
+  // chips no topo da coluna, cabe uma conta a mais no lugar deles.
+  const nextBills = reminders.filter((r) => r.kind === "due").slice(0, sideChip ? 2 : 3);
 
   // A curva do gasto fica sob a régua, cada ponto embaixo da barra do seu dia:
   // começa no centro da primeira barra e vai até o centro da de hoje. As contas
@@ -312,7 +325,6 @@ export default async function DashboardPage() {
   // bloco da régua define (2,5px; 3px no desktop) e as duas leem.
   const rulerDays = Math.max(1, totalDays);
   const trendSpan = Math.min(spendingTrend.length, rulerDays) - 1;
-  const spentInPeriod = spendingTrend.at(-1)?.value ?? 0;
 
   // O resumo de cada linha do "Planejar" do celular.
   const slicesOver = slicesOverview.usage.filter(
@@ -422,7 +434,7 @@ export default async function DashboardPage() {
       <section
         aria-label="Orçamento de hoje"
         className="hero-surface rise-in relative overflow-hidden rounded-[26px] lg:rounded-[28px]"
-        data-tone={isOverBudget ? "negative" : undefined}
+        data-tone={isOverBudget ? "negative" : isTight ? "tight" : undefined}
         style={rise(40)}
       >
         <div className="relative z-10 p-1 lg:px-4 lg:py-3">
@@ -439,12 +451,15 @@ export default async function DashboardPage() {
                     ? "Este período está no vermelho"
                     : allToSavings
                       ? "Hoje, o que sobra vai para guardar"
-                      : "Por dia, até receber"}
+                      : isTight
+                        ? "Apertado até receber"
+                        : "Por dia, até receber"}
                 </h1>
                 {/* O número é por dia: a unidade fica colada nele, senão ele
                     lê como saldo. No estado normal ela já está no título logo
-                    acima, e a linha de baixo só dá a data; nos outros dois o
-                    título diz o estado, e a linha leva a unidade. */}
+                    acima, e a linha de baixo só dá a data; nos outros três
+                    (vermelho, tudo para guardar, apertado) o título diz o
+                    estado, e a linha leva a unidade. */}
                 <div className="flex flex-col gap-2">
                   <CountUpCurrency
                     value={dailyAvailable}
@@ -458,21 +473,33 @@ export default async function DashboardPage() {
                   />
                   <div className="flex flex-col gap-0.5">
                     <p className="text-[15px] font-medium text-(--hero-muted) tabular-nums">
-                      {isOverBudget || allToSavings
+                      {isOverBudget || allToSavings || isTight
                         ? `por dia até ${formatDate(budget.periodEnd)}`
                         : `Você recebe em ${formatDate(budget.periodEnd)}`}
                     </p>
-                    {/* Sem gasto hoje a linha some: o número já é a média pura. */}
+                    {/* Sem gasto hoje a linha some: o número já é a média pura.
+                        Com gasto, ela diz que ele já saiu do número — senão o
+                        número parece o que ainda resta para hoje, e a pessoa
+                        desconta de novo de cabeça. */}
                     {spentToday >= 0.005 && (
                       <p className="text-sm text-(--hero-muted) tabular-nums">
-                        Hoje você já gastou{" "}
+                        Já descontado: você gastou{" "}
                         <span className="font-semibold text-(--hero-fg)">
                           {formatCurrency(spentToday)}
-                        </span>
+                        </span>{" "}
+                        hoje
                       </p>
                     )}
                   </div>
                 </div>
+                {/* No apertado, o próximo passo. A data já está na unidade logo
+                    acima ("por dia até…"); aqui ela vira "lá", para não ser
+                    dita duas vezes. */}
+                {isTight && (
+                  <p className="text-sm font-medium text-(--hero-fg)">
+                    Para chegar bem até lá, segure os gastos de hoje.
+                  </p>
+                )}
                 {isOverBudget && (
                   <div className="flex flex-col gap-0.5 text-sm">
                     {/* A data já está na unidade acima; aqui vem o total do período. */}
@@ -500,7 +527,7 @@ export default async function DashboardPage() {
                 <DayRuler totalDays={totalDays} elapsedDays={elapsedDays} />
                 {/* O gasto acumulado, dia a dia, embaixo das barras dos dias
                     que já passaram. Do primeiro dia não há curva: o gasto dele
-                    é o "Hoje você já gastou" lá em cima. */}
+                    é o "Já descontado: você gastou…" lá em cima. */}
                 {trendSpan > 0 && (
                   <div
                     style={{
@@ -519,10 +546,14 @@ export default async function DashboardPage() {
                     />
                   </div>
                 )}
-                {/* Uma linha só: à esquerda, embaixo da curva, o total dela; à
-                    direita, embaixo dos dias apagados, quantos faltam — o
-                    mesmo divisor da conta do número. A data do pagamento já
-                    está sob o número, e o dia de hoje, na régua. */}
+                {/* À esquerda, embaixo da curva, o que já foi: o total dela.
+                    À direita, embaixo dos dias apagados, o que vem: o livre
+                    até receber (quando não há segundo chip; sozinho, o chip
+                    tomava uma linha do hero para um número só) e quantos dias
+                    faltam — o divisor da conta do número. No celular estreito
+                    o lado direito desce para uma segunda linha, ainda à
+                    direita. A data do pagamento já está sob o número, e o
+                    dia de hoje, na régua. */}
                 <div className="flex flex-wrap justify-between gap-x-3 gap-y-0.5 pt-0.5 text-xs font-medium text-(--hero-muted) tabular-nums">
                   <p>
                     Gasto no período{" "}
@@ -530,10 +561,29 @@ export default async function DashboardPage() {
                       {formatCurrency(spentInPeriod)}
                     </span>
                   </p>
-                  <p className="ml-auto">
-                    {budget.daysRemaining === 1
-                      ? "falta 1 dia"
-                      : `faltam ${budget.daysRemaining} dias`}
+                  <p className="ml-auto text-right">
+                    {/* Cada parte inteira: se não couber, quebra entre elas,
+                        nunca no meio do valor. */}
+                    {!sideChip && (
+                      <>
+                        <span className="whitespace-nowrap">
+                          Livre até receber{" "}
+                          <span
+                            className={`font-semibold ${
+                              budget.periodBalance < 0 ? "text-negative" : "text-(--hero-fg)"
+                            }`}
+                          >
+                            {formatCurrency(budget.periodBalance)}
+                          </span>
+                          {" ·"}
+                        </span>{" "}
+                      </>
+                    )}
+                    <span className="whitespace-nowrap">
+                      {budget.daysRemaining === 1
+                        ? "falta 1 dia"
+                        : `faltam ${budget.daysRemaining} dias`}
+                    </span>
                   </p>
                 </div>
               </div>
@@ -542,21 +592,22 @@ export default async function DashboardPage() {
             {/* A coluna de olhar para a frente. No desktop, o divisor é uma
                 sombra de 1px à esquerda. */}
             <div className="flex flex-col gap-4 p-[18px] lg:gap-5 lg:p-5 lg:shadow-[-1px_0_0_0_var(--hero-line)]">
-              <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap lg:grid lg:grid-cols-2">
-                {/* Sozinho, ocupa a linha: meia largura deixava um buraco ao lado. */}
-                <div className={cn(heroChip, !sideChip && "col-span-2")}>
-                  <span className="text-[12.5px] leading-tight font-medium text-(--hero-muted)">
-                    Livre até receber
-                  </span>
-                  <span
-                    className={`truncate text-[15px] font-semibold tabular-nums ${
-                      budget.periodBalance < 0 ? "text-negative" : ""
-                    }`}
-                  >
-                    {formatCurrency(budget.periodBalance)}
-                  </span>
-                </div>
-                {sideChip && (
+              {/* Os chips só aparecem em par: sem o segundo, o livre até
+                  receber vai para a linha sob a régua. */}
+              {sideChip && (
+                <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap lg:grid lg:grid-cols-2">
+                  <div className={heroChip}>
+                    <span className="text-[12.5px] leading-tight font-medium text-(--hero-muted)">
+                      Livre até receber
+                    </span>
+                    <span
+                      className={`truncate text-[15px] font-semibold tabular-nums ${
+                        budget.periodBalance < 0 ? "text-negative" : ""
+                      }`}
+                    >
+                      {formatCurrency(budget.periodBalance)}
+                    </span>
+                  </div>
                   <Link
                     href={sideChip.href}
                     className={`${heroChip} group/chip transition-shadow duration-150 ease-out-quint hover:ring-(--hero-muted) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--hero-fg)`}
@@ -574,8 +625,8 @@ export default async function DashboardPage() {
                       {sideChip.value}
                     </span>
                   </Link>
-                )}
-              </div>
+                </div>
+              )}
               {/* Só no desktop: no celular os lembretes vêm logo abaixo do
                   hero, com o Pagar e o Adiar. Aqui é só leitura; cada linha
                   leva até eles. Âncora nativa pelo mesmo motivo do link do
@@ -682,6 +733,7 @@ export default async function DashboardPage() {
             balance={accountBalance}
             adjustedAt={inputs.account.adjustment?.createdAt ?? null}
             registeredMovement={registeredMovement}
+            today={today}
             className="rise-in"
             style={rise(80)}
           />

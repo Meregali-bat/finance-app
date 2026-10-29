@@ -105,13 +105,15 @@ type BudgetBreakdownProps = {
 
 /**
  * "Como chegamos nesse número": a conta do número do dia, aberta só quando a
- * pessoa pede. Um `<details>` nativo — teclado, leitor de tela e sem JS.
+ * pessoa pede. Um `<details>` nativo — teclado, leitor de tela e sem JS. O
+ * resumo tem 44px de toque, e a margem negativa devolve o espaço: na tela ele
+ * ocupa o mesmo que antes.
  */
 export function BudgetBreakdown(props: BudgetBreakdownProps) {
   const lines = breakdownLines(props);
   return (
     <details className="group/why text-[13px] text-(--hero-muted)">
-      <summary className="-mx-1 flex w-fit cursor-pointer list-none items-center gap-1 rounded-sm px-1 py-1 font-medium transition-colors duration-150 select-none hover:text-(--hero-fg) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--hero-fg) [&::-webkit-details-marker]:hidden">
+      <summary className="-mx-1 flex w-fit cursor-pointer list-none items-center gap-1 -my-2.5 min-h-11 rounded-sm px-1 font-medium transition-colors duration-150 select-none hover:text-(--hero-fg) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--hero-fg) [&::-webkit-details-marker]:hidden">
         Como chegamos nesse número
         <ChevronDown
           aria-hidden="true"
