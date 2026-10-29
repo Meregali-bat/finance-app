@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { Check, ChevronDown, HandCoins } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -25,8 +25,6 @@ import type { DebtView } from "@/lib/loans-data";
 import { cn } from "@/lib/utils";
 import { errorMessage } from "@/lib/error-message";
 
-const TOAST_MS = 4000;
-
 /**
  * "A receber": quem te deve, uma linha por pessoa com o total em aberto. Tocar
  * abre os empréstimos dela; "Recebi" registra o que ela devolveu, que abate
@@ -36,12 +34,11 @@ export function HomeDebts({ debts }: { debts: DebtView[] }) {
   const [toast, setToast] = useState<(UndoToastState & { transactionId: string }) | null>(null);
   const [undoing, startUndo] = useTransition();
   const seq = useRef(0);
-
-  useEffect(() => {
-    if (!toast) return;
-    const t = window.setTimeout(() => setToast(null), TOAST_MS);
-    return () => window.clearTimeout(t);
-  }, [toast]);
+  const heading = useRef<HTMLDivElement>(null);
+  const list = useRef<HTMLUListElement>(null);
+  // De quem foi o último recebimento: o foco volta para a linha dela quando o
+  // toast sai com ele dentro. Num ref, porque nessa hora o toast já é `null`.
+  const lastPerson = useRef<string | null>(null);
 
   if (debts.length === 0 && !toast) return null;
 
@@ -49,7 +46,11 @@ export function HomeDebts({ debts }: { debts: DebtView[] }) {
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex items-baseline justify-between gap-2">
+      <div
+        ref={heading}
+        tabIndex={-1}
+        className="-mx-1 flex items-baseline justify-between gap-2 rounded-lg px-1 outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
         <SectionLabel>A receber</SectionLabel>
         {debts.length > 1 && (
           <span className="text-xs font-semibold text-muted-foreground tabular-nums">
@@ -57,19 +58,20 @@ export function HomeDebts({ debts }: { debts: DebtView[] }) {
           </span>
         )}
       </div>
-      <ul className="flex flex-col gap-2.5">
+      <ul ref={list} className="flex flex-col gap-2.5">
         {debts.map((debt) => (
-          <li key={debt.personId}>
+          <li key={debt.personId} data-person-id={debt.personId}>
             <DebtCard
               debt={debt}
-              onReceived={(transactionId, amount) =>
+              onReceived={(transactionId, amount) => {
+                lastPerson.current = debt.personId;
                 setToast({
                   id: ++seq.current,
                   transactionId,
                   hasUndo: true,
                   text: `${formatCurrency(amount)} recebidos de ${debt.name}`,
-                })
-              }
+                });
+              }}
             />
           </li>
         ))}
@@ -77,6 +79,13 @@ export function HomeDebts({ debts }: { debts: DebtView[] }) {
       <UndoToast
         toast={toast}
         undoing={undoing}
+        onDismiss={() => setToast(null)}
+        // A linha da pessoa, se ela ainda deve; senão (quitou), o título.
+        restoreFocus={() =>
+          Array.from(list.current?.children ?? [])
+            .find((li) => (li as HTMLElement).dataset.personId === lastPerson.current)
+            ?.querySelector("button") ?? heading.current
+        }
         onUndo={() => {
           if (!toast) return;
           const { transactionId } = toast;

@@ -157,6 +157,11 @@
   --brand-light: #7a0907;
   --card-hover: #211514;
   --toast: #2a1a18;
+  /* O toast é escuro nos dois temas: o check e o "Desfazer" levam sempre o
+     turquesa e o rosado do escuro, e não o --positive e o --primary, que a
+     paleta clara escurece e sumiriam no fundo do toast. */
+  --toast-positive: #5fd0c0;
+  --toast-action: #f2a99f;
   --chart-line: #ffd2cb;
   --dot-ring: #4a0a09;
   --shadow-card: 0 1px 2px rgb(0 0 0 / 0.4), inset 0 0 0 1px rgb(247 236 233 / 0.08),
@@ -335,8 +340,6 @@
     --dots: rgb(155 42 32 / 0.1);
     --shadow-panel: 0 2px 4px rgb(60 20 15 / 0.06), 0 24px 60px -24px rgb(60 20 15 / 0.25),
       inset 0 0 0 1px rgb(42 18 16 / 0.06);
-  --shadow-panel: 0 2px 4px rgb(60 20 15 / 0.06), 0 24px 60px -24px rgb(60 20 15 / 0.25),
-    inset 0 0 0 1px rgb(42 18 16 / 0.06);
     --shadow-card: 0 1px 2px rgb(60 20 15 / 0.06), inset 0 0 0 1px rgb(42 18 16 / 0.08);
     --shadow-card-hover: 0 12px 28px -14px rgb(60 20 15 / 0.28), inset 0 0 0 1px rgb(42 18 16 / 0.14);
     --shadow-hero: 0 2px 4px rgb(60 20 15 / 0.12), 0 24px 60px -20px rgb(60 20 15 / 0.45),

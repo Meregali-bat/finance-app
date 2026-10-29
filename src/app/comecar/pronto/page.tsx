@@ -61,7 +61,7 @@ export default async function OnboardingDonePage() {
             {/* Fora do vermelho, o "por dia" já está no rótulo acima. */}
             {isOverBudget
               ? `Por dia, até ${formatDate(budget.periodEnd)} — ${days} ${days === 1 ? "dia" : "dias"} até o próximo pagamento.`
-              : `Você recebe em ${formatDate(budget.periodEnd)}, daqui a ${days} ${days === 1 ? "dia" : "dias"}.`}{" "}
+              : `Próximo pagamento em ${formatDate(budget.periodEnd)}, daqui a ${days} ${days === 1 ? "dia" : "dias"}.`}{" "}
             Já contando {countedText}
             {budget.periodBalance > 0
               ? `: ${formatCurrency(budget.periodBalance)} livres até receber.`
@@ -75,8 +75,8 @@ export default async function OnboardingDonePage() {
         style={{ "--rise-delay": "200ms" } as React.CSSProperties}
       >
         <p className="text-[15px] leading-relaxed text-muted-foreground">
-          O número muda conforme você lança gastos e confirma o que recebe e o que paga. Use o +
-          para lançar o primeiro.
+          O número muda conforme você lança gastos e confirma o que recebe e o que paga. Lance o
+          primeiro pelo botão + da Início.
         </p>
         <Link
           href="/"

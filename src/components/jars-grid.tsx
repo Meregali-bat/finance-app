@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { PiggyBank } from "lucide-react";
 import { StatLabel } from "@/components/page-header";
 import { CountUpCurrency } from "@/components/ui/animated-number";
@@ -44,8 +44,6 @@ export type JarView = {
   }[];
 };
 
-const TOAST_MS = 4000;
-
 /**
  * As caixinhas em grade, com o total guardado em cima. Guardar e resgatar
  * fazem o saldo e o total contarem até o valor novo (eles vêm revalidados do
@@ -62,12 +60,6 @@ export function JarsGrid({ jars, yieldContext }: { jars: JarView[]; yieldContext
   const total = jars.reduce((sum, jar) => sum + (jar.now?.total ?? jar.balance), 0);
   const earned = jars.reduce((sum, jar) => sum + (jar.now ? jar.now.total - jar.balance : 0), 0);
   const estimated = yieldContext.cdiSource === "estimate";
-
-  useEffect(() => {
-    if (!toast) return;
-    const t = window.setTimeout(() => setToast(null), TOAST_MS);
-    return () => window.clearTimeout(t);
-  }, [toast]);
 
   function done(jar: JarView, withdraw: boolean, depositId: string, amount: number) {
     setError(null);
@@ -258,7 +250,12 @@ export function JarsGrid({ jars, yieldContext }: { jars: JarView[]; yieldContext
         ))}
       </div>
 
-      <UndoToast toast={toast} onUndo={undo} undoing={undoing} />
+      <UndoToast
+        toast={toast}
+        onUndo={undo}
+        onDismiss={() => setToast(null)}
+        undoing={undoing}
+      />
     </>
   );
 }
