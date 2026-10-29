@@ -52,11 +52,14 @@ export function PageHeader({
 
 /**
  * O título de uma seção dentro da tela, em caixa normal: lê como título, e não
- * como etiqueta gritada em maiúsculas.
+ * como etiqueta gritada em maiúsculas. 18px bold, um degrau claro acima do
+ * título de linha (15px semibold) e do `StatLabel` (12,5px, cinza).
  */
-export function SectionLabel({ children }: { children: React.ReactNode }) {
+export function SectionLabel({ children, id }: { children: React.ReactNode; id?: string }) {
   return (
-    <h2 className="font-heading text-[15px] leading-tight font-semibold tracking-[-0.01em]">
+    <h2
+      id={id}
+      className="font-heading text-[18px] leading-tight font-bold tracking-[-0.025em] text-balance">
       {children}
     </h2>
   );

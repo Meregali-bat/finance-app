@@ -112,8 +112,6 @@ export function JarsGrid({ jars, yieldContext }: { jars: JarView[]; yieldContext
         <StatLabel>Total guardado</StatLabel>
         <CountUpCurrency
           value={total}
-          duration={1.2}
-          delay={0.2}
           className="font-heading text-[40px] leading-none font-bold tracking-[-0.045em] tabular-nums"
         />
         {earned > 0.005 && (
@@ -154,8 +152,6 @@ export function JarsGrid({ jars, yieldContext }: { jars: JarView[]; yieldContext
               <p className="truncate text-sm font-semibold">{jar.name}</p>
               <CountUpCurrency
                 value={jar.now?.total ?? jar.balance}
-                duration={1}
-                delay={0.3 + index * 0.07}
                 className={cn(
                   "block truncate font-heading text-[22px] leading-tight font-bold tracking-[-0.035em] tabular-nums",
                 )}

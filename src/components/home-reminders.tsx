@@ -135,6 +135,20 @@ export function HomeReminders({ reminders }: { reminders: HomeReminder[] }) {
   // No celular, doze lembretes empurram o resto da Início para longe: os
   // primeiros (os vencidos vêm na frente) ficam à vista, o resto abre num toque.
   const [expanded, setExpanded] = useState(false);
+  // O "Veja o que dá para adiar" do hero no vermelho aponta para cá
+  // (#lembretes): a conta adiável pode ser a quinta da lista, então chegar
+  // por ele abre a lista inteira.
+  useEffect(() => {
+    function reveal() {
+      if (window.location.hash === "#lembretes") setExpanded(true);
+    }
+    const t = window.setTimeout(reveal, 0);
+    window.addEventListener("hashchange", reveal);
+    return () => {
+      window.clearTimeout(t);
+      window.removeEventListener("hashchange", reveal);
+    };
+  }, []);
   const shown = expanded ? visible : visible.slice(0, COLLAPSED_COUNT);
   const hiddenCount = visible.length - shown.length;
 
@@ -191,7 +205,9 @@ export function HomeReminders({ reminders }: { reminders: HomeReminder[] }) {
                     },
                   },
                 }}
-                className="mb-2.5 overflow-hidden last:mb-0"
+                // `@container`: o card decide pela própria largura se os botões
+                // cabem na linha do texto ou descem para a linha de baixo.
+                className="@container mb-2.5 overflow-hidden last:mb-0"
               >
                 <ReminderCard
                   reminder={reminder}
@@ -255,19 +271,32 @@ function ReminderCard({
 }) {
   const isIncome = reminder.kind === "income";
   const overdue = !isIncome && reminder.overdue;
-  const payLabel = isIncome ? "Marcar como recebida" : "Marcar como paga";
+  const payLabel = isIncome ? "Recebi" : "Pagar";
+  // Os botões se repetem em cada lembrete: o nome acessível leva o lembrete
+  // junto, senão a lista vira vários "Pagar" iguais. Ele começa pelo texto
+  // visível, para quem comanda por voz dizer o que vê.
   const payTrigger = {
-    label: payLabel,
-    icon: <Check aria-hidden="true" strokeWidth={2.5} />,
+    label: `${payLabel}: ${reminder.label}`,
+    icon: (
+      <>
+        <Check aria-hidden="true" strokeWidth={2.5} />
+        {payLabel}
+      </>
+    ),
     className: iconButton({
-      size: "sm",
-      className: confirmed ? "bg-positive text-positive-foreground hover:bg-positive" : undefined,
+      size: "pill",
+      className: cn(
+        "ml-auto",
+        confirmed && "bg-positive text-positive-foreground hover:bg-positive",
+      ),
     }),
   };
 
   return (
     <div
-      className={homeCard("flex items-center gap-3 py-3.5 pr-3.5 pl-4 lg:py-3.5 lg:pr-3.5 lg:pl-4")}
+      className={homeCard(
+        "flex flex-wrap items-center gap-x-3 gap-y-2 py-3.5 pr-3.5 pl-4 @[31rem]:flex-nowrap lg:py-3.5 lg:pr-3.5 lg:pl-4",
+      )}
     >
       <div
         className={cn(
@@ -308,7 +337,11 @@ function ReminderCard({
           ))}
         </p>
       </div>
-      <div className="flex shrink-0 items-center gap-1.5">
+      {/* Num card estreito (o celular), os botões descem para uma linha só
+          deles, alinhada ao texto: o "Adiar" à esquerda e o "Pagar" na outra
+          ponta, longe um do outro — um toque errado entre os dois paga uma
+          conta que era para adiar. Com espaço, voltam para a linha do texto. */}
+      <div className="flex w-full items-center gap-2 pl-[34px] @[31rem]:w-auto @[31rem]:shrink-0 @[31rem]:pl-0">
         {reminder.kind === "due" && reminder.defer && (
           <DeferExpenseDialog
             action={reminder.defer.action}
@@ -318,9 +351,14 @@ function ReminderCard({
             nextMonthTarget={reminder.defer.nextMonthTarget}
             endTarget={reminder.defer.endTarget}
             trigger={{
-              label: "Adiar",
-              icon: <Clock aria-hidden="true" />,
-              className: iconButton({ tone: "ghost", size: "sm" }),
+              label: `Adiar: ${reminder.label}`,
+              icon: (
+                <>
+                  <Clock aria-hidden="true" />
+                  Adiar
+                </>
+              ),
+              className: iconButton({ tone: "ghost", size: "pill" }),
             }}
             onDone={onDeferred}
           />

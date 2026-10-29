@@ -35,14 +35,18 @@ export function AreaTrend({
   title: string;
   className?: string;
   /**
-   * Entra revelado da esquerda para a direita, e só então o ponto final
-   * aparece, com um anel pulsando atrás dele.
+   * Entra revelado da esquerda para a direita, e o ponto final aparece no
+   * fim. Curto (~400ms): é o gráfico do Início, aberto várias vezes por dia.
    */
   reveal?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const gradientId = `trend-${useId().replace(/:/g, "")}`;
+  const hintId = useId();
   const [index, setIndex] = useState<number | null>(null);
+  // O que o leitor de tela fala ao percorrer com as setas. Só o teclado
+  // escreve aqui: passar o mouse por cima não pode virar uma narração.
+  const [spoken, setSpoken] = useState("");
 
   if (points.length === 0) return null;
 
@@ -63,23 +67,48 @@ export function AreaTrend({
     setIndex(Math.round(ratio * last));
   }
 
+  function scrubTo(i: number) {
+    setIndex(i);
+    setSpoken(`${points[i].valueLabel} em ${points[i].label}`);
+  }
+
   return (
     <figure className="flex flex-col gap-1">
       <div
         ref={ref}
-        className={cn("relative touch-none outline-none", className)}
+        // `pan-y`: um arrasto vertical que começa no gráfico ainda rola a
+        // página; só o horizontal fica com a mira. Quando o navegador assume a
+        // rolagem, ele manda `pointercancel`, e a mira some junto.
+        className={cn("relative touch-pan-y outline-none", className)}
         style={className ? undefined : { height }}
         tabIndex={0}
         role="img"
         aria-label={`${title}: ${points[last].valueLabel} em ${points[last].label}`}
+        aria-describedby={last > 0 ? hintId : undefined}
         onPointerMove={(e) => track(e.clientX)}
         onPointerDown={(e) => track(e.clientX)}
         onPointerLeave={() => setIndex(null)}
+        onPointerCancel={() => setIndex(null)}
         onKeyDown={(e) => {
-          if (e.key === "ArrowLeft") setIndex(Math.max(0, shown - 1));
-          if (e.key === "ArrowRight") setIndex(Math.min(last, shown + 1));
+          const next =
+            e.key === "ArrowLeft"
+              ? Math.max(0, shown - 1)
+              : e.key === "ArrowRight"
+                ? Math.min(last, shown + 1)
+                : e.key === "Home"
+                  ? 0
+                  : e.key === "End"
+                    ? last
+                    : null;
+          if (next === null) return;
+          // Sem isso a seta também rola a página por baixo do gráfico.
+          e.preventDefault();
+          scrubTo(next);
         }}
-        onBlur={() => setIndex(null)}
+        onBlur={() => {
+          setIndex(null);
+          setSpoken("");
+        }}
       >
         <svg
           viewBox={`0 0 ${width} ${height}`}
@@ -93,7 +122,7 @@ export function AreaTrend({
               <stop offset="1" style={{ stopColor: stroke, stopOpacity: 0 }} />
             </linearGradient>
           </defs>
-          <g className={reveal ? "trend-reveal" : undefined}>
+          <g className={reveal ? "trend-reveal-quick" : undefined}>
             <path d={area} fill={`url(#${gradientId})`} />
             <path
               d={line}
@@ -116,18 +145,6 @@ export function AreaTrend({
         )}
         {/* O ponto em HTML, não no SVG esticado: lá ele viraria uma elipse.
             A posição vertical em porcentagem acompanha a altura da tela. */}
-        {reveal && index === null && (
-          <span
-            aria-hidden="true"
-            data-ping
-            className="trend-ping absolute size-[11px] rounded-full motion-reduce:hidden"
-            style={{
-              left: `${x(last)}%`,
-              top: `${(y(points[last].value) / height) * 100}%`,
-              background: stroke,
-            }}
-          />
-        )}
         <span
           aria-hidden="true"
           className={cn(
@@ -144,8 +161,11 @@ export function AreaTrend({
           }}
         />
         {index !== null && (
+          // Só visual: o mesmo valor chega ao leitor de tela pela região
+          // `aria-live` abaixo, fora do `role="img"` (lá dentro ela seria
+          // ignorada: os filhos de uma imagem não são lidos).
           <span
-            role="tooltip"
+            aria-hidden="true"
             className="pointer-events-none absolute bottom-full z-10 mb-1 flex -translate-x-1/2 flex-col items-center rounded-xl bg-popover px-3 py-1.5 whitespace-nowrap shadow-float ring-1 ring-foreground/10"
             style={{ left: `${Math.min(88, Math.max(12, x(index)))}%` }}
           >
@@ -155,6 +175,14 @@ export function AreaTrend({
         )}
       </div>
       <figcaption className="sr-only">{title}</figcaption>
+      {last > 0 && (
+        <span id={hintId} className="sr-only">
+          Use as setas para ver cada dia.
+        </span>
+      )}
+      <span className="sr-only" aria-live="polite" aria-atomic="true">
+        {spoken}
+      </span>
     </figure>
   );
 }

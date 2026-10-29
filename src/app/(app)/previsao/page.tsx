@@ -261,8 +261,6 @@ export default async function ForecastPage({
                     remonta a tela), então o valor conta do anterior até o novo. */}
                 <CountUpCurrency
                   value={isNegative ? period.endBalance : period.freeToSpend}
-                  duration={0.7}
-                  delay={0.2}
                   className={cn(
                     "font-heading text-[44px] leading-none font-bold tracking-[-0.04em] tabular-nums lg:text-[52px]",
                     isNegative ? "text-negative" : "text-(--hero-fg)",

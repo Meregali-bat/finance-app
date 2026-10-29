@@ -43,9 +43,15 @@ interface Option {
 export function PurchaseSimulationDialog({
   cards,
   categories = [],
+  trigger,
 }: {
   cards: Option[];
   categories?: Option[];
+  /**
+   * Um gatilho com texto visível (a linha "Planejar" do celular). Sem ele, o
+   * botão-ícone do card do desktop.
+   */
+  trigger?: { className: string; children: React.ReactNode };
 }) {
   const [open, setOpen] = useState(false);
   const [cardId, setCardId] = useState(cards[0]?.id ?? "");
@@ -132,18 +138,24 @@ export function PurchaseSimulationDialog({
         if (!next) reset();
       }}
     >
-      <DialogTrigger
-        render={
-          <button
-            type="button"
-            className={iconButton({ tone: "outline" })}
-            aria-label="Simular compra"
-            title="Simular compra"
-          />
-        }
-      >
-        <Scale aria-hidden="true" />
-      </DialogTrigger>
+      {trigger ? (
+        <DialogTrigger render={<button type="button" className={trigger.className} />}>
+          {trigger.children}
+        </DialogTrigger>
+      ) : (
+        <DialogTrigger
+          render={
+            <button
+              type="button"
+              className={iconButton({ tone: "outline" })}
+              aria-label="Simular compra"
+              title="Simular compra"
+            />
+          }
+        >
+          <Scale aria-hidden="true" />
+        </DialogTrigger>
+      )}
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{result ? "O veredito" : "Posso comprar isso?"}</DialogTitle>
