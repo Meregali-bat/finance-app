@@ -434,7 +434,16 @@ export default async function ForecastPage({
     const subtotal = Math.abs(
       entries.filter((entry) => !entry.awaiting).reduce((sum, entry) => sum + entry.amount, 0),
     );
-    return { ...group, entries, subtotal };
+    // No ciclo atual, o que ainda vai acontecer é o número que decide.
+    const pending =
+      period.offset === 0 && group.kind !== "scheduled" && group.kind !== "jar"
+        ? Math.abs(
+            entries
+              .filter((entry) => !entry.confirmed && !entry.awaiting)
+              .reduce((sum, entry) => sum + entry.amount, 0),
+          )
+        : 0;
+    return { ...group, entries, subtotal, pending };
   }).filter((group) => group.entries.length > 0);
   const summaryReconciles =
     Math.abs(
@@ -543,7 +552,9 @@ export default async function ForecastPage({
       ? period.offset === 1
         ? // O anterior é o corrente, que nem terminou: "faltou" seria passado.
           period.inherited < -0.005
-          ? "Falta do ciclo atual"
+          ? // O número de cima parte daqui: sem dizer que supõe parar de
+            // gastar agora, ele promete mais do que o ritmo entrega.
+            "Falta do ciclo atual, sem gastar mais"
           : "Guardado do ciclo atual"
         : period.inherited < -0.005
           ? "Faltou nos ciclos anteriores"
@@ -563,7 +574,8 @@ export default async function ForecastPage({
         <div key={group.key} className="flex justify-between gap-3">
           <dt className="text-muted-foreground">{groupLabel(group.kind, group.label, period.offset)}</dt>
           <dd className="shrink-0">
-            {group.incoming ? "+" : "−"} {formatCurrency(group.subtotal)}
+            {group.incoming ? "+" : "−"}
+            {formatCurrency(group.subtotal)}
           </dd>
         </div>
       ))}
@@ -639,7 +651,7 @@ export default async function ForecastPage({
                 )}{" "}
                 ·{" "}
                 {period.offset === 0
-                  ? `${period.daysLeft} ${period.daysLeft === 1 ? "dia restante" : "dias restantes"}`
+                  ? `${period.daysLeft} ${period.daysLeft === 1 ? "dia restante" : "dias restantes"}, com hoje`
                   : `${period.totalDays} ${period.totalDays === 1 ? "dia" : "dias"} de ciclo`}
               </p>
               {/* Um ciclo comprido (o pagamento atrasou, o mês virou duas
@@ -693,7 +705,7 @@ export default async function ForecastPage({
                   sem a nota. */}
               {jarRoundTrip > 0.005 && (
                 <p className="text-[12.5px] text-(--hero-muted) tabular-nums">
-                  Os dois incluem {formatCurrency(jarRoundTrip)} que foram e voltaram das caixinhas.
+                  Os dois incluem {formatCurrency(jarRoundTrip)} que vão e voltam das caixinhas neste ciclo.
                 </p>
               )}
             </div>
@@ -800,8 +812,7 @@ export default async function ForecastPage({
                 <span className={paceLeft < -0.005 ? "text-negative" : undefined}>
                   {paceLeft < -0.005 ? "faltando" : "sobrando"}
                 </span>{" "}
-                em{" "}
-                <span className="whitespace-nowrap">{dateIn(lastDay(period), currentYear)}</span>
+                <span className="whitespace-nowrap">em {dateIn(lastDay(period), currentYear)}</span>
               </span>
             </p>
             {/* Duas frases curtas: o ritmo, e só quando falta, a saída. O ritmo
@@ -814,12 +825,15 @@ export default async function ForecastPage({
                 ? pace.remainingDays > 0
                   ? `: saem mais ${formatCurrency(pace.projectedSpending)} nos ${pace.remainingDays} ${pace.remainingDays === 1 ? "dia" : "dias"} depois de hoje, que já está na média.`
                   : "."
-                : `: os ${period.totalDays} dias do ciclo de ${cycleMonth(period, currentYear)} levam ${formatCurrency(pace.perDay * period.totalDays)}${carriesShortfall ? ", e o que faltar antes passa para ele" : carriesSurplus > 0.005 ? `, somando ${formatCurrency(carriesSurplus)} que sobram ${offset === 1 ? "do ciclo atual" : "dos ciclos antes"}, nesse ritmo` : ""}.`}
+                : `: os ${period.totalDays} dias do ciclo de ${cycleMonth(period, currentYear)} levam ${formatCurrency(pace.perDay * period.totalDays)}${carriesShortfall ? `, e os ${formatCurrency(-carryIn)} que faltarem antes passam para ele` : carriesSurplus > 0.005 ? `, somando ${formatCurrency(carriesSurplus)} que sobram ${offset === 1 ? "do ciclo atual" : "dos ciclos antes"}, nesse ritmo` : ""}.`}
             </p>
             {paceLeft < -0.005 && (noSpendLeft < -0.005 || paceDays > 0) && (
               <p className="text-[13.5px] leading-relaxed text-muted-foreground tabular-nums">
                 {noSpendLeft < -0.005
-                  ? `Mesmo sem gastar nada no dia a dia, faltariam ${formatCurrency(-noSpendLeft)}: são as contas que não cabem.`
+                  ? period.offset === 0
+                    ? // O valor já é o número do hero: aqui, só a causa.
+                      "Não é o dia a dia: mesmo sem gastar nada, são as contas que não cabem."
+                    : `Mesmo sem gastar nada no dia a dia, faltariam ${formatCurrency(-noSpendLeft)}: são as contas que não cabem.`
                   : targetFromNext !== null
                     ? // O ciclo atual já fecha no vermelho: o número de hoje é
                       // zero, então o alvo só vale do próximo ciclo em diante.
@@ -854,13 +868,20 @@ export default async function ForecastPage({
                   </span>{" "}
                   {timelineShort.length === 1 ? "ciclos fecha com falta:" : "ciclos fecham com falta · pior"}{" "}
                   {/* O pior ciclo é um link: dá para ir direto a ele. */}
-                  <Link
-                    href={forecastHref(timelineWorst.offset)}
-                    className={cn(shortfallLink, "font-semibold text-negative")}
-                  >
-                    {inNamedCycle(timelineWorst, currentYear)} (falta{" "}
-                    {formatCurrency(Math.abs(timelineWorst.endBalance))})
-                  </Link>
+                  {timelineWorst.offset === offset ? (
+                    // Já é a tela aberta: um link para ela mesma não leva a nada.
+                    <span className="font-semibold text-negative">
+                      este ({formatCurrency(Math.abs(timelineWorst.endBalance))})
+                    </span>
+                  ) : (
+                    <Link
+                      href={forecastHref(timelineWorst.offset)}
+                      className={cn(shortfallLink, "font-semibold text-negative")}
+                    >
+                      {inNamedCycle(timelineWorst, currentYear)} (falta{" "}
+                      {formatCurrency(Math.abs(timelineWorst.endBalance))})
+                    </Link>
+                  )}
                 </>
               ) : (
                 <>
@@ -922,13 +943,19 @@ export default async function ForecastPage({
         // da coluna curta. Cada grupo leva o subtotal, para os chips do hero
         // serem conferíveis.
         <div className="flex flex-col gap-6 xl:grid xl:grid-cols-2 xl:items-start">
-          {[true, false].map((side) => (
+          {/* No ciclo atual as saídas vêm antes, no HTML e na tela empilhada:
+              o que já foi recebido não decide nada, e o que falta pagar
+              decide. No xl, cada lado volta à sua coluna. */}
+          {(period.offset === 0 ? [false, true] : [true, false]).map((side) => (
             <div
               key={String(side)}
               // A coluna das entradas é a curta: ela acompanha a rolagem, com
               // o resumo do ciclo embaixo, em vez de deixar um vão ao lado das
               // saídas.
-              className={cn("flex flex-col gap-6", side && "xl:sticky xl:top-6")}
+              className={cn(
+                "flex flex-col gap-6 xl:row-start-1",
+                side ? "xl:sticky xl:top-6 xl:col-start-1" : "xl:col-start-2",
+              )}
             >
               {groupLists
                 .filter((group) => group.incoming === side)
@@ -936,8 +963,17 @@ export default async function ForecastPage({
                   <div key={group.key} className="flex flex-col gap-3">
                     <div className="flex items-baseline justify-between gap-3">
                       <SectionLabel>{groupLabel(group.kind, group.label, period.offset)}</SectionLabel>
-                      <span className="text-[13px] font-medium text-muted-foreground tabular-nums">
-                        {formatCurrency(group.subtotal)}
+                      <span className="text-right text-[13px] font-medium text-muted-foreground tabular-nums">
+                        {group.pending > 0.005 && group.pending < group.subtotal - 0.005 ? (
+                          <>
+                            <span className="font-semibold text-foreground">
+                              {formatCurrency(group.pending)} {group.incoming ? "a receber" : "a pagar"}
+                            </span>{" "}
+                            · de {formatCurrency(group.subtotal)}
+                          </>
+                        ) : (
+                          formatCurrency(group.subtotal)
+                        )}
                       </span>
                     </div>
                     {/* Um ciclo pode ter dezenas de lançamentos: as primeiras
