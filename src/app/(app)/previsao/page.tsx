@@ -406,6 +406,24 @@ export default async function ForecastPage({
   // um alvo que valesse desde amanhã mandaria gastar o salário antes de ele
   // cair. Aí o alvo só começa no próximo ciclo, supondo que o atual pare onde
   // está, e se divide só pelos dias dos ciclos à frente.
+  // No ritmo, o pior ciclo do caminho até a tela: um ciclo da tela que fecha
+  // sobrando não pode esconder meses no vermelho antes dele.
+  const worstOnWay =
+    paceByCycle && offset > 0
+      ? periods
+          .slice(0, offset)
+          .map((p, k) => ({ period: p, left: paceByCycle[k] }))
+          .reduce((worst, item) => (item.left < worst.left ? item : worst))
+      : null;
+  const redOnWay = worstOnWay && worstOnWay.left < -0.005 ? worstOnWay : null;
+  const redCyclesOnWay = paceByCycle
+    ? paceByCycle.slice(0, offset).filter((left) => left < -0.005).length
+    : 0;
+  // Com o ciclo atual parado e cada ciclo à frente gastando o seu "por dia"
+  // (no centavo de baixo), todos fecham: a previsão já desconta a falta. Só
+  // vale se nenhum deles fecha no vermelho por conta própria.
+  const followEachCycle =
+    offset > 0 && isNegativeCycle(current) && periods.slice(1, offset + 1).every((p) => !isNegativeCycle(p));
   const targetFromNext =
     pace && paceByCycle && offset > 0 && isNegativeCycle(current)
       ? Math.min(
@@ -688,8 +706,10 @@ export default async function ForecastPage({
                   <span className="font-semibold text-(--hero-fg)">Nada livre para gastar</span>
                 ) : (
                   <>
+                    {/* No centavo de baixo: arredondado para cima, os dias
+                        somados passariam do livre por alguns centavos. */}
                     <span className="font-semibold text-(--hero-fg)">
-                      {formatCurrency(period.dailyAvailable)}
+                      {formatCurrency(floorCents(period.dailyAvailable))}
                     </span>{" "}
                     por dia
                   </>
@@ -841,7 +861,7 @@ export default async function ForecastPage({
           className={homeCard("rise-in flex items-start gap-3")}
           style={{ "--rise-delay": "160ms" } as React.CSSProperties}
         >
-          <IconSquare tone={paceLeft < -0.005 ? "negative" : "positive"}>
+          <IconSquare tone={paceLeft < -0.005 || redOnWay ? "negative" : "positive"}>
             <Gauge />
           </IconSquare>
           <div className="flex min-w-0 flex-col gap-1.5 pt-0.5">
@@ -900,7 +920,7 @@ export default async function ForecastPage({
                   <div className="flex justify-between gap-3">
                     <dt className="text-muted-foreground">
                       {carryIn < 0 ? "Falta a mais" : "Sobra"}{" "}
-                      {offset === 1 ? "do ciclo atual" : "dos ciclos antes"}, no ritmo
+                      {offset === 1 ? "do ciclo atual" : "dos ciclos anteriores"}, no ritmo
                     </dt>
                     <dd className="shrink-0">
                       {carryIn < 0 ? "−" : "+"}
@@ -916,7 +936,13 @@ export default async function ForecastPage({
                 </div>
               </dl>
             )}
-            {paceLeft < -0.005 && (noSpendLeft < -0.005 || paceDays > 0) && (
+            {/* Fechar sobrando no fim não basta: o caminho até lá também conta. */}
+            {paceLeft >= -0.005 && redOnWay && (
+              <p className="text-[13.5px] leading-relaxed text-negative tabular-nums">
+                {`Mas, nesse ritmo, ${redCyclesOnWay} ${redCyclesOnWay === 1 ? "ciclo fica" : "ciclos ficam"} no vermelho antes; o pior é ${inNamedCycle(redOnWay.period, currentYear)} (−${formatCurrency(Math.abs(redOnWay.left))}).`}
+              </p>
+            )}
+            {(paceLeft < -0.005 || redOnWay) && (noSpendLeft < -0.005 || paceDays > 0) && (
               <p className="text-[13.5px] leading-relaxed text-muted-foreground tabular-nums">
                 {noSpendLeft < -0.005
                   ? period.offset === 0
@@ -926,11 +952,15 @@ export default async function ForecastPage({
                   : targetFromNext !== null
                     ? // O ciclo atual já fecha no vermelho: o número de hoje é
                       // zero, então o alvo só vale do próximo ciclo em diante.
-                      `Para fechar, não gaste mais nada no ciclo atual e, a partir de ${dateIn(periods[1].periodStart, currentYear)}, até ${formatCurrency(Math.abs(targetFromNext - periods[1].dailyAvailable) < 0.01 ? periods[1].dailyAvailable : targetFromNext)} por dia.`
+                      followEachCycle
+                      ? // Um alvo só para vários ciclos travava todos no mais
+                        // apertado; o número de cada ciclo já fecha a conta.
+                        `Para fechar, não gaste mais nada até ${dateIn(lastDay(current), currentYear)} (${pace.remainingDays} ${pace.remainingDays === 1 ? "dia" : "dias"}); depois, siga o número de cada ciclo: até ${formatCurrency(floorCents(periods[1].dailyAvailable))} por dia em ${cycleMonth(periods[1], currentYear)}${offset > 1 ? `, ${formatCurrency(floorCents(period.dailyAvailable))} neste` : ""}.`
+                      : `Para fechar, não gaste mais nada até ${dateIn(lastDay(current), currentYear)} (${pace.remainingDays} ${pace.remainingDays === 1 ? "dia" : "dias"}) e, a partir de ${dateIn(periods[1].periodStart, currentYear)}, até ${formatCurrency(targetFromNext)} por dia.`
                   : period.offset > 0 && paceTarget < period.dailyAvailable - 0.005
                     ? // Abaixo do número de cima: diz por quê, senão os dois
                       // números diários parecem se contradizer.
-                      `Para fechar, gaste até ${formatCurrency(paceTarget)} por dia a partir de amanhã, menos que os ${formatCurrency(period.dailyAvailable)} de cima: o ritmo de agora faz o ciclo atual chegar devendo.`
+                      `Para fechar, gaste até ${formatCurrency(paceTarget)} por dia a partir de amanhã, menos que os ${formatCurrency(floorCents(period.dailyAvailable))} de cima: o ritmo de agora faz o ciclo atual chegar devendo.`
                     : `Para fechar, gaste até ${formatCurrency(paceTarget)} por dia a partir de amanhã.`}
               </p>
             )}
