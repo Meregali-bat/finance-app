@@ -451,19 +451,23 @@ export default async function DashboardPage() {
             <div className="flex flex-col gap-4 p-[18px] pb-0 lg:gap-5 lg:p-5">
               <div className="flex flex-col gap-2">
                 {/* O título da página, em todos os tamanhos: a pergunta que o app responde. */}
-                <h1 className="flex items-center gap-1.5 text-sm font-medium text-(--hero-muted)">
+                {/* O ícone fica fora do texto, e o texto num span só: com o
+                    h1 em flex, cada pedaço virava uma coluna e o título se
+                    partia no celular. */}
+                <h1 className="flex items-start gap-1.5 text-sm font-medium text-(--hero-muted)">
                   {/* A cor não pode ser o único sinal do vermelho. */}
                   {isOverBudget && (
-                    <TriangleAlert aria-hidden className="size-4 shrink-0 text-negative" />
+                    <TriangleAlert aria-hidden className="mt-0.5 size-4 shrink-0 text-negative" />
                   )}
+                  <span>
                   {/* Com o saldo velho, o próprio título é condicional: é o
                       que se lê primeiro, e não pode afirmar um vermelho que
                       talvez não exista. */}
                   {isOverBudget
                     ? staleDays != null
                       ? <>
-                          Pode estar no vermelho: o saldo é de{" "}
-                          <span className="whitespace-nowrap">{staleDays} dias atrás</span>
+                          Pode estar no vermelho: saldo conferido{" "}
+                          <span className="whitespace-nowrap">há {staleDays} dias</span>
                         </>
                       : "Este período está no vermelho"
                     : allToSavings
@@ -475,7 +479,13 @@ export default async function DashboardPage() {
                       de títulos e o "h" dizem a pergunta junto com a
                       resposta. O número grande abaixo fica só visual
                       (`announce={false}`), para não ser lido duas vezes. */}
-                  <span className="sr-only">: {formatCurrency(dailyAvailable)}</span>
+                  {/* Com o título em frase, o ":" faria o valor ler como saldo. */}
+                  <span className="sr-only">
+                    {isOverBudget
+                      ? `. Por dia: ${formatCurrency(dailyAvailable)}`
+                      : `: ${formatCurrency(dailyAvailable)}`}
+                  </span>
+                  </span>
                 </h1>
                 {/* O número é por dia: a unidade fica colada nele, senão ele
                     lê como saldo. No estado normal ela já está no título logo
@@ -537,9 +547,9 @@ export default async function DashboardPage() {
                           className="mt-[3px] size-3.5 shrink-0 text-(--hero-fg)"
                         />
                         <span>
-                          Conta feita com o saldo de{" "}
+                          Conta feita com o saldo conferido{" "}
                           <span className="whitespace-nowrap">
-                            {staleDays} dias atrás ·{" "}
+                            há {staleDays} dias ·{" "}
                             <a href="#saldo" className={heroLink}>
                               Conferir
                             </a>

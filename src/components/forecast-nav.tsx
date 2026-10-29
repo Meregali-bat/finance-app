@@ -30,11 +30,14 @@ export function ForecastNav({
   caption,
   previousHref,
   nextHref,
+  currentHref = null,
 }: {
   label: string;
   caption: string;
   previousHref: string | null;
   nextHref: string | null;
+  /** Longe do ciclo atual, a legenda vira o caminho de volta a ele. */
+  currentHref?: string | null;
 }) {
   return (
     <div className="rise-in flex items-center justify-between gap-2 rounded-[18px] bg-card p-1.5 shadow-[inset_0_0_0_1px_var(--hairline)] lg:w-fit lg:min-w-[24rem] lg:self-start">
@@ -58,7 +61,20 @@ export function ForecastNav({
       <div className="min-w-0 px-2 text-center">
         <p className="truncate font-heading text-base font-semibold tracking-[-0.01em]">{label}</p>
         <p className="truncate text-xs text-muted-foreground">
-          {caption}
+          {currentHref ? (
+            <>
+              {caption} ·{" "}
+              <Link
+                href={currentHref}
+                aria-keyshortcuts="Home"
+                className="rounded-sm font-medium text-foreground underline decoration-border underline-offset-2 hover:decoration-current focus-visible:outline-2 focus-visible:outline-ring"
+              >
+                voltar ao atual
+              </Link>
+            </>
+          ) : (
+            caption
+          )}
           {/* Só onde há teclado: no celular, o atalho não existe. */}
           <span className="hidden lg:inline" aria-hidden="true">
             {" "}
@@ -66,7 +82,7 @@ export function ForecastNav({
           </span>
         </p>
       </div>
-      <ForecastArrowKeys previousHref={previousHref} nextHref={nextHref} />
+      <ForecastArrowKeys previousHref={previousHref} nextHref={nextHref} homeHref={currentHref} />
 
       {nextHref ? (
         <Link

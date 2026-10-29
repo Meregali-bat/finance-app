@@ -65,15 +65,16 @@ export function AccountBalanceCard({
               <p className="flex items-start gap-1 text-xs text-muted-foreground tabular-nums">
                 <CircleAlert aria-hidden="true" className="mt-px size-3.5 shrink-0 text-foreground" />
                 <span>
-                  {/* O "·" fica no fim da primeira linha, nunca no começo da segunda. */}
-                  <span className="font-semibold text-foreground">Confira com o extrato</span>
-                  {" · "}
-                  <span className="whitespace-nowrap">ajustado há {staleDays} dias</span>
+                  {/* Duas linhas, cada uma inteira: no card estreito, um "·"
+                      no meio quebrava a frase de qualquer jeito. "Conferido"
+                      é a palavra do hero e da conta para o mesmo momento. */}
+                  <span className="block font-semibold text-foreground">Confira com o extrato</span>
+                  <span className="block">Conferido há {staleDays} dias</span>
                 </span>
               </p>
             ) : adjustedAt && (
               <p className="text-xs text-muted-foreground">
-                Ajustado em {formatDate(adjustedAt)}
+                Conferido em {formatDate(adjustedAt)}
                 <span className="hidden sm:inline"> · atualizado pelos lançamentos</span>
               </p>
             )}
