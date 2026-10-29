@@ -150,7 +150,7 @@ type BudgetBreakdownProps = {
 
 /** Os links de dentro da conta: sublinhados, para não lerem como texto solto. */
 const lineLink =
-  "group/line inline-flex items-center gap-0.5 rounded-sm underline decoration-(--hero-line) underline-offset-4 transition-colors duration-150 hover:text-(--hero-fg) hover:decoration-current focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--hero-fg)";
+  "group/line inline rounded-sm underline decoration-(--hero-line) underline-offset-4 transition-colors duration-150 hover:text-(--hero-fg) hover:decoration-current focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--hero-fg)";
 
 /**
  * "Como chegamos nesse número": a conta do número do dia. No celular, aberta
@@ -202,7 +202,7 @@ export function BudgetBreakdown(props: BudgetBreakdownProps) {
                   {line.label}
                   <ChevronRight
                     aria-hidden="true"
-                    className="size-3 shrink-0 transition-transform duration-150 group-hover/line:translate-x-0.5"
+                    className="ml-0.5 inline size-3 align-[-1px] transition-transform duration-150 group-hover/line:translate-x-0.5"
                   />
                 </Link>
               ) : line.kind === "divide" ? (
