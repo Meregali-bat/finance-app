@@ -14,7 +14,11 @@ import {
 import { Label } from "@/components/ui/label";
 import { CurrencyInput } from "@/components/currency-input";
 import { setAccountBalance } from "@/lib/actions/account-balance";
+import Link from "next/link";
 import { formatCurrency, formatDate } from "@/lib/format";
+
+/** "2026-10-16", no fuso local: o formato dos parâmetros do Histórico. */
+const dayParam = (date: Date) => date.toLocaleDateString("en-CA");
 import { cn } from "@/lib/utils";
 import { iconButton } from "@/components/ui/icon-button";
 import { errorMessage } from "@/lib/error-message";
@@ -127,7 +131,7 @@ export function BalanceAdjustmentDialog({
                   preenchido é uma estimativa, não o que o banco mostra. */}
               {currentBalance != null
                 ? stale && checkedAt
-                  ? `O app calculou ${formatCurrency(currentBalance)} a partir do saldo conferido em ${formatDate(checkedAt)}. Confira no app do banco.`
+                  ? `Com base no saldo conferido em ${formatDate(checkedAt)}, o app calculou ${formatCurrency(currentBalance)}.`
                   : `O app calculou ${formatCurrency(currentBalance)}.`
                 : `Movimentação registrada até hoje: ${formatCurrency(registeredMovement)} — não é o saldo do banco, só o que passou pelo app.`}
             </p>
@@ -168,6 +172,17 @@ export function BalanceAdjustmentDialog({
               Abra o app do banco e digite o valor que aparece lá. Daqui para a frente o saldo se
               atualiza sozinho com os seus lançamentos.
             </p>
+            {/* Se a estimativa não bate, o lançamento que faltou está entre
+                o que o app somou desde a última conferência. */}
+            {stale && checkedAt && (
+              <Link
+                href={`/historico?range=custom&from=${dayParam(checkedAt)}&to=${dayParam(new Date())}`}
+                onClick={() => setOpen(false)}
+                className="w-fit text-sm font-medium underline decoration-border underline-offset-4 hover:decoration-current"
+              >
+                Ver o que entrou e saiu desde {formatDate(checkedAt)}
+              </Link>
+            )}
           </div>
           {error && (
             <p role="alert" className="text-sm text-negative">

@@ -60,7 +60,7 @@ function breakdownLines({
       lines.push({ label: "Contas e faturas a pagar", amount: -toPay, kind: "step" });
     if (shows(scheduled))
       lines.push({
-        label: scheduled > 0 ? "Recebimentos e resgates por vir" : "Lançamentos com data futura",
+        label: scheduled > 0 ? "Recebimentos e resgates por vir" : "Lançamentos com data futura",
         amount: scheduled,
         kind: "step",
         // A diferença que fecha a conta junta várias coisas (resgates,
@@ -211,7 +211,14 @@ export function BudgetBreakdown(props: BudgetBreakdownProps) {
                 line.label
               )}
             </dt>
-            <dd className={cn("shrink-0 text-right", line.negative && "text-negative")}>
+            {/* Com o saldo velho, o hero não afirma o vermelho, e a conta ao
+                lado também não: o rótulo diz "Falta", a cor fica neutra. */}
+            <dd
+              className={cn(
+                "shrink-0 text-right",
+                line.negative && props.accountBalanceStaleDays == null && "text-negative",
+              )}
+            >
               {line.kind === "step" ? signed(line.amount) : formatCurrency(line.amount)}
             </dd>
           </div>

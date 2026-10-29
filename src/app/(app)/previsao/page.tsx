@@ -360,11 +360,11 @@ export default async function ForecastPage({
   // O que chega ao ciclo da tela vindo do anterior, no ritmo: só uma falta
   // herdada merece a frase "o que faltar antes passa para ele".
   const prevCycle = offset > 0 ? periods[offset - 1] : null;
-  const carryIn =
-    paceByCycle && prevCycle
-      ? paceByCycle[offset - 1] -
-        Math.min(0, isNegativeCycle(prevCycle) ? prevCycle.endBalance : prevCycle.freeToSpend)
-      : 0;
+  // A falta do anterior que a previsão já desconta (sem gastar mais).
+  const prevBase = prevCycle
+    ? Math.min(0, isNegativeCycle(prevCycle) ? prevCycle.endBalance : prevCycle.freeToSpend)
+    : 0;
+  const carryIn = paceByCycle && prevCycle ? paceByCycle[offset - 1] - prevBase : 0;
   const carriesShortfall = carryIn < -0.005;
   // O par: no ritmo, a sobra de antes passa adiante (o hero a conta como
   // gasta). Sem dizer, a conta do card não fecha de cabeça.
@@ -427,10 +427,14 @@ export default async function ForecastPage({
     );
     // No ciclo atual, o que ainda vai acontecer vem antes: é o que pesa, e
     // não pode ficar atrás do "Mostrar mais", embaixo do que já foi pago.
+    // Os lançamentos do ciclo atual já aconteceram: o mais recente primeiro,
+    // que é o que se procura.
     const entries =
-      period.offset === 0
-        ? [...picked.filter((e) => !e.confirmed), ...picked.filter((e) => e.confirmed)]
-        : picked;
+      period.offset !== 0
+        ? picked
+        : group.kind === "scheduled"
+          ? [...picked].reverse()
+          : [...picked.filter((e) => !e.confirmed), ...picked.filter((e) => e.confirmed)];
     const subtotal = Math.abs(
       entries.filter((entry) => !entry.awaiting).reduce((sum, entry) => sum + entry.amount, 0),
     );
@@ -443,7 +447,13 @@ export default async function ForecastPage({
               .reduce((sum, entry) => sum + entry.amount, 0),
           )
         : 0;
-    return { ...group, entries, subtotal, pending };
+    // Tudo já aconteceu: o cabeçalho diz, como diz o "a pagar".
+    const settled =
+      period.offset === 0 &&
+      group.kind !== "jar" &&
+      group.kind !== "scheduled" &&
+      entries.every((entry) => entry.confirmed);
+    return { ...group, entries, subtotal, pending, settled };
   }).filter((group) => group.entries.length > 0);
   const summaryReconciles =
     Math.abs(
@@ -583,6 +593,27 @@ export default async function ForecastPage({
         <dt>Saldo do ciclo</dt>
         <dd>{formatCurrency(period.periodResult)}</dd>
       </div>
+      {/* Até o número do topo, com as mesmas linhas da fita do hero. */}
+      {Math.abs(period.inherited) >= 0.005 && (
+        <div className="flex justify-between gap-3">
+          <dt className="text-muted-foreground">{inheritedLabel}</dt>
+          <dd className="shrink-0">{formatCurrency(period.inherited)}</dd>
+        </div>
+      )}
+      {period.reservedForLater > 0.005 && (
+        <div className="flex justify-between gap-3">
+          <dt className="text-muted-foreground">Guardado para cobrir ciclos à frente</dt>
+          <dd className="shrink-0">−{formatCurrency(period.reservedForLater)}</dd>
+        </div>
+      )}
+      {(Math.abs(period.inherited) >= 0.005 || period.reservedForLater > 0.005) && (
+        <div className="mt-1 flex justify-between gap-3 border-t border-border pt-2 font-semibold">
+          <dt>{isNegative ? "Vai faltar" : "Livre para gastar"}</dt>
+          <dd className={isNegative ? "text-negative" : undefined}>
+            {formatCurrency(isNegative ? Math.abs(period.endBalance) : period.freeToSpend)}
+          </dd>
+        </div>
+      )}
     </dl>
   );
 
@@ -773,7 +804,12 @@ export default async function ForecastPage({
               <span className="font-semibold tabular-nums">
                 {formatCurrency(Math.abs(shortfall.endBalance))}
               </span>
-              , mesmo sem gastar mais nada. O que faltar passa para o ciclo seguinte.
+              , mesmo sem gastar mais nada.{" "}
+              {/* Visto de um ciclo à frente, "o ciclo seguinte" seria o de
+                  depois da tela: aqui a falta já chegou. */}
+              {shortfall.offset < period.offset
+                ? "Essa falta já está descontada neste ciclo."
+                : "O que faltar passa para o ciclo seguinte."}
             </p>
             {/* As saídas: no ciclo atual, adiar uma conta (nos lembretes da
                 Início); à frente, mexer nas despesas fixas; e, com dinheiro
@@ -823,9 +859,9 @@ export default async function ForecastPage({
               {`É a média do ciclo atual (${formatCurrency(pace.spent)} em ${pace.elapsedDays} ${pace.elapsedDays === 1 ? "dia" : "dias"}, na conta e no cartão)`}
               {period.offset === 0
                 ? pace.remainingDays > 0
-                  ? `: saem mais ${formatCurrency(pace.projectedSpending)} nos ${pace.remainingDays} ${pace.remainingDays === 1 ? "dia" : "dias"} depois de hoje, que já está na média.`
+                  ? `: saem mais ${formatCurrency(pace.projectedSpending)} nos ${pace.remainingDays} ${pace.remainingDays === 1 ? "dia" : "dias"} depois de hoje (hoje já entra na média).`
                   : "."
-                : `: os ${period.totalDays} dias do ciclo de ${cycleMonth(period, currentYear)} levam ${formatCurrency(pace.perDay * period.totalDays)}${carriesShortfall ? `, e os ${formatCurrency(-carryIn)} que faltarem antes passam para ele` : carriesSurplus > 0.005 ? `, somando ${formatCurrency(carriesSurplus)} que sobram ${offset === 1 ? "do ciclo atual" : "dos ciclos antes"}, nesse ritmo` : ""}.`}
+                : `: os ${period.totalDays} dias do ciclo de ${cycleMonth(period, currentYear)} levam ${formatCurrency(pace.perDay * period.totalDays)}${carriesShortfall ? `, e os ${formatCurrency(-carryIn)} a mais que faltarem antes, nesse ritmo, passam para ele${prevBase < -0.005 ? ` (os ${formatCurrency(-prevBase)} de falta sem gastar já estão na conta de cima)` : ""}` : carriesSurplus > 0.005 ? `, somando ${formatCurrency(carriesSurplus)} que sobram ${offset === 1 ? "do ciclo atual" : "dos ciclos antes"}, se cada sobra for passando adiante nesse ritmo` : ""}.`}
             </p>
             {paceLeft < -0.005 && (noSpendLeft < -0.005 || paceDays > 0) && (
               <p className="text-[13.5px] leading-relaxed text-muted-foreground tabular-nums">
@@ -871,7 +907,9 @@ export default async function ForecastPage({
                   {timelineWorst.offset === offset ? (
                     // Já é a tela aberta: um link para ela mesma não leva a nada.
                     <span className="font-semibold text-negative">
-                      este ({formatCurrency(Math.abs(timelineWorst.endBalance))})
+                      <span className="whitespace-nowrap">
+                        este ({formatCurrency(Math.abs(timelineWorst.endBalance))})
+                      </span>
                     </span>
                   ) : (
                     <Link
@@ -967,10 +1005,12 @@ export default async function ForecastPage({
                         {group.pending > 0.005 && group.pending < group.subtotal - 0.005 ? (
                           <>
                             <span className="font-semibold text-foreground">
-                              {formatCurrency(group.pending)} {group.incoming ? "a receber" : "a pagar"}
+                              {formatCurrency(group.pending)}
                             </span>{" "}
-                            · de {formatCurrency(group.subtotal)}
+                            de {formatCurrency(group.subtotal)} {group.incoming ? "a receber" : "a pagar"}
                           </>
+                        ) : group.settled ? (
+                          `${formatCurrency(group.subtotal)} · ${group.incoming ? "tudo recebido" : "tudo pago"}`
                         ) : (
                           formatCurrency(group.subtotal)
                         )}
@@ -1005,7 +1045,7 @@ export default async function ForecastPage({
           {showSummary && (
             <details className="group/sum rounded-[18px] p-4 text-[13.5px] tabular-nums ring-1 ring-border xl:hidden">
               <summary className="-my-2.5 flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 font-medium select-none [&::-webkit-details-marker]:hidden">
-                Como chega ao saldo do ciclo
+                Como chega a esse número
                 <ChevronDown
                   aria-hidden="true"
                   className="size-4 shrink-0 text-muted-foreground transition-transform duration-150 group-open/sum:rotate-180"
