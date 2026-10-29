@@ -191,10 +191,11 @@
   /* Painel solto sobre o fundo (o formulário do login). */
   --shadow-panel: 0 2px 4px rgb(0 0 0 / 0.5), 0 24px 60px -20px rgb(0 0 0 / 0.9),
     inset 0 1px 0 rgb(255 255 255 / 0.1), inset 0 0 0 1px rgb(247 236 233 / 0.06);
-  /* O card de destaque (hero). No escuro, garnet com texto branco. */
+  /* O card de destaque (hero). No escuro, garnet com texto branco.
+     `--hero-faint` a 0,66 passa de 4,5:1 até sob o brilho do canto (5,0:1). */
   --hero-fg: #ffffff;
   --hero-muted: rgb(255 255 255 / 0.72);
-  --hero-faint: rgb(255 255 255 / 0.6);
+  --hero-faint: rgb(255 255 255 / 0.66);
   --hero-chip: rgb(0 0 0 / 0.22);
   --hero-line: rgb(255 255 255 / 0.12);
   --hero-dots: rgb(255 255 255 / 0.18);
@@ -273,6 +274,8 @@
   --sidebar-accent-foreground: #2a1210;
   --sidebar-border: rgb(42 18 16 / 10%);
   --sidebar-ring: #9b2a20;
+  /* O dia de hoje da régua fica ≥ 3:1 até no rosé mais fundo com o brilho
+     por cima (3,1:1; 4,0:1 no fundo liso); a altura o separa dos passados. */
   --hero-fg: #2a1210;
   --hero-muted: rgb(42 18 16 / 0.68);
   --hero-faint: rgb(42 18 16 / 0.66);
@@ -284,7 +287,7 @@
   --hero-chart: #9b2a20;
   --hero-dot-ring: #ffffff;
   --hero-ruler-past: rgb(155 42 32 / 0.85);
-  --hero-ruler-today: #e0503e;
+  --hero-ruler-today: #c9402f;
   --hero-ruler-future: rgb(155 42 32 / 0.14);
   color-scheme: light;
 }
@@ -359,7 +362,7 @@
     --hero-chart: #9b2a20;
     --hero-dot-ring: #ffffff;
     --hero-ruler-past: rgb(155 42 32 / 0.85);
-    --hero-ruler-today: #e0503e;
+    --hero-ruler-today: #c9402f;
     --hero-ruler-future: rgb(155 42 32 / 0.14);
     color-scheme: light;
   }
@@ -531,6 +534,57 @@
   --hero-ruler-today: var(--negative);
   --hero-ruler-future: rgb(245 241 239 / 0.2);
   color-scheme: dark;
+}
+
+/*
+ * Dia apertado: o número é positivo, mas magro (a regra é `heroTone`, em
+ * `src/lib/hero-tone.ts`). O card continua da marca — não é o vermelho, e
+ * não ganha a tinta neutra —, mas baixa a voz: o garnet perde saturação e
+ * desce para mogno queimado, o brilho do canto quase apaga e os pontos
+ * recuam. O número segue em `--hero-fg`; quem diz "apertado" é o título.
+ * Cada tema tem o seu bloco, porque o claro é rosé e não garnet.
+ * Contraste conferido (pior ponto, brilho incluído): escuro — texto 14,1:1,
+ * `--hero-muted` 7,9:1, `--hero-faint` 6,0:1, dia de hoje e curva 8,0:1;
+ * claro — texto 13,9:1, `--hero-muted` 5,5:1, `--hero-faint` 5,2:1, dia de
+ * hoje 3,8:1, curva 5,9:1.
+ */
+.hero-surface[data-tone="tight"] {
+  --hero-chip: rgb(0 0 0 / 0.2);
+  --hero-line: rgb(255 255 255 / 0.1);
+  --hero-dots: rgb(255 255 255 / 0.09);
+  --hero-glow: rgb(104 36 30 / 0.4);
+  --hero-bg: linear-gradient(145deg, #3a1714 0%, #2c1412 45%, #201110 100%);
+  --hero-chart: #e6b9b1;
+  --hero-dot-ring: #2c1412;
+  --hero-ruler-past: rgb(255 255 255 / 0.85);
+  --hero-ruler-today: #e6b9b1;
+  --hero-ruler-future: rgb(255 255 255 / 0.14);
+}
+:root[data-theme="light"] .hero-surface[data-tone="tight"] {
+  --hero-chip: rgb(255 255 255 / 0.65);
+  --hero-line: rgb(120 52 44 / 0.12);
+  --hero-dots: rgb(120 52 44 / 0.08);
+  --hero-glow: rgb(214 184 178 / 0.28);
+  --hero-bg: linear-gradient(145deg, #fdfbfa 0%, #f8f2f0 50%, #f1e8e5 100%);
+  --hero-chart: #874038;
+  --hero-dot-ring: #ffffff;
+  --hero-ruler-past: rgb(135 64 56 / 0.85);
+  --hero-ruler-today: #b0574c;
+  --hero-ruler-future: rgb(135 64 56 / 0.14);
+}
+@media (prefers-color-scheme: light) {
+  :root[data-theme="system"] .hero-surface[data-tone="tight"] {
+    --hero-chip: rgb(255 255 255 / 0.65);
+    --hero-line: rgb(120 52 44 / 0.12);
+    --hero-dots: rgb(120 52 44 / 0.08);
+    --hero-glow: rgb(214 184 178 / 0.28);
+    --hero-bg: linear-gradient(145deg, #fdfbfa 0%, #f8f2f0 50%, #f1e8e5 100%);
+    --hero-chart: #874038;
+    --hero-dot-ring: #ffffff;
+    --hero-ruler-past: rgb(135 64 56 / 0.85);
+    --hero-ruler-today: #b0574c;
+    --hero-ruler-future: rgb(135 64 56 / 0.14);
+  }
 }
 
 /*

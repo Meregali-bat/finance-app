@@ -158,3 +158,22 @@ export function calculateRegisteredMovement(input: {
   const debited = input.debits.filter(upToToday).reduce((sum, m) => sum + m.amount, 0);
   return credited - debited;
 }
+
+/** Depois de tantos dias sem ajuste, o saldo pede conferência com o extrato. */
+export const STALE_ADJUSTMENT_DAYS = 7;
+
+/**
+ * Há quantos dias o saldo foi ajustado, e nulo enquanto ele ainda está fresco
+ * (até `STALE_ADJUSTMENT_DAYS`).
+ *
+ * `adjustedAt` é um instante de verdade (o `createdAt` do ajuste), não um dia
+ * de calendário: os dois lados se leem no fuso local — o do servidor é
+ * `America/Sao_Paulo`, fixado em src/instrumentation.ts — e contam viradas de
+ * dia, não blocos de 24h. Um ajuste às 23h de ontem já tem um dia.
+ */
+export function staleAdjustmentDays(adjustedAt: Date, today: Date): number | null {
+  const days = Math.round(
+    (startOfDay(today).getTime() - startOfDay(adjustedAt).getTime()) / 86_400_000,
+  );
+  return days > STALE_ADJUSTMENT_DAYS ? days : null;
+}

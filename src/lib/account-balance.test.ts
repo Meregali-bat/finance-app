@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { calculateAccountBalance, calculateRegisteredMovement } from "./account-balance";
+import {
+  calculateAccountBalance,
+  calculateRegisteredMovement,
+  staleAdjustmentDays,
+} from "./account-balance";
 import type { AccountMovementInput } from "./account-balance";
 
 // O ajuste foi feito no dia 10/set às 9h; "agora" são 20h do mesmo dia.
@@ -218,5 +222,25 @@ describe("calculateRegisteredMovement", () => {
       today: now,
     });
     expect(movement).toBe(400);
+  });
+});
+
+describe("staleAdjustmentDays", () => {
+  it("fica nulo até sete dias depois do ajuste", () => {
+    expect(staleAdjustmentDays(adjustedAt, now)).toBeNull();
+    expect(staleAdjustmentDays(adjustedAt, new Date(2026, 8, 17, 23, 59))).toBeNull();
+  });
+
+  it("conta viradas de dia, não blocos de 24h", () => {
+    // Ajuste às 23h do dia 2; às 8h do dia 10 já são oito dias.
+    expect(staleAdjustmentDays(new Date(2026, 8, 2, 23, 0), new Date(2026, 8, 10, 8, 0))).toBe(8);
+  });
+
+  it("devolve os dias passados depois de uma semana", () => {
+    expect(staleAdjustmentDays(adjustedAt, new Date(2026, 8, 22, 7, 0))).toBe(12);
+  });
+
+  it("atravessa a virada do mês", () => {
+    expect(staleAdjustmentDays(new Date(2026, 8, 28, 12, 0), new Date(2026, 9, 6, 9, 0))).toBe(8);
   });
 });

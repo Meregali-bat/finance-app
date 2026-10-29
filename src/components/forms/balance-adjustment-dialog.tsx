@@ -30,11 +30,16 @@ import { errorMessage } from "@/lib/error-message";
 export function BalanceAdjustmentDialog({
   currentBalance,
   registeredMovement,
+  stale = false,
 }: {
   currentBalance: number | null;
   registeredMovement: number;
+  /** O saldo pede conferência: o lápis ganha o texto "Atualizar" ao lado. */
+  stale?: boolean;
 }) {
   const hasBalance = currentBalance != null;
+  const triggerLabel = hasBalance ? "Atualizar saldo" : "Informar saldo";
+  const showText = stale && hasBalance;
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -72,13 +77,17 @@ export function BalanceAdjustmentDialog({
         render={
           <button
             type="button"
-            className={iconButton()}
-            aria-label={hasBalance ? "Corrigir saldo" : "Informar saldo"}
-            title={hasBalance ? "Corrigir saldo" : "Informar saldo"}
+            className={iconButton({ size: showText ? "pill" : "md" })}
+            aria-label={triggerLabel}
+            // Com texto visível, a dica do ponteiro só repetiria o botão.
+            title={showText ? undefined : triggerLabel}
           />
         }
       >
         <Pencil aria-hidden="true" />
+        {/* Com o saldo velho, a ação se lê sozinha: o aviso ao lado pede
+            conferência, e o botão diz o que fazer com ela. */}
+        {showText && "Atualizar"}
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
