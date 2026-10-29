@@ -1,8 +1,19 @@
+/**
+ * O "−" tipográfico (U+2212) no lugar do hífen do Intl: o app escreve o sinal
+ * à mão em vários lugares ("−R$ 10,00" nas linhas), e um valor negativo vindo
+ * daqui não pode sair com outro traço ao lado deles.
+ */
+function withMinusSign(text: string): string {
+  return text.replace("-", "−");
+}
+
 export function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  }).format(amount);
+  return withMinusSign(
+    new Intl.NumberFormat("pt-BR", {
+      style: "currency",
+      currency: "BRL",
+    }).format(amount),
+  );
 }
 
 // Em prosa, "8 de nov.", como se escreve, e não "08 de nov.": o zero à
@@ -100,11 +111,13 @@ export function installmentLabel(total: number, installments: number): string | 
 
 /** "R$ 1,4 mil" — para rótulos de gráfico, onde o valor exato não cabe. */
 export function formatCompactCurrency(amount: number): string {
-  return new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-    notation: "compact",
-    // Abaixo de mil não há o que abreviar, e "R$ 820,0" só faz ruído.
-    maximumFractionDigits: Math.abs(amount) < 1000 ? 0 : 1,
-  }).format(amount);
+  return withMinusSign(
+    new Intl.NumberFormat("pt-BR", {
+      style: "currency",
+      currency: "BRL",
+      notation: "compact",
+      // Abaixo de mil não há o que abreviar, e "R$ 820,0" só faz ruído.
+      maximumFractionDigits: Math.abs(amount) < 1000 ? 0 : 1,
+    }).format(amount),
+  );
 }

@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   ArrowDownLeft,
   ArrowUpRight,
+  ChevronRight,
   CalendarClock,
   Gauge,
   TriangleAlert,
@@ -58,22 +59,67 @@ function monthLabel(date: Date) {
   return new Intl.DateTimeFormat("pt-BR", { month: "short" }).format(date).replace(".", "");
 }
 
-const GROUPS: { kind: ForecastEntryKind; label: string; incoming: boolean }[] = [
-  { kind: "income", label: "Entradas previstas", incoming: true },
-  { kind: "jarReturn", label: "Voltam das caixinhas", incoming: true },
-  { kind: "fixedExpense", label: "Despesas fixas", incoming: false },
-  { kind: "cardBill", label: "Faturas", incoming: false },
-  { kind: "scheduled", label: "Agendados", incoming: false },
-  { kind: "jar", label: "Guardado em caixinhas", incoming: false },
+/**
+ * Os grupos das listas, cada um de um lado. Um resgate já feito é um depósito
+ * negativo (`jar` < 0): ele mora do lado das entradas, com o valor virado,
+ * para os subtotais somarem exatamente os chips do hero.
+ */
+const GROUPS: {
+  key: string;
+  kind: ForecastEntryKind;
+  label: string;
+  incoming: boolean;
+  pick?: (entry: ForecastEntry) => boolean;
+}[] = [
+  { key: "income", kind: "income", label: "Entradas previstas", incoming: true },
+  { key: "jarReturn", kind: "jarReturn", label: "Voltam das caixinhas", incoming: true },
+  {
+    key: "jarOut",
+    kind: "jar",
+    label: "Resgatado das caixinhas",
+    incoming: true,
+    pick: (entry) => entry.amount < 0,
+  },
+  { key: "fixedExpense", kind: "fixedExpense", label: "Despesas fixas", incoming: false },
+  { key: "cardBill", kind: "cardBill", label: "Faturas", incoming: false },
+  { key: "scheduled", kind: "scheduled", label: "Agendados", incoming: false },
+  {
+    key: "jarIn",
+    kind: "jar",
+    label: "Guardado em caixinhas",
+    incoming: false,
+    pick: (entry) => entry.amount >= 0,
+  },
 ];
 
 /**
  * No ciclo corrente as movimentações em sua maioria já aconteceram, e chamar
- * de "agendado" um almoço de duas semanas atrás seria mentir sobre o que a
- * lista mostra. À frente, todas elas são de fato agendamentos.
+ * de "agendado" um almoço de duas semanas atrás — ou de "previsto" um salário
+ * confirmado — seria mentir sobre o que a lista mostra. À frente, são de fato
+ * previsões e agendamentos.
  */
 function groupLabel(kind: ForecastEntryKind, label: string, offset: number) {
-  return kind === "scheduled" && offset === 0 ? "Lançamentos" : label;
+  if (offset !== 0) return label;
+  if (kind === "scheduled") return "Lançamentos";
+  if (kind === "income") return "Entradas";
+  return label;
+}
+
+/** Onde cada linha é editada: a previsão lê, e a linha leva até quem decide. */
+function entryHref(entry: ForecastEntry) {
+  switch (entry.kind) {
+    case "fixedExpense":
+      return "/rendas?aba=despesas";
+    case "income":
+      return "/rendas";
+    case "cardBill":
+      return `/cartoes/${entry.sourceId}`;
+    case "jar":
+    case "jarReturn":
+      return "/caixinhas";
+    case "scheduled":
+      return "/historico";
+  }
 }
 
 /**
@@ -171,24 +217,37 @@ function EntryRow({
   ]
     .filter(Boolean)
     .join(" · ");
-  // Um valor negativo num grupo inverte a direção: um resgate já feito mora
-  // entre os "guardados" com valor negativo, e é dinheiro que entrou. O sinal
-  // vem daqui, uma vez só — senão a linha dizia "−-R$ 2.000,00".
-  const inflow = incoming !== entry.amount < 0;
+  // A direção é a do grupo (um resgate já feito, depósito negativo, fica no
+  // grupo das entradas); o sinal vem daqui, uma vez só, sobre o valor
+  // absoluto — senão a linha dizia "−-R$ 2.000,00".
+  const inflow = incoming;
 
   return (
     <li className="rise-in" style={stagger(index, 80, 45)}>
-      <ListRow
-        icon={inflow ? <ArrowDownLeft /> : <ArrowUpRight />}
-        tone={inflow ? "positive" : "negative"}
-        title={entry.label}
-        subtitle={<span className="tabular-nums">{detail}</span>}
-        value={`${inflow ? "+" : "−"}${formatCurrency(Math.abs(entry.amount))}`}
-        valueClassName={cn(
-          inflow ? "text-positive" : "text-foreground",
-          entry.awaiting && "text-muted-foreground line-through",
-        )}
-      />
+      {/* A linha leva para onde ela é editada: planejar no computador é
+          também poder mexer no que pesa. */}
+      <Link
+        href={entryHref(entry)}
+        className="group/entry block rounded-[18px] transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring [&>div]:transition-colors [&>div]:duration-150 hover:[&>div]:bg-card-hover"
+      >
+        <ListRow
+          icon={inflow ? <ArrowDownLeft /> : <ArrowUpRight />}
+          tone={inflow ? "positive" : "negative"}
+          title={entry.label}
+          subtitle={<span className="tabular-nums">{detail}</span>}
+          value={`${inflow ? "+" : "−"}${formatCurrency(Math.abs(entry.amount))}`}
+          valueClassName={cn(
+            inflow ? "text-positive" : "text-foreground",
+            entry.awaiting && "text-muted-foreground line-through",
+          )}
+          trailing={
+            <ChevronRight
+              aria-hidden="true"
+              className="size-4 shrink-0 text-muted-foreground/60 transition-transform duration-150 group-hover/entry:translate-x-0.5"
+            />
+          }
+        />
+      </Link>
     </li>
   );
 }
@@ -259,7 +318,17 @@ export default async function ForecastPage({
     transactions: inputs.transactions,
     cardPurchases: inputs.cardPurchases,
   });
-  const paceLeft = pace ? paceAcrossCycles(pace, periods)[offset] : null;
+  const paceByCycle = pace ? paceAcrossCycles(pace, periods) : null;
+  const paceLeft = paceByCycle ? paceByCycle[offset] : null;
+  // O que chega ao ciclo da tela vindo do anterior, no ritmo: só uma falta
+  // herdada merece a frase "o que faltar antes passa para ele".
+  const prevCycle = offset > 0 ? periods[offset - 1] : null;
+  const carriesShortfall =
+    paceByCycle && prevCycle
+      ? paceByCycle[offset - 1] -
+          Math.min(0, isNegativeCycle(prevCycle) ? prevCycle.endBalance : prevCycle.freeToSpend) <
+        -0.005
+      : false;
   // O mesmo caminho sem gasto nenhum no dia a dia: quando ele já falta, cortar
   // o dia a dia não fecha a conta, e dizer "gaste R$ X a menos" mentiria.
   const noSpendLeft = pace
@@ -281,6 +350,20 @@ export default async function ForecastPage({
     pace && paceLeft !== null && paceDays > 0
       ? Math.max(0, Math.floor((pace.perDay + paceLeft / paceDays) * 100) / 100)
       : 0;
+  // Com o ciclo atual no vermelho, o número de hoje é zero (a Início diz isso):
+  // um alvo que valesse desde amanhã mandaria gastar o salário antes de ele
+  // cair. Aí o alvo só começa no próximo ciclo, supondo que o atual pare onde
+  // está, e se divide só pelos dias dos ciclos à frente.
+  const futureDays = periods.slice(1, offset + 1).reduce((sum, p) => sum + p.totalDays, 0);
+  const targetFromNext =
+    pace && paceLeft !== null && offset > 0 && isNegativeCycle(current) && futureDays > 0
+      ? Math.max(
+          0,
+          Math.floor(
+            (pace.perDay + (paceLeft + pace.perDay * pace.remainingDays) / futureDays) * 100,
+          ) / 100,
+        )
+      : null;
   // Os chips do hero fecham com o "Saldo do ciclo": as entradas levam o que
   // volta das caixinhas, e um resgate já feito (depósito negativo) conta como
   // entrada, não como saída menor.
@@ -288,6 +371,22 @@ export default async function ForecastPage({
     .filter((entry) => entry.kind === "jar" && entry.amount < 0)
     .reduce((sum, entry) => sum - entry.amount, 0);
   const incomingTotal = period.incomeTotal + period.jarReturnTotal + jarIn;
+  // As listas por grupo, com o subtotal positivo dos dois lados (o sinal é o
+  // lado). Um agendado que só espera confirmação não entra na conta.
+  const groupLists = GROUPS.map((group) => {
+    const entries = period.entries.filter(
+      (entry) => entry.kind === group.kind && (group.pick?.(entry) ?? true),
+    );
+    const subtotal = Math.abs(
+      entries.filter((entry) => !entry.awaiting).reduce((sum, entry) => sum + entry.amount, 0),
+    );
+    return { ...group, entries, subtotal };
+  }).filter((group) => group.entries.length > 0);
+  const summaryReconciles =
+    Math.abs(
+      groupLists.reduce((sum, g) => sum + (g.incoming ? g.subtotal : -g.subtotal), 0) -
+        period.periodResult,
+    ) < 0.01;
   const outgoingTotal =
     period.fixedExpenseTotal +
     period.cardBillTotal +
@@ -586,18 +685,27 @@ export default async function ForecastPage({
             <p className="text-[13px] font-medium text-muted-foreground tabular-nums">
               Se continuar gastando{" "}
               <span className="whitespace-nowrap">{formatCurrency(pace.perDay)} por dia</span>
-              {period.offset === 0 ? "" : `, até ${cycleMonth(period, currentYear)}`}
+              {period.offset === 0
+                ? ""
+                : `, até o fim do ciclo de ${cycleMonth(period, currentYear)}`}
             </p>
             {/* 20px, e não o tamanho de um segundo hero: é uma projeção, e o
-                número da tela é o de cima. */}
+                número da tela é o de cima. O coral fica na palavra que diz o
+                lado, não no valor: um segundo número vermelho competiria com o
+                hero. */}
             <p className="font-heading text-[20px] leading-none font-bold tracking-[-0.025em] tabular-nums">
-              <span className={paceLeft < -0.005 ? "text-negative" : undefined}>
-                {formatCurrency(Math.abs(paceLeft))}
-              </span>{" "}
+              {formatCurrency(Math.abs(paceLeft))}{" "}
               <span className="text-[15px] font-semibold tracking-normal text-muted-foreground">
-                {paceLeft < -0.005 ? "faltando" : "sobrando"} em{" "}
-                {dateIn(lastDay(period), currentYear)}
+                <span className={paceLeft < -0.005 ? "text-negative" : undefined}>
+                  {paceLeft < -0.005 ? "faltando" : "sobrando"}
+                </span>{" "}
+                em {dateIn(lastDay(period), currentYear)}
               </span>
+            </p>
+            {/* De onde vem o ritmo: sem isso, o valor por dia é um número solto. */}
+            <p className="text-[12.5px] text-muted-foreground tabular-nums">
+              É a média do ciclo atual: {formatCurrency(pace.spent)} em {pace.elapsedDays}{" "}
+              {pace.elapsedDays === 1 ? "dia" : "dias"}, na conta e no cartão.
             </p>
             {/* Duas frases curtas: o ritmo, e só quando falta, a saída. O ritmo
                 é sempre o de agora, mesmo com um ciclo à frente na tela. */}
@@ -605,13 +713,17 @@ export default async function ForecastPage({
               <p className="text-[13.5px] leading-relaxed text-muted-foreground tabular-nums">
                 {period.offset === 0
                   ? `Nesse ritmo, saem mais ${formatCurrency(pace.projectedSpending)} até o fim do ciclo.`
-                  : `Nesse ritmo, os ${period.totalDays} dias do ciclo de ${cycleMonth(period, currentYear)} levam ${formatCurrency(pace.perDay * period.totalDays)}, e o que faltar antes passa para ele.`}
+                  : `Nesse ritmo, os ${period.totalDays} dias do ciclo de ${cycleMonth(period, currentYear)} levam ${formatCurrency(pace.perDay * period.totalDays)}${carriesShortfall ? ", e o que faltar antes passa para ele" : ""}.`}
               </p>
             )}
             {paceLeft < -0.005 && (noSpendLeft < -0.005 || paceDays > 0) && (
               <p className="text-[13.5px] leading-relaxed text-muted-foreground tabular-nums">
                 {noSpendLeft < -0.005
                   ? `Mesmo sem gastar nada no dia a dia, faltariam ${formatCurrency(-noSpendLeft)}: são as contas que não cabem.`
+                  : targetFromNext !== null
+                    ? // O ciclo atual já fecha no vermelho: o número de hoje é
+                      // zero, então o alvo só vale do próximo ciclo em diante.
+                      `Para fechar, não gaste mais nada no ciclo atual e, a partir de ${dateIn(periods[1].periodStart, currentYear)}, até ${formatCurrency(targetFromNext)} por dia.`
                   : period.offset > 0 && paceTarget < period.dailyAvailable - 0.005
                     ? // Abaixo do número de cima: diz por quê, senão os dois
                       // números diários parecem se contradizer.
@@ -711,38 +823,61 @@ export default async function ForecastPage({
         // serem conferíveis.
         <div className="flex flex-col gap-6 xl:grid xl:grid-cols-2 xl:items-start">
           {[true, false].map((side) => (
-            <div key={String(side)} className="flex flex-col gap-6">
-              {GROUPS.filter((group) => group.incoming === side).map(
-                ({ kind, label, incoming }) => {
-                  const entries = period.entries.filter((entry) => entry.kind === kind);
-                  if (entries.length === 0) return null;
-                  const subtotal = entries
-                    .filter((entry) => !entry.awaiting)
-                    .reduce((sum, entry) => sum + entry.amount, 0);
-                  return (
-                    <div key={kind} className="flex flex-col gap-3">
-                      <div className="flex items-baseline justify-between gap-3">
-                        <SectionLabel>{groupLabel(kind, label, period.offset)}</SectionLabel>
-                        <span className="text-[13px] font-medium text-muted-foreground tabular-nums">
-                          {formatCurrency(Math.abs(subtotal))}
-                        </span>
-                      </div>
-                      {/* Um ciclo pode ter dezenas de lançamentos: as primeiras
-                          linhas, e o resto num toque. */}
-                      <CollapsibleList
-                        className="flex flex-col gap-2"
-                        items={entries.map((entry, index) => (
-                          <EntryRow
-                            key={`${entry.kind}-${entry.sourceId}-${entry.date.toISOString()}`}
-                            entry={entry}
-                            incoming={incoming}
-                            index={index}
-                          />
-                        ))}
-                      />
+            <div
+              key={String(side)}
+              // A coluna das entradas é a curta: ela acompanha a rolagem, com
+              // o resumo do ciclo embaixo, em vez de deixar um vão ao lado das
+              // saídas.
+              className={cn("flex flex-col gap-6", side && "xl:sticky xl:top-6")}
+            >
+              {groupLists
+                .filter((group) => group.incoming === side)
+                .map((group) => (
+                  <div key={group.key} className="flex flex-col gap-3">
+                    <div className="flex items-baseline justify-between gap-3">
+                      <SectionLabel>{groupLabel(group.kind, group.label, period.offset)}</SectionLabel>
+                      <span className="text-[13px] font-medium text-muted-foreground tabular-nums">
+                        {formatCurrency(group.subtotal)}
+                      </span>
                     </div>
-                  );
-                },
+                    {/* Um ciclo pode ter dezenas de lançamentos: as primeiras
+                        linhas, e o resto num toque. */}
+                    <CollapsibleList
+                      className="flex flex-col gap-2"
+                      items={group.entries.map((entry, index) => (
+                        <EntryRow
+                          key={`${entry.kind}-${entry.sourceId}-${entry.date.toISOString()}`}
+                          entry={entry}
+                          incoming={group.incoming}
+                          index={index}
+                        />
+                      ))}
+                    />
+                  </div>
+                ))}
+              {/* Os subtotais somados até o "Saldo do ciclo" do hero. Só
+                  aparece quando a soma bate: uma conta que não fecha seria
+                  pior que nenhuma. */}
+              {side && summaryReconciles && groupLists.length > 1 && (
+                <div className="hidden flex-col gap-2 rounded-[18px] p-4 text-[13.5px] tabular-nums ring-1 ring-border xl:flex">
+                  <SectionLabel>Resumo do ciclo</SectionLabel>
+                  <dl className="flex flex-col gap-1.5">
+                    {groupLists.map((group) => (
+                      <div key={group.key} className="flex justify-between gap-3">
+                        <dt className="text-muted-foreground">
+                          {groupLabel(group.kind, group.label, period.offset)}
+                        </dt>
+                        <dd>
+                          {group.incoming ? "+" : "−"} {formatCurrency(group.subtotal)}
+                        </dd>
+                      </div>
+                    ))}
+                    <div className="mt-1 flex justify-between gap-3 border-t border-border pt-2 font-semibold">
+                      <dt>Saldo do ciclo</dt>
+                      <dd>{formatCurrency(period.periodResult)}</dd>
+                    </div>
+                  </dl>
+                </div>
               )}
             </div>
           ))}

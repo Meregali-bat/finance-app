@@ -39,7 +39,12 @@ export function ForecastNav({
   return (
     <div className="rise-in flex items-center justify-between gap-2 rounded-[18px] bg-card p-1.5 shadow-[inset_0_0_0_1px_var(--hairline)] lg:w-fit lg:min-w-[24rem] lg:self-start">
       {previousHref ? (
-        <Link href={previousHref} className={ARROW_CLASS} aria-label="Ciclo anterior">
+        <Link
+          href={previousHref}
+          className={ARROW_CLASS}
+          aria-label="Ciclo anterior"
+          aria-keyshortcuts="ArrowLeft"
+        >
           <ChevronLeft className="size-5" aria-hidden="true" />
         </Link>
       ) : (
@@ -52,12 +57,24 @@ export function ForecastNav({
 
       <div className="min-w-0 px-2 text-center">
         <p className="truncate font-heading text-base font-semibold tracking-[-0.01em]">{label}</p>
-        <p className="truncate text-xs text-muted-foreground">{caption}</p>
+        <p className="truncate text-xs text-muted-foreground">
+          {caption}
+          {/* Só onde há teclado: no celular, o atalho não existe. */}
+          <span className="hidden lg:inline" aria-hidden="true">
+            {" "}
+            · ← → para trocar
+          </span>
+        </p>
       </div>
       <ForecastArrowKeys previousHref={previousHref} nextHref={nextHref} />
 
       {nextHref ? (
-        <Link href={nextHref} className={ARROW_CLASS} aria-label="Próximo ciclo">
+        <Link
+          href={nextHref}
+          className={ARROW_CLASS}
+          aria-label="Próximo ciclo"
+          aria-keyshortcuts="ArrowRight"
+        >
           <ChevronRight className="size-5" aria-hidden="true" />
         </Link>
       ) : (

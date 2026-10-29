@@ -456,8 +456,13 @@ export default async function DashboardPage() {
                   {isOverBudget && (
                     <TriangleAlert aria-hidden className="size-4 shrink-0 text-negative" />
                   )}
+                  {/* Com o saldo velho, o próprio título é condicional: é o
+                      que se lê primeiro, e não pode afirmar um vermelho que
+                      talvez não exista. */}
                   {isOverBudget
-                    ? "Este período está no vermelho"
+                    ? staleDays != null
+                      ? `Pode estar no vermelho: o saldo é de ${staleDays} dias atrás`
+                      : "Este período está no vermelho"
                     : allToSavings
                       ? "Hoje, o que sobra vai para guardar"
                       : isTight
@@ -481,8 +486,9 @@ export default async function DashboardPage() {
                     memoryKey="home:daily"
                     announce={false}
                     className={`flex items-baseline font-heading text-[64px] leading-[0.9] font-bold tracking-[-0.045em] tabular-nums lg:text-[80px] ${
-                      isOverBudget ? "text-negative" : "text-(--hero-fg)"
+                      isOverBudget && staleDays == null ? "text-negative" : "text-(--hero-fg)"
                     }`}
+                    signClassName="mr-1 text-[44px] lg:text-[54px]"
                     symbolClassName="mr-1.5 text-[24px] tracking-[-0.02em] opacity-70 lg:mr-2 lg:text-[30px]"
                     centsClassName="text-[30px] tracking-[-0.03em] opacity-70 lg:text-[36px]"
                   />
@@ -491,6 +497,16 @@ export default async function DashboardPage() {
                       {isOverBudget || allToSavings || isTight
                         ? `por dia até ${formatDate(budget.periodEnd)}`
                         : `Próximo pagamento em ${formatDate(budget.periodEnd)}`}
+                      {/* No vermelho, no celular, a linha da régua some; os
+                          dias que faltam vêm para cá, e a régua não fica muda. */}
+                      {isOverBudget && (
+                        <span className="lg:hidden">
+                          {" · "}
+                          {budget.daysRemaining === 1
+                            ? "falta 1 dia"
+                            : `faltam ${budget.daysRemaining} dias`}
+                        </span>
+                      )}
                     </p>
                     {/* Sem gasto hoje a linha some: o número já é a média pura.
                         Com gasto, ela diz que ele já saiu do número — senão o
@@ -561,7 +577,7 @@ export default async function DashboardPage() {
                         vermelho que pode não existir seria agir pela mentira. */}
                     <p className="font-medium text-(--hero-fg)">
                       {staleDays != null
-                        ? `O período fecharia ${formatCurrency(periodDeficit)} no negativo, mas a conta usa o saldo de ${staleDays} dias atrás.`
+                        ? `O período fecharia ${formatCurrency(periodDeficit)} no negativo se o saldo ainda for o mesmo.`
                         : `O período fecha ${formatCurrency(periodDeficit)} no negativo, mesmo sem gastar mais nada.`}
                     </p>
                     {/* Âncora nativa, não `Link`: o `hashchange` é o que faz os
@@ -675,7 +691,7 @@ export default async function DashboardPage() {
                 abaixo. No celular ela é um `<details>`, aberto só quando
                 pedido. O aviso de falta fica fora dela — é aviso, não
                 explicação. */}
-            <div className="flex flex-col gap-1 p-[18px] text-[13px] leading-snug text-pretty lg:p-5 lg:shadow-[-1px_0_0_0_var(--hero-line)]">
+            <div className="flex flex-col gap-1 p-[18px] text-[13px] leading-snug text-pretty lg:justify-center lg:p-5 lg:shadow-[-1px_0_0_0_var(--hero-line)]">
               {savingsShortfall && (
                 <p className="font-medium text-(--hero-fg)">{savingsShortfall}</p>
               )}

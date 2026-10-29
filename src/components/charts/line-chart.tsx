@@ -169,7 +169,7 @@ export function LineChart({
                   <span
                     aria-hidden="true"
                     className={cn(
-                      "pop-in absolute left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full ring-2 ring-card transition-[width,height] duration-150",
+                      "dot-in absolute left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full ring-2 ring-card transition-[width,height] duration-150",
                       p.selected || isActive ? "size-3.5" : "size-2.5",
                     )}
                     style={

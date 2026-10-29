@@ -60,7 +60,7 @@ export function HomeDebts({ debts }: { debts: DebtView[] }) {
       </div>
       {/* Com a faixa toda do desktop (sem os avisos ao lado), duas colunas:
           uma linha de 980px deixava o "Recebi" longe do nome. */}
-      <ul ref={list} className="grid items-start gap-2.5 @3xl:grid-cols-2 @3xl:gap-x-4">
+      <ul ref={list} className="grid gap-2.5 @3xl:grid-cols-2 @3xl:gap-x-4">
         {debts.map((debt) => (
           <li key={debt.personId} data-person-id={debt.personId}>
             <DebtCard
@@ -110,7 +110,7 @@ function DebtCard({
   const [expanded, setExpanded] = useState(false);
   return (
     <div
-      className={homeCard("flex flex-col gap-2.5 py-3.5 pr-3.5 pl-4 lg:py-3.5 lg:pr-3.5 lg:pl-4")}
+      className={homeCard("flex h-full flex-col justify-center gap-2.5 py-3.5 pr-3.5 pl-4 lg:py-3.5 lg:pr-3.5 lg:pl-4")}
     >
       {/* No celular o "Recebi" desce para uma linha só dele, na ponta direita,
           como o "Pagar" dos lembretes: deixa livre a coluna do "+" fixo (58px
