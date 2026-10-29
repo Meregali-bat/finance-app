@@ -41,7 +41,9 @@ export function AccountBalanceCard({
       <div className="flex min-w-0 flex-col gap-1.5">
         {/* Um título com cara de rótulo: é o número de que o do dia parte, e
             precisa aparecer na navegação por títulos do leitor de tela. */}
-        <h2 className="text-[12.5px] font-medium text-muted-foreground">Saldo em conta</h2>
+        <h2 className="text-[12.5px] font-medium text-muted-foreground">
+          {staleDays != null ? "Saldo estimado" : "Saldo em conta"}
+        </h2>
         {balance == null ? (
           <p className="text-sm text-muted-foreground">
             Informe o saldo da sua conta para acompanhar quanto você tem agora.
@@ -68,7 +70,7 @@ export function AccountBalanceCard({
                   {/* Duas linhas, cada uma inteira: no card estreito, um "·"
                       no meio quebrava a frase de qualquer jeito. "Conferido"
                       é a palavra do hero e da conta para o mesmo momento. */}
-                  <span className="block font-semibold text-foreground">Confira com o extrato</span>
+                  <span className="block font-semibold text-foreground">Confira no app do banco</span>
                   <span className="block">Conferido há {staleDays} dias</span>
                 </span>
               </p>

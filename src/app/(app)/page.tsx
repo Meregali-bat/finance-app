@@ -9,6 +9,7 @@ import { cumulativeDailySpending } from "@/lib/spending-trend";
 import { AreaTrend } from "@/components/charts/area-trend";
 import { loadBudgetInputs, registeredMovementOf } from "@/lib/budget-inputs";
 import { formatCurrency, formatDate, installmentLabel } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SectionLabel } from "@/components/page-header";
 import { CountUpCurrency } from "@/components/ui/animated-number";
@@ -590,14 +591,15 @@ export default async function DashboardPage() {
                         vermelho que pode não existir seria agir pela mentira. */}
                     <p className="font-medium text-(--hero-fg)">
                       {staleDays != null
-                        ? `Se o saldo não mudou, o período fecha ${formatCurrency(periodDeficit)} no negativo.`
+                        ? `Se a estimativa estiver certa, o período fecha ${formatCurrency(periodDeficit)} no negativo.`
                         : `O período fecha ${formatCurrency(periodDeficit)} no negativo, mesmo sem gastar mais nada.`}
                     </p>
                     {/* Âncora nativa, não `Link`: o `hashchange` é o que faz os
                         lembretes abrirem por inteiro, para a conta adiável não
                         ficar escondida no "Mostrar mais". */}
                     {staleDays != null ? (
-                      <a href="#saldo" className={heroLink}>
+                      // A única ação desse estado: 44px de toque, sem mudar o desenho.
+                      <a href="#saldo" className={cn(heroLink, "-my-2.5 inline-block w-fit py-2.5")}>
                         Conferir o saldo
                       </a>
                     ) : canDefer ? (
