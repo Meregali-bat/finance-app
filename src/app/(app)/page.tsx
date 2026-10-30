@@ -4,7 +4,7 @@ import { ChevronRight, CircleAlert, CreditCard, Receipt, TriangleAlert } from "l
 import { staleAdjustmentDays } from "@/lib/account-balance";
 import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/auth-helpers";
-import { deferralTargetDate, fallsOnDay } from "@/lib/period";
+import { deferralTargetDate, fallsOnDay, ownSpendingOf } from "@/lib/period";
 import { cumulativeDailySpending } from "@/lib/spending-trend";
 import { AreaTrend } from "@/components/charts/area-trend";
 import { loadBudgetInputs, registeredMovementOf } from "@/lib/budget-inputs";
@@ -172,7 +172,11 @@ export default async function DashboardPage() {
   const todayParts = [
     {
       label: "na conta",
-      total: sumWhere(todaysItems, (i) => i.kind === "transaction" && i.amount > 0),
+      // O gasto seu: sem transferência para outra conta e sem a parte emprestada.
+      total: todaysItems.reduce(
+        (sum, i) => sum + (i.kind === "transaction" ? ownSpendingOf(i) : 0),
+        0,
+      ),
     },
     { label: "no cartão", total: sumWhere(todaysItems, (i) => i.kind === "card") },
   ];
@@ -866,7 +870,10 @@ type DayItem = {
   date: Date;
   createdAt: Date | null;
   categoryId: string | null;
-} & ({ kind: "transaction" } | { kind: "card"; cardId: string; installments: number });
+} & (
+  | { kind: "transaction"; transfer?: boolean; lent?: number }
+  | { kind: "card"; cardId: string; installments: number }
+);
 
 function sumWhere(items: DayItem[], keep: (item: DayItem) => boolean): number {
   return items.filter(keep).reduce((sum, item) => sum + item.amount, 0);

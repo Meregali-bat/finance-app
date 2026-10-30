@@ -271,6 +271,11 @@ model Transaction {
   /// A fatia da renda deste lançamento, quando a pessoa a trocou na listagem.
   /// Nulo = a fatia da categoria.
   slice           String?
+  /// Dinheiro entre contas da própria pessoa: de outro banco para esta conta
+  /// (negativo) ou desta para outra (positivo). Move o saldo como qualquer
+  /// lançamento, mas não é renda nem gasto — o Histórico e o ritmo de gasto
+  /// o deixam de fora.
+  transfer        Boolean        @default(false)
 
   @@index([userId, date])
   @@index([categoryId])

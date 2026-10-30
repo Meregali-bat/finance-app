@@ -23,9 +23,12 @@ export async function createTransaction(formData: FormData) {
     date: formData.get("date") || undefined,
     categoryId: formData.get("categoryId"),
   });
+  // Entre contas suas: não é gasto nem renda, então não tem categoria nem
+  // empréstimo.
+  const transfer = formData.get("transfer") === "1";
 
   // Só despesa se empresta; uma receita nunca leva empréstimo.
-  const loan = data.type === "expense" ? parseLoanFields(formData) : null;
+  const loan = data.type === "expense" && !transfer ? parseLoanFields(formData) : null;
 
   await prisma.$transaction(async (tx) => {
     const created = await tx.transaction.create({
@@ -33,7 +36,8 @@ export async function createTransaction(formData: FormData) {
         userId,
         description: data.description,
         amount: data.type === "income" ? -data.amount : data.amount,
-        categoryId: data.categoryId || null,
+        categoryId: transfer ? null : data.categoryId || null,
+        transfer,
         ...(data.date ? { date: data.date } : {}),
       },
       select: { id: true },
@@ -53,8 +57,9 @@ export async function updateTransaction(id: string, formData: FormData) {
     date: formData.get("date") || undefined,
     categoryId: formData.get("categoryId"),
   });
+  const transfer = formData.get("transfer") === "1";
 
-  const loan = data.type === "expense" ? parseLoanFields(formData) : null;
+  const loan = data.type === "expense" && !transfer ? parseLoanFields(formData) : null;
 
   await prisma.$transaction(async (tx) => {
     await tx.transaction.update({
@@ -62,7 +67,8 @@ export async function updateTransaction(id: string, formData: FormData) {
       data: {
         description: data.description,
         amount: data.type === "income" ? -data.amount : data.amount,
-        categoryId: data.categoryId || null,
+        categoryId: transfer ? null : data.categoryId || null,
+        transfer,
         ...(data.date ? { date: data.date } : {}),
       },
     });

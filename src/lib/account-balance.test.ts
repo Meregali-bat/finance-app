@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  balanceAtDay,
   calculateAccountBalance,
   calculateRegisteredMovement,
   staleAdjustmentDays,
@@ -242,5 +243,59 @@ describe("staleAdjustmentDays", () => {
 
   it("atravessa a virada do mês", () => {
     expect(staleAdjustmentDays(new Date(2026, 8, 28, 12, 0), new Date(2026, 9, 6, 9, 0))).toBe(8);
+  });
+});
+
+describe("balanceAtDay", () => {
+  // Leitura de R$ 1.000 no dia 10/set às 9h.
+  const reading = { balance: 1000, createdAt: adjustedAt };
+
+  it("sem leitura nenhuma, não inventa saldo", () => {
+    expect(balanceAtDay({ adjustments: [], credits: [], debits: [], day: now })).toBeNull();
+  });
+
+  it("depois da leitura, anda para frente como o saldo em conta", () => {
+    const result = balanceAtDay({
+      adjustments: [reading],
+      credits: [],
+      debits: [
+        movement({
+          amount: 200,
+          registeredAt: new Date(2026, 8, 12, 10),
+          occurredOn: new Date(2026, 8, 12),
+        }),
+      ],
+      day: new Date(2026, 8, 30),
+    });
+    expect(result?.balance).toBe(800);
+  });
+
+  it("antes da leitura, volta dela desfazendo o que ela já mostrava", () => {
+    const result = balanceAtDay({
+      adjustments: [reading],
+      // O salário do dia 5 e uma compra do dia 8 já estavam no extrato do dia 10.
+      credits: [
+        movement({
+          amount: 3000,
+          registeredAt: new Date(2026, 8, 5, 10),
+          occurredOn: new Date(2026, 8, 5),
+        }),
+      ],
+      debits: [
+        movement({
+          amount: 150,
+          registeredAt: new Date(2026, 8, 8, 10),
+          occurredOn: new Date(2026, 8, 8),
+        }),
+        // Depois da leitura: não entra na volta.
+        movement({
+          amount: 999,
+          registeredAt: new Date(2026, 8, 12, 10),
+          occurredOn: new Date(2026, 8, 12),
+        }),
+      ],
+      day: new Date(2026, 7, 31),
+    });
+    expect(result?.balance).toBe(1000 - 3000 + 150);
   });
 });

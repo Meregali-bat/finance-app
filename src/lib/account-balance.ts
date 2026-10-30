@@ -177,3 +177,50 @@ export function staleAdjustmentDays(adjustedAt: Date, today: Date): number | nul
   );
   return days > STALE_ADJUSTMENT_DAYS ? days : null;
 }
+
+/**
+ * O saldo em conta no fim de `day`, a partir das leituras do extrato — o mesmo
+ * número da Início quando `day` é hoje.
+ *
+ * Com uma leitura feita até aquele dia, anda dela para frente, como
+ * `calculateAccountBalance`. Com todas depois, volta da mais próxima para
+ * trás: tira o que entrou e devolve o que saiu entre o dia e a leitura, só o
+ * que ela já mostrava. Sem leitura nenhuma, nulo — sem o ponto de partida, o
+ * app não sabe quanto havia no banco, e somar meses não diz isso.
+ */
+export function balanceAtDay(input: {
+  adjustments: AccountBalanceAdjustmentInput[];
+  credits: AccountMovementInput[];
+  debits: AccountMovementInput[];
+  day: Date;
+}): { balance: number; from: AccountBalanceAdjustmentInput } | null {
+  const { adjustments, credits, debits } = input;
+  const dayStart = startOfDay(input.day).getTime();
+  const byTime = [...adjustments].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+
+  const before = byTime.filter((a) => startOfDay(a.createdAt).getTime() <= dayStart).at(-1);
+  if (before) {
+    const balance = calculateAccountBalance({ adjustment: before, credits, debits, today: input.day });
+    return balance === null ? null : { balance, from: before };
+  }
+
+  const after = byTime[0];
+  if (!after) return null;
+  const adjustedAt = after.createdAt;
+  // Na leitura e depois do dia: o que a leitura já somava e o dia ainda não.
+  const between = (raises: (m: AccountMovementInput) => boolean) => (m: AccountMovementInput) => {
+    const occurred = startOfDay(m.occurredOn).getTime();
+    if (occurred <= dayStart) return false;
+    const read =
+      (m.registeredAt != null && m.registeredAt.getTime() <= adjustedAt.getTime()) ||
+      alreadyInReading(m, adjustedAt, raises(m));
+    return read && occurred <= startOfDay(adjustedAt).getTime();
+  };
+  const credited = credits
+    .filter(between((m) => m.amount > 0))
+    .reduce((sum, m) => sum + m.amount, 0);
+  const debited = debits
+    .filter(between((m) => m.amount < 0))
+    .reduce((sum, m) => sum + m.amount, 0);
+  return { balance: after.balance - credited + debited, from: after };
+}

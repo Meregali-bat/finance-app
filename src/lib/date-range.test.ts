@@ -6,8 +6,40 @@ import {
   previousRangeParams,
   rangeHref,
   resolveRange,
+  type CycleOf,
   type RangeParams,
 } from "./date-range";
+
+// Pagamento todo dia 5: o ciclo vai do dia 5 até o dia 4 do mês seguinte.
+const fifth: CycleOf = (day) => {
+  const start =
+    day.getDate() >= 5
+      ? new Date(day.getFullYear(), day.getMonth(), 5)
+      : new Date(day.getFullYear(), day.getMonth() - 1, 5);
+  return { periodStart: start, periodEnd: new Date(start.getFullYear(), start.getMonth() + 1, 5) };
+};
+
+describe("ciclo", () => {
+  it("vai do pagamento até o dia antes do próximo", () => {
+    const range = resolveRange({ range: "ciclo" }, new Date(2026, 9, 30), fifth);
+    expect(range.mode).toBe("ciclo");
+    expect(range.firstDay).toBe("2026-10-05");
+    expect(range.lastDay).toBe("2026-11-04");
+  });
+
+  it("anda de ciclo em ciclo", () => {
+    const range = resolveRange({ range: "ciclo", from: "2026-10-12" }, new Date(2026, 9, 30), fifth);
+    const previous = resolveRange(previousRangeParams(range), new Date(2026, 9, 30), fifth);
+    const next = resolveRange(nextRangeParams(range), new Date(2026, 9, 30), fifth);
+    expect(previous.firstDay).toBe("2026-09-05");
+    expect(next.firstDay).toBe("2026-11-05");
+  });
+
+  it("sem renda que marque ciclo, cai no mês", () => {
+    const range = resolveRange({ range: "ciclo" }, new Date(2026, 9, 30), () => null);
+    expect(range.mode).toBe("mes");
+  });
+});
 
 describe("resolveRange", () => {
   it("cai no mês corrente quando não vem nenhum parâmetro", () => {

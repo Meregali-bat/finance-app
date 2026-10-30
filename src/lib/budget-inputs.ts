@@ -59,6 +59,8 @@ export interface BudgetInputs {
   /** A matéria-prima do saldo em conta — ver `accountBalanceOf`. */
   account: {
     adjustment?: AccountBalanceAdjustmentInput;
+    /** Todas as leituras do extrato, da mais nova para a mais velha. */
+    adjustments?: AccountBalanceAdjustmentInput[];
     credits: AccountMovementInput[];
     debits: AccountMovementInput[];
   };
@@ -85,7 +87,7 @@ export async function loadBudgetInputs(userId: string): Promise<BudgetInputs> {
     expensePayments,
     billEstimates,
     jarDeposits,
-    adjustment,
+    adjustments,
     user,
     withdrawalPlans,
   ] = await Promise.all([
@@ -95,15 +97,22 @@ export async function loadBudgetInputs(userId: string): Promise<BudgetInputs> {
       where: { userId },
       include: { pauses: true, deferrals: true },
     }),
-    prisma.creditCard.findMany({ where: { userId }, include: { purchases: true } }),
-    prisma.transaction.findMany({ where: { userId }, orderBy: { date: "desc" } }),
+    prisma.creditCard.findMany({
+      where: { userId },
+      include: { purchases: { include: { loans: { select: { amount: true } } } } },
+    }),
+    prisma.transaction.findMany({
+      where: { userId },
+      orderBy: { date: "desc" },
+      include: { loans: { select: { amount: true } } },
+    }),
     prisma.expensePayment.findMany({
       where: { userId },
       include: { cardPurchase: { select: { amount: true } } },
     }),
     prisma.cardBillEstimate.findMany({ where: { userId } }),
     prisma.jarDeposit.findMany({ where: { userId }, include: { jar: { select: { name: true } } } }),
-    prisma.balanceAdjustment.findFirst({ where: { userId }, orderBy: { createdAt: "desc" } }),
+    prisma.balanceAdjustment.findMany({ where: { userId }, orderBy: { createdAt: "desc" } }),
     prisma.user.findUnique({ where: { id: userId }, select: { budgetSlices: true } }),
     prisma.jarWithdrawalPlan.findMany({
       where: { userId },
@@ -143,6 +152,7 @@ export async function loadBudgetInputs(userId: string): Promise<BudgetInputs> {
         amount: Number(p.amount),
         date: p.date,
         installments: p.installments,
+        lent: lentTotal(p.loans),
       })),
     ),
     billEstimates: billEstimates.map((e) => ({
@@ -169,6 +179,8 @@ export async function loadBudgetInputs(userId: string): Promise<BudgetInputs> {
       categoryId: t.categoryId,
       createdAt: t.createdAt,
       fromPeriodClose: t.fromPeriodClose,
+      transfer: t.transfer || undefined,
+      lent: lentTotal(t.loans),
     })),
     jarDeposits: jarDeposits.map((d) => ({
       amount: Number(d.amount),
@@ -206,9 +218,10 @@ export async function loadBudgetInputs(userId: string): Promise<BudgetInputs> {
       })),
     slices: parseSlices(user?.budgetSlices),
     account: {
-      adjustment: adjustment
-        ? { balance: Number(adjustment.balance), createdAt: adjustment.createdAt }
+      adjustment: adjustments[0]
+        ? { balance: Number(adjustments[0].balance), createdAt: adjustments[0].createdAt }
         : undefined,
+      adjustments: adjustments.map((a) => ({ balance: Number(a.balance), createdAt: a.createdAt })),
       // As quatro tabelas viram duas listas genéricas aqui, e não dentro de
       // account-balance.ts: a regra dos filtros mora em um lugar só, e o
       // módulo continua puro, sem conhecer nome de tabela.
@@ -245,6 +258,11 @@ export async function loadBudgetInputs(userId: string): Promise<BudgetInputs> {
       ],
     },
   };
+}
+
+/** A soma dos empréstimos de uma despesa; nada quando não foi emprestada. */
+function lentTotal(loans: { amount: unknown }[]): number | undefined {
+  return loans.length > 0 ? loans.reduce((sum, l) => sum + Number(l.amount), 0) : undefined;
 }
 
 /**

@@ -55,6 +55,16 @@ export type HistoryItem = {
   incomeId?: string;
   /** A despesa foi emprestada: quem vai devolver ("Ana e Bruno"). */
   lentTo?: string;
+  /**
+   * Quanto desta linha é de outra pessoa: a soma dos empréstimos, na mesma
+   * proporção da parcela quando é uma compra parcelada. Sai do saldo, mas não
+   * é gasto seu — volta quando a pessoa devolver.
+   */
+  lent?: number;
+  /** Receita que é alguém devolvendo um empréstimo: entra no saldo, não é renda. */
+  loanRepayment?: boolean;
+  /** Dinheiro entre contas da própria pessoa: nem renda nem gasto. */
+  transfer?: boolean;
   /** Pagamento de fatura ou conta: falso quando foi só uma parte. */
   settled?: boolean;
   /** A fatia escolhida para este lançamento; ausente = a da categoria. */
@@ -77,6 +87,8 @@ export type MovementValues = {
   cardId?: string;
   /** Em quantas parcelas — só de leitura no formulário, como o cartão. */
   installments?: number;
+  /** Lançamento entre contas da própria pessoa. */
+  transfer?: boolean;
 };
 
 /** Ids colidem entre tabelas, então a chave de lista precisa do kind junto. */
@@ -97,6 +109,7 @@ export function toMovementValues(item: HistoryItem): MovementValues {
     categoryId: item.categoryId,
     cardId: item.cardId,
     installments: item.installments,
+    transfer: item.transfer,
   };
 }
 

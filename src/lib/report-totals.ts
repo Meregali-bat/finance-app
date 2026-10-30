@@ -2,12 +2,22 @@ import type { HistoryItem } from "./history-item";
 import { storedDay } from "./period";
 
 export type ReportTotals = {
+  /** Só o que é seu: sem a parte emprestada e sem transferências. */
   spent: number;
-  /** Positivo, ao contrário do sinal que a receita tem no banco. */
+  /** Renda: sem devoluções de empréstimo e sem dinheiro vindo de outra conta. Positivo. */
   received: number;
+  /** A parte das despesas que é de outros (empréstimos). Saiu, mas volta. */
+  lent: number;
+  /** O que pessoas devolveram de empréstimos. Entrou, mas não é renda. */
+  repaid: number;
+  /** Para outras contas suas, menos o que veio delas. Positivo = saiu. */
+  transferred: number;
   /** Guardado em caixinhas menos o resgatado. Não é gasto, mas saiu do disponível. */
   saved: number;
-  /** `received − spent − saved`: o que o período deixou de dinheiro livre. */
+  /**
+   * O quanto a conta mudou no período: `received + repaid − spent − lent −
+   * saved − transferred`. É o movimento de caixa, não o resultado.
+   */
   balance: number;
   dailyAverage: number;
 };
@@ -37,14 +47,31 @@ function diffCalendarDays(a: Date, b: Date) {
  * Exportada porque o "Por categoria" do Histórico precisa do mesmo critério.
  */
 export function countsAsSpending(item: HistoryItem) {
+  if (item.transfer) return false;
   if (item.kind === "cardBillAdjustment") return true;
   if (item.kind === "cardBillPayment" || item.kind === "jarDeposit") return false;
   return item.amount > 0;
 }
 
-function countsAsReceived(item: HistoryItem) {
+/**
+ * Quanto da linha é gasto seu: o valor menos a parte emprestada. Uma conta
+ * dividida com a Ana conta só a sua metade — a dela volta, e somá-la fazia o
+ * mês parecer mais caro do que foi.
+ */
+export function ownSpending(item: HistoryItem) {
+  if (!countsAsSpending(item)) return 0;
+  return item.amount - (item.lent ?? 0);
+}
+
+export function countsAsReceived(item: HistoryItem) {
+  if (item.transfer || item.loanRepayment) return false;
   if (item.kind === "cardBillAdjustment" || item.kind === "jarDeposit") return false;
   return item.amount < 0;
+}
+
+/** Linha que só troca o dinheiro de lugar: caixinha, outra conta sua, devolução. */
+export function movesMoneyOnly(item: HistoryItem) {
+  return item.kind === "jarDeposit" || !!item.transfer || !!item.loanRepayment;
 }
 
 /**
@@ -70,21 +97,25 @@ export function calculateReportTotals(input: {
 }): ReportTotals {
   const { items, rangeStart, rangeEnd, today } = input;
 
-  const spent = items.filter(countsAsSpending).reduce((sum, item) => sum + item.amount, 0);
-  const received = items
-    .filter(countsAsReceived)
-    .reduce((sum, item) => sum - item.amount, 0);
-  const saved = items
-    .filter((item) => item.kind === "jarDeposit")
-    .reduce((sum, item) => sum + item.amount, 0);
+  const sum = (pick: (item: HistoryItem) => number) =>
+    items.reduce((total, item) => total + pick(item), 0);
+  const spent = sum(ownSpending);
+  const lent = sum((item) => (countsAsSpending(item) ? (item.lent ?? 0) : 0));
+  const received = sum((item) => (countsAsReceived(item) ? -item.amount : 0));
+  const repaid = sum((item) => (item.loanRepayment && !item.transfer ? -item.amount : 0));
+  const transferred = sum((item) => (item.transfer ? item.amount : 0));
+  const saved = sum((item) => (item.kind === "jarDeposit" ? item.amount : 0));
 
   const days = elapsedDays(rangeStart, rangeEnd, today);
 
   return {
     spent,
     received,
+    lent,
+    repaid,
+    transferred,
     saved,
-    balance: received - spent - saved,
+    balance: received + repaid - spent - lent - saved - transferred,
     dailyAverage: days > 0 ? spent / days : 0,
   };
 }
@@ -125,7 +156,7 @@ export function spendingBuckets(input: {
   for (const item of items.filter(countsAsSpending)) {
     const day = dayOf(item);
     const index = buckets.findLastIndex((b) => b.start.getTime() <= day.getTime());
-    if (index >= 0 && day.getTime() < rangeEnd.getTime()) buckets[index].total += item.amount;
+    if (index >= 0 && day.getTime() < rangeEnd.getTime()) buckets[index].total += ownSpending(item);
   }
   return buckets;
 }

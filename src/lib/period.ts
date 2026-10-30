@@ -92,6 +92,8 @@ export interface CardPurchaseInput {
   date: Date;
   /** Em quantas parcelas. Ausente ou 1 = valor inteiro num único ciclo. */
   installments?: number;
+  /** Quanto da compra é de outros (empréstimos), do total. */
+  lent?: number;
 }
 
 /**
@@ -138,6 +140,26 @@ export interface TransactionInput {
    * contar essas linhas também levaria a mesma sobra duas vezes.
    */
   fromPeriodClose?: boolean;
+  /** Entre contas da própria pessoa: move o saldo, mas não é gasto nem renda. */
+  transfer?: boolean;
+  /** Quanto da saída é de outros (empréstimos). */
+  lent?: number;
+}
+
+/**
+ * O gasto seu de um lançamento ou compra: zero para entrada, transferência e
+ * linha do fechamento antigo; sem a parte emprestada. É o que os ritmos de
+ * gasto somam — o saldo continua contando o valor inteiro, porque o dinheiro
+ * saiu.
+ */
+export function ownSpendingOf(movement: {
+  amount: number;
+  transfer?: boolean;
+  fromPeriodClose?: boolean;
+  lent?: number;
+}): number {
+  if (movement.amount <= 0 || movement.transfer || movement.fromPeriodClose) return 0;
+  return Math.max(0, movement.amount - (movement.lent ?? 0));
 }
 
 /**

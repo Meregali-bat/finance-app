@@ -2,7 +2,13 @@ import { startOfWeek } from "date-fns";
 import { formatDate } from "./format";
 
 /** Como o período do relatório foi escolhido. */
-export type RangeMode = "hoje" | "semana" | "mes" | "custom";
+export type RangeMode = "hoje" | "semana" | "ciclo" | "mes" | "custom";
+
+/**
+ * O ciclo de pagamento que contém um dia: do pagamento até o seguinte
+ * (exclusivo). Nulo quando não há renda que marque ciclo.
+ */
+export type CycleOf = (day: Date) => { periodStart: Date; periodEnd: Date } | null;
 
 /** Os parâmetros de URL que descrevem o período — todos opcionais e não confiáveis. */
 export type RangeParams = {
@@ -156,8 +162,32 @@ function monthRange(year: number, monthIndex: number): ResolvedRange {
  * Traduz os parâmetros de URL num período concreto. Parâmetro faltando ou
  * inválido nunca é erro: o mês corrente é sempre a saída segura.
  */
-export function resolveRange(params: RangeParams, today: Date = new Date()): ResolvedRange {
+export function resolveRange(
+  params: RangeParams,
+  today: Date = new Date(),
+  cycleOf?: CycleOf,
+): ResolvedRange {
   const currentMonth = { year: today.getFullYear(), monthIndex: today.getMonth() };
+
+  if (params.range === "ciclo") {
+    // De um pagamento ao seguinte, como a Início e a Previsão contam o
+    // período. `from` é a âncora: qualquer dia do ciclo. Sem renda que marque
+    // ciclo, cai no mês.
+    const anchor = startOfDay(parseDayParam(params.from) ?? today);
+    const cycle = cycleOf?.(anchor);
+    if (cycle) {
+      const rangeStart = startOfDay(cycle.periodStart);
+      const rangeEnd = startOfDay(cycle.periodEnd);
+      if (rangeEnd.getTime() > rangeStart.getTime())
+        return complete({
+          mode: "ciclo",
+          rangeStart,
+          rangeEnd,
+          label: spanLabel(rangeStart, rangeEnd),
+          month: currentMonth,
+        });
+    }
+  }
 
   if (params.range === "hoje") {
     // `from` é só a âncora, como na semana: sem ela, é o dia de hoje.
@@ -221,6 +251,15 @@ function shiftRange(range: RangeCore, direction: 1 | -1): RangeParams {
 
   if (range.mode === "semana") {
     return { range: "semana", from: dayParam(addDays(range.rangeStart, direction * 7)) };
+  }
+
+  if (range.mode === "ciclo") {
+    // O dia antes do começo cai no ciclo anterior; o fim (exclusivo) já é o
+    // primeiro dia do seguinte.
+    return {
+      range: "ciclo",
+      from: dayParam(direction < 0 ? addDays(range.rangeStart, -1) : range.rangeEnd),
+    };
   }
 
   if (range.mode === "custom") {
