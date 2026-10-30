@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { homeCard } from "@/components/home-card";
 import { SectionLabel } from "@/components/page-header";
@@ -113,7 +114,7 @@ export function SlicesEditor({
                   : `sobram ${total - 100}%`}
             </span>
           </SliceDonut>
-          <p className="text-center text-[13px] text-muted-foreground">
+          <p className="text-center text-[13px] text-pretty text-muted-foreground">
             <b className="text-foreground">{savingPercent(percents)}%</b> para guardar (Metas e
             Liberdade financeira): o que faltar guardar no período sai do seu número do dia.
           </p>
@@ -187,10 +188,23 @@ export function SlicesEditor({
       </div>
 
       {categories.length > 0 && (
-        <div className="flex flex-col gap-3">
-          <SectionLabel>Em que fatia cada categoria entra</SectionLabel>
+        // Já configuradas, as categorias raramente mudam: ficam recolhidas, e o
+        // Salvar não fica dois mil pixels abaixo das porcentagens.
+        <details open={!active} className="group flex flex-col gap-3">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 [&::-webkit-details-marker]:hidden">
+            <SectionLabel>Em que fatia cada categoria entra</SectionLabel>
+            <span className="flex shrink-0 items-center gap-1.5 text-[13px] text-muted-foreground">
+              {categories.length === 1 ? "1 categoria" : `${categories.length} categorias`}
+              <ChevronDown
+                className="size-4 transition-transform duration-200 ease-out-quint group-open:rotate-180"
+                aria-hidden="true"
+              />
+            </span>
+          </summary>
           <div
-            className={homeCard("grid grid-cols-[minmax(0,1fr)] gap-x-6 gap-y-3 sm:grid-cols-2")}
+            className={homeCard(
+              "mt-3 grid grid-cols-[minmax(0,1fr)] gap-x-6 gap-y-3 sm:grid-cols-2",
+            )}
           >
             {categories.map((category) => (
               <div key={category.id} className="flex items-center justify-between gap-3 text-sm">
@@ -214,7 +228,7 @@ export function SlicesEditor({
               </div>
             ))}
           </div>
-        </div>
+        </details>
       )}
 
       {jars.length > 0 && (
