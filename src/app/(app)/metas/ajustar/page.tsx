@@ -2,10 +2,19 @@ import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/auth-helpers";
 import { PageHeader } from "@/components/page-header";
 import { SlicesEditor } from "@/components/slices-editor";
-import { DEFAULT_SLICES, parseSlices, sliceOfCategory } from "@/lib/slices";
+import { DEFAULT_SLICES, SLICE_KEYS, parseSlices, sliceOfCategory } from "@/lib/slices";
 
-export default async function AdjustSlicesPage() {
+export default async function AdjustSlicesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ proposta?: string }>;
+}) {
   const userId = await requireUserId();
+  // A proposta da IA ("25,30,15,15,10,5", na ordem das fatias) como ponto de partida.
+  const { proposta } = await searchParams;
+  const proposal = parseSlices(
+    Object.fromEntries(SLICE_KEYS.map((k, i) => [k, Number(proposta?.split(",")[i])])),
+  );
   const [user, categories, jars] = await Promise.all([
     prisma.user.findUnique({ where: { id: userId }, select: { budgetSlices: true } }),
     prisma.category.findMany({ where: { userId, active: true }, orderBy: { name: "asc" } }),
@@ -23,7 +32,7 @@ export default async function AdjustSlicesPage() {
       />
       <SlicesEditor
         active={saved !== null}
-        initialPercents={saved ?? DEFAULT_SLICES}
+        initialPercents={proposal ?? saved ?? DEFAULT_SLICES}
         categories={categories.map((c) => ({ id: c.id, name: c.name, slice: sliceOfCategory(c) }))}
         jars={jars.map((j) => ({
           id: j.id,

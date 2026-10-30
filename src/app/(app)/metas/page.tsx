@@ -1,5 +1,12 @@
 import Link from "next/link";
-import { AlertTriangle, ChevronDown, PiggyBank, SlidersHorizontal, Target } from "lucide-react";
+import {
+  AlertTriangle,
+  ChevronDown,
+  PiggyBank,
+  SlidersHorizontal,
+  Sparkles,
+  Target,
+} from "lucide-react";
 import { requireUserId } from "@/lib/auth-helpers";
 import { loadSlicesOverview } from "@/lib/slices-data";
 import { SLICES, savingPercent } from "@/lib/slices";
@@ -32,7 +39,9 @@ export default async function SlicesPage() {
     return (
       <div className="flex flex-col gap-5 lg:gap-6">
         <PageHeader title="Metas" subtitle="As fatias da sua renda" />
-        <div className={homeCard("flex flex-col items-start gap-4 lg:max-w-2xl")}>
+        <div
+          className={homeCard("flex flex-col items-start gap-4 lg:max-w-2xl")}
+        >
           <span
             aria-hidden="true"
             className="flex size-11 items-center justify-center rounded-2xl bg-primary/12 text-primary"
@@ -40,17 +49,28 @@ export default async function SlicesPage() {
             <Target className="size-5" />
           </span>
           <div className="flex flex-col gap-1.5">
-            <p className="font-heading text-lg font-semibold">Divida a renda em fatias</p>
+            <p className="font-heading text-lg font-semibold">
+              Divida a renda em fatias
+            </p>
             <p className="text-sm text-muted-foreground">
-              Uma parte para os custos fixos, outra para o conforto, para os prazeres, para aprender
-              — e duas para guardar: Metas e Liberdade financeira. O que ainda falta guardar no
-              período sai do seu número do dia, e o que você guarda nas caixinhas vai cumprindo a
-              fatia.
+              Uma parte para os custos fixos, outra para o conforto, para os
+              prazeres, para aprender — e duas para guardar: Metas e Liberdade
+              financeira. O que ainda falta guardar no período sai do seu número
+              do dia, e o que você guarda nas caixinhas vai cumprindo a fatia.
             </p>
           </div>
-          <Link href="/metas/ajustar" className={buttonVariants()}>
-            Configurar as fatias
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <Link href="/metas/ia" className={buttonVariants()}>
+              <Sparkles aria-hidden="true" />
+              Montar com a IA
+            </Link>
+            <Link
+              href="/metas/ajustar"
+              className={buttonVariants({ variant: "outline" })}
+            >
+              Configurar à mão
+            </Link>
+          </div>
         </div>
       </div>
     );
@@ -76,23 +96,42 @@ export default async function SlicesPage() {
         title="Metas"
         subtitle={subtitle}
         action={
-          <Link
-            href="/metas/ajustar"
-            aria-label="Ajustar as fatias"
-            title="Ajustar as fatias"
-            className={iconButton({ tone: "outline", size: "lg" })}
-          >
-            <SlidersHorizontal aria-hidden="true" />
-          </Link>
+          <>
+            <Link
+              href="/metas/ia"
+              aria-label="Montar com a IA"
+              title="Montar com a IA"
+              className={iconButton({ tone: "outline", size: "lg" })}
+            >
+              <Sparkles aria-hidden="true" />
+            </Link>
+            <Link
+              href="/metas/ajustar"
+              aria-label="Ajustar as fatias"
+              title="Ajustar as fatias"
+              className={iconButton({ tone: "outline", size: "lg" })}
+            >
+              <SlidersHorizontal aria-hidden="true" />
+            </Link>
+          </>
         }
       />
 
       <div className="grid grid-cols-[minmax(0,1fr)] gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)] lg:gap-4">
-        <div className={homeCard("rise-in flex items-center gap-5")} style={stagger(0, 60)}>
+        <div
+          className={homeCard("rise-in flex items-center gap-5")}
+          style={stagger(0, 60)}
+        >
           <SliceDonut
             size={132}
-            label={SLICES.map((s) => `${s.name} ${percents[s.key]}%`).join(", ")}
-            segments={SLICES.map((s) => ({ key: s.key, value: percents[s.key], color: s.color }))}
+            label={SLICES.map((s) => `${s.name} ${percents[s.key]}%`).join(
+              ", ",
+            )}
+            segments={SLICES.map((s) => ({
+              key: s.key,
+              value: percents[s.key],
+              color: s.color,
+            }))}
           >
             <span className="font-heading text-lg font-bold tabular-nums">
               {savingPercent(percents)}%
@@ -101,7 +140,9 @@ export default async function SlicesPage() {
           </SliceDonut>
           <dl className="flex min-w-0 flex-1 flex-col gap-3">
             <div>
-              <dt className="text-[12.5px] font-medium text-muted-foreground">Renda do período</dt>
+              <dt className="text-[12.5px] font-medium text-muted-foreground">
+                Renda do período
+              </dt>
               <dd className="font-heading text-xl font-bold tabular-nums">
                 {formatCurrency(overview.income)}
               </dd>
@@ -175,8 +216,8 @@ export default async function SlicesPage() {
                   className="mt-0.5 size-4 shrink-0 text-negative"
                   aria-hidden="true"
                 />
-                Este período não fecha com tudo guardado: faltam {formatCurrency(savings.shortfall)}{" "}
-                depois das contas e faturas.
+                Este período não fecha com tudo guardado: faltam{" "}
+                {formatCurrency(savings.shortfall)} depois das contas e faturas.
               </p>
             )}
           </div>
@@ -192,8 +233,9 @@ export default async function SlicesPage() {
               aria-hidden="true"
             />
             <p className="text-sm text-muted-foreground">
-              Nenhuma renda confirmada neste período ainda. Cada fatia é uma parte da renda: assim
-              que o salário for confirmado, aparece quanto cabe em cada uma.
+              Nenhuma renda confirmada neste período ainda. Cada fatia é uma
+              parte da renda: assim que o salário for confirmado, aparece quanto
+              cabe em cada uma.
             </p>
           </div>
         ) : (
@@ -208,11 +250,18 @@ export default async function SlicesPage() {
               const over = beyond && !slice.saving;
               const ahead = beyond && slice.saving;
               const percentUsed =
-                usage.limit > 0 ? Math.round((used / usage.limit) * 1000) / 10 : used > 0 ? 100 : 0;
+                usage.limit > 0
+                  ? Math.round((used / usage.limit) * 1000) / 10
+                  : used > 0
+                    ? 100
+                    : 0;
               // A reserva do período é uma só: o que uma fatia de guardar tem a
               // mais cobre o que falta na outra.
               const sharedRemaining =
-                slice.saving && savings && left > 0.005 && savings.remaining < left - 0.005
+                slice.saving &&
+                savings &&
+                left > 0.005 &&
+                savings.remaining < left - 0.005
                   ? savings.remaining
                   : null;
               return (
@@ -248,7 +297,9 @@ export default async function SlicesPage() {
                           ? "Nada guardado"
                           : "Sem gastos"
                         : `${percentUsed.toLocaleString("pt-BR")}%`}
-                      {used >= 0.005 && <span className="sr-only"> do previsto</span>}
+                      {used >= 0.005 && (
+                        <span className="sr-only"> do previsto</span>
+                      )}
                     </span>
                   </div>
                   <div className="h-2 overflow-hidden rounded-full bg-(--track)">
@@ -265,7 +316,9 @@ export default async function SlicesPage() {
                       <dt className="text-xs text-muted-foreground">
                         {slice.saving ? "Guardado" : "Gasto"}
                       </dt>
-                      <dd className="text-sm font-semibold tabular-nums">{formatCurrency(used)}</dd>
+                      <dd className="text-sm font-semibold tabular-nums">
+                        {formatCurrency(used)}
+                      </dd>
                     </div>
                     <div className="rounded-xl bg-muted px-3 py-2">
                       <dt className="text-xs text-muted-foreground">
@@ -280,7 +333,11 @@ export default async function SlicesPage() {
                     <span
                       className={cn(
                         "tabular-nums",
-                        over ? "text-negative" : ahead || !sharedRemaining ? "text-positive" : "",
+                        over
+                          ? "text-negative"
+                          : ahead || !sharedRemaining
+                            ? "text-positive"
+                            : "",
                       )}
                     >
                       {over
@@ -318,7 +375,8 @@ export default async function SlicesPage() {
               : `${choosable.length} gastos sem categoria`}
           </SectionLabel>
           <p className="-mt-1 text-[13px] text-muted-foreground">
-            Sem categoria, o gasto não entra em nenhuma fatia. Escolha uma e ele passa a contar.
+            Sem categoria, o gasto não entra em nenhuma fatia. Escolha uma e ele
+            passa a contar.
           </p>
           <CategorizeList
             items={choosable.map((i) => ({
@@ -328,7 +386,10 @@ export default async function SlicesPage() {
               amount: i.amount,
               date: formatDate(i.date),
             }))}
-            categories={overview.categories.map((c) => ({ id: c.id, name: c.name }))}
+            categories={overview.categories.map((c) => ({
+              id: c.id,
+              name: c.name,
+            }))}
           />
         </div>
       )}
@@ -338,7 +399,9 @@ export default async function SlicesPage() {
           <summary className="flex cursor-pointer list-none items-baseline justify-between gap-3 text-[13px] [&::-webkit-details-marker]:hidden">
             <span className="text-muted-foreground">
               Fora das fatias:{" "}
-              {outside.length === 1 ? "1 valor sem categoria" : `${outside.length} valores sem categoria`}
+              {outside.length === 1
+                ? "1 valor sem categoria"
+                : `${outside.length} valores sem categoria`}
             </span>
             <span className="flex shrink-0 items-center gap-2 font-semibold tabular-nums">
               {formatCurrency(outsideTotal)}
@@ -349,8 +412,8 @@ export default async function SlicesPage() {
             </span>
           </summary>
           <p className="mt-2 text-[12.5px] text-muted-foreground">
-            Previsões e diferenças da fatura não têm categoria, então não contam em nenhuma fatia.
-            Uma conta fixa ganha categoria em Fixos.
+            Previsões e diferenças da fatura não têm categoria, então não contam
+            em nenhuma fatia. Uma conta fixa ganha categoria em Fixos.
           </p>
           <ul className="mt-2 flex flex-col divide-y divide-(--hairline)">
             {outside.map((i) => (
@@ -362,10 +425,13 @@ export default async function SlicesPage() {
                   {i.description}
                   <span className="text-muted-foreground">
                     {" "}
-                    · {formatDate(i.date)} · {OUTSIDE[i.kind] ?? "sem categoria"}
+                    · {formatDate(i.date)} ·{" "}
+                    {OUTSIDE[i.kind] ?? "sem categoria"}
                   </span>
                 </span>
-                <span className="shrink-0 tabular-nums">{formatCurrency(i.amount)}</span>
+                <span className="shrink-0 tabular-nums">
+                  {formatCurrency(i.amount)}
+                </span>
               </li>
             ))}
           </ul>
