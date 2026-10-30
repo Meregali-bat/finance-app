@@ -1,7 +1,10 @@
 import type { Metadata, Viewport } from "next";
-import { currentTheme } from "@/lib/theme-server";
+import { currentAppearance } from "@/lib/theme-server";
+import { paletteInfo } from "@/lib/theme";
 import { Bricolage_Grotesque, Geist, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
+// Depois do globals.css: as paletas redefinem os tokens de lá.
+import "./palettes.css";
 
 // Bricolage Grotesque para títulos e números, Geist para texto e interface —
 // o par do handoff de 16/10, no lugar de Sora + Inter.
@@ -23,7 +26,7 @@ const plexMono = IBM_Plex_Mono({
 });
 
 export async function generateMetadata(): Promise<Metadata> {
-  const theme = await currentTheme();
+  const { theme } = await currentAppearance();
   return {
     title: "Leeway",
     description: "Quanto você pode gastar hoje até receber de novo.",
@@ -41,9 +44,8 @@ export async function generateMetadata(): Promise<Metadata> {
 
 /** A cor da barra do navegador acompanha o tema escolhido. */
 export async function generateViewport(): Promise<Viewport> {
-  const theme = await currentTheme();
-  const dark = "#0c0706";
-  const light = "#fbf7f5";
+  const { theme, palette } = await currentAppearance();
+  const { dark, light } = paletteInfo(palette).background;
   return {
     width: "device-width",
     initialScale: 1,
@@ -63,11 +65,12 @@ export async function generateViewport(): Promise<Viewport> {
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {
   // Lido no servidor: o HTML já sai com o tema certo, sem piscar.
-  const theme = await currentTheme();
+  const { theme, palette } = await currentAppearance();
   return (
     <html
       lang="pt-BR"
       data-theme={theme}
+      data-palette={palette}
       // O ThemeSwitcher troca o atributo direto no <html> antes do servidor
       // responder; sem isto o React reclamaria da diferença.
       suppressHydrationWarning

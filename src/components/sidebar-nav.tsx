@@ -7,8 +7,7 @@ import { cn } from "@/lib/utils";
 import { springDefault } from "@/lib/motion";
 import { navItems, isNavItemActive } from "@/components/nav-items";
 import { Logo } from "@/components/logo";
-import { ThemeSwitcher } from "@/components/theme-toggle";
-import type { Theme } from "@/lib/theme";
+import { UserAvatar } from "@/components/user-avatar";
 
 /**
  * A navegação em telas largas. Substitui a barra inferior a partir de `lg` —
@@ -16,7 +15,11 @@ import type { Theme } from "@/lib/theme";
  * daqui usa um `layoutId` próprio para o motion não tentar animá-la entre os
  * dois containers.
  */
-export function SidebarNav({ theme }: { theme: Theme }) {
+export function SidebarNav({
+  user,
+}: {
+  user: { name: string | null; email: string; avatar: string | null };
+}) {
   const pathname = usePathname();
 
   return (
@@ -57,7 +60,23 @@ export function SidebarNav({ theme }: { theme: Theme }) {
         </ul>
       </nav>
 
-      <ThemeSwitcher initial={theme} className="mt-auto" />
+      {/* No pé, quem está usando: leva ao Perfil, onde ficam o nome, a foto e o tema. */}
+      <Link
+        href="/perfil"
+        aria-current={pathname === "/perfil" ? "page" : undefined}
+        className={cn(
+          "mt-auto flex items-center gap-3 rounded-[14px] p-2 transition-colors hover:bg-muted",
+          pathname === "/perfil" && "bg-primary/10 ring-1 ring-primary/15 ring-inset",
+        )}
+      >
+        <UserAvatar name={user.name} email={user.email} src={user.avatar} className="size-9" />
+        <span className="flex min-w-0 flex-col">
+          <span className="truncate text-sm font-semibold">{user.name ?? "Seu perfil"}</span>
+          <span className="truncate text-[12px] text-muted-foreground">
+            {user.name ? "Perfil e aparência" : user.email}
+          </span>
+        </span>
+      </Link>
     </div>
   );
 }
