@@ -12,6 +12,8 @@ export function DeleteIconButton({
   className,
   undo = false,
   itemLabel,
+  disabledReason,
+  title,
 }: {
   action: () => Promise<void>;
   confirmMessage: string;
@@ -22,6 +24,10 @@ export function DeleteIconButton({
   /** O que a linha é: entra no nome do botão, para três "Desfazer" seguidos
    *  não soarem iguais no leitor de tela. */
   itemLabel?: string;
+  /** Por que não dá para excluir agora: o botão fica apagado e diz isso. */
+  disabledReason?: string;
+  /** A dica do botão, quando "Desfazer pagamento" não é o que ele desfaz. */
+  title?: string;
 }) {
   const verb = undo ? "Desfazer" : "Excluir";
   const [open, setOpen] = useState(false);
@@ -35,8 +41,13 @@ export function DeleteIconButton({
       <button
         type="button"
         aria-label={itemLabel ? `${verb}: ${itemLabel}` : verb}
-        title={undo ? "Desfazer pagamento" : itemLabel ? `${verb}: ${itemLabel}` : verb}
-        disabled={isPending}
+        title={
+          disabledReason ??
+          title ??
+          (undo ? "Desfazer pagamento" : itemLabel ? `${verb}: ${itemLabel}` : verb)
+        }
+        aria-disabled={disabledReason ? true : undefined}
+        disabled={isPending || !!disabledReason}
         onClick={() => setOpen(true)}
         className={iconButton({ tone: "ghost", size: "sm", className })}
       >

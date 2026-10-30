@@ -168,12 +168,13 @@ export function UntilChips({
   value: string;
   onChange: (date: string) => void;
 }) {
+  // Na ordem do calendário, o salário entre as contas.
   const chips = [
     ...context.upcomingBills.map((b) => ({ key: `${b.label}-${b.date}`, ...b })),
     ...(context.nextPayday
       ? [{ key: "payday", label: "Salário", date: context.nextPayday, amount: 0 }]
       : []),
-  ];
+  ].sort((a, b) => a.date.localeCompare(b.date));
   if (chips.length === 0) return null;
   return (
     <div className="flex flex-wrap gap-1.5">

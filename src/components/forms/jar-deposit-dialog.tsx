@@ -17,9 +17,12 @@ import { Switch } from "@/components/ui/switch";
 import { CurrencyInput } from "@/components/currency-input";
 import { depositToJar, withdrawFromJar } from "@/lib/actions/jar";
 import { iconButton } from "@/components/ui/icon-button";
+import { formatCurrency } from "@/lib/format";
 import { errorMessage } from "@/lib/error-message";
 import {
   JarYieldPreview,
+  dayFromKey,
+  shortDay,
   suggestedUntil,
   UntilChips,
   type YieldContext,
@@ -37,6 +40,7 @@ export function JarDepositDialog({
   disabled,
   cdiPercent = null,
   yieldContext = null,
+  holding,
 }: {
   jarId: string;
   jarName: string;
@@ -47,10 +51,21 @@ export function JarDepositDialog({
   /** Depois de salvar, com o id do movimento e o valor — para o toast. */
   onDone?: (result: { depositId: string; amount: number }) => void;
   disabled?: boolean;
+  /**
+   * No resgate, o que a caixinha tem: o saldo, o líquido de hoje e as datas de
+   * volta que um resgate consome primeiro (da mais próxima).
+   */
+  holding?: {
+    balance: number;
+    net: number | null;
+    returns: { amount: number; date: string }[];
+  };
 }) {
   const withdraw = mode === "withdraw";
   const [open, setOpen] = useState(false);
   const [amount, setAmount] = useState(0);
+  // Trocar a chave remonta o campo de valor com o "Tudo" já escrito.
+  const [fill, setFill] = useState(0);
   // O resgate previsto começa no próximo pagamento: é o dia em que o dinheiro
   // costuma voltar a fazer falta.
   const [until, setUntil] = useState(yieldContext ? suggestedUntil(yieldContext) : "");
@@ -113,7 +128,14 @@ export function JarDepositDialog({
           <div className="grid grid-cols-2 gap-3">
             <div className="flex min-w-0 flex-col gap-2">
               <Label htmlFor="amount">Valor</Label>
-              <CurrencyInput id="amount" name="amount" required onValueChange={setAmount} />
+              <CurrencyInput
+                key={fill}
+                id="amount"
+                name="amount"
+                required
+                defaultValue={fill ? amount : undefined}
+                onValueChange={setAmount}
+              />
             </div>
             {yieldContext && (
               <div className="flex min-w-0 flex-col gap-2">
@@ -167,6 +189,10 @@ export function JarDepositDialog({
               )}
             </div>
           )}
+          {withdraw && holding && <WithdrawContext holding={holding} amount={amount} onFill={(v) => {
+            setAmount(v);
+            setFill((n) => n + 1);
+          }} />}
           <div className="flex flex-col gap-2">
             <Label htmlFor="note">Nota (opcional)</Label>
             <Input
@@ -194,5 +220,60 @@ export function JarDepositDialog({
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/**
+ * O que o resgate mexe, ao vivo: quanto há, um atalho para tirar tudo, e qual
+ * data de volta ele consome — o resgate abate da volta mais próxima, e a
+ * Previsão deixa de contar com ela.
+ */
+function WithdrawContext({
+  holding,
+  amount,
+  onFill,
+}: {
+  holding: NonNullable<Parameters<typeof JarDepositDialog>[0]["holding"]>;
+  amount: number;
+  onFill: (value: number) => void;
+}) {
+  const all = Math.round((holding.net ?? holding.balance) * 100) / 100;
+  const returns = [...holding.returns].sort((a, b) => a.date.localeCompare(b.date));
+  // Como `jarReturns` conta: o resgate abate as voltas da mais próxima para
+  // a mais distante, e só o que passar delas sai do dinheiro sem data.
+  const fromReturns = Math.max(0, Math.min(amount, holding.balance));
+  const used = returns
+    .map((r, i) => {
+      const before = returns.slice(0, i).reduce((sum, p) => sum + p.amount, 0);
+      return { ...r, take: Math.max(0, Math.min(r.amount, fromReturns - before)) };
+    })
+    .filter((r) => r.take >= 0.005);
+  const extra = amount - holding.balance;
+
+  return (
+    <div className="flex flex-col gap-2 rounded-2xl bg-muted/60 p-3 text-[12.5px] text-muted-foreground tabular-nums">
+      <div className="flex items-center justify-between gap-3">
+        <span>
+          Guardado {formatCurrency(holding.balance)}
+          {holding.net != null && ` · líquido hoje ${formatCurrency(holding.net)}`}
+        </span>
+        <button
+          type="button"
+          onClick={() => onFill(all)}
+          className="h-9 shrink-0 rounded-full bg-card px-3 font-semibold text-foreground ring-1 ring-(--hairline) transition-colors hover:bg-muted"
+        >
+          Tudo
+        </button>
+      </div>
+      {used.map((r) => (
+        <p key={r.date} className="text-foreground">
+          Usa {formatCurrency(r.take)} da volta de {shortDay(dayFromKey(r.date))}: a Previsão deixa
+          de contar com ele.
+        </p>
+      ))}
+      {extra >= 0.005 && (
+        <p>Passa do guardado: os {formatCurrency(extra)} a mais contam como rendimento.</p>
+      )}
+    </div>
   );
 }

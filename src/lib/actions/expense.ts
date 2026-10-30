@@ -69,6 +69,7 @@ export async function createFixedExpense(formData: FormData) {
   revalidatePath("/rendas");
   revalidatePath("/");
   revalidatePath("/historico");
+  revalidatePath("/previsao");
 }
 
 /**
@@ -132,6 +133,7 @@ export async function updateFixedExpense(id: string, formData: FormData) {
   revalidatePath("/rendas");
   revalidatePath("/");
   revalidatePath("/historico");
+  revalidatePath("/previsao");
 }
 
 /**
@@ -164,6 +166,7 @@ export async function deleteFixedExpense(id: string) {
   revalidatePath("/rendas");
   revalidatePath("/");
   revalidatePath("/historico");
+  revalidatePath("/previsao");
 }
 
 /**
@@ -255,7 +258,24 @@ export async function deferFixedExpense(expenseId: string, formData: FormData) {
 /** Desfaz um adiamento: a ocorrência volta a ser cobrada e o alvo perde o valor. */
 export async function undoExpenseDeferral(id: string) {
   const userId = await requireUserId();
-  await prisma.expenseDeferral.deleteMany({ where: { id, userId } });
+  const deferral = await prisma.expenseDeferral.findFirst({ where: { id, userId } });
+  if (!deferral) return;
+  // Já pago no dia para onde foi: desfazer cobraria a mesma conta de novo no
+  // dia de origem.
+  const paid = await prisma.expensePayment.findFirst({
+    where: {
+      userId,
+      fixedExpenseId: deferral.fixedExpenseId,
+      settled: true,
+      dueDate: {
+        gte: new Date(deferral.targetDueDate.getTime() - 86_400_000),
+        lte: new Date(deferral.targetDueDate.getTime() + 86_400_000),
+      },
+    },
+    select: { id: true },
+  });
+  if (paid) throw new Error("A cobrança adiada já foi paga no dia novo. Desfaça o pagamento antes.");
+  await prisma.expenseDeferral.delete({ where: { id: deferral.id } });
   revalidatePath("/");
   revalidatePath("/rendas");
   revalidatePath("/previsao");

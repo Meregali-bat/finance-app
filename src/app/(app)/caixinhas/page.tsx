@@ -49,8 +49,8 @@ export default async function JarsPage() {
   const { budget } = todayBudget(inputs, today);
   const nextPayday = inputs.incomes.length > 0 ? dayKey(budget.periodEnd) : null;
 
-  // As próximas contas a pagar, deste ciclo e do seguinte: o dinheiro sai da
-  // caixinha para pagar uma delas, e o dia dela é a data de tirar sugerida.
+  // As próximas contas a pagar deste ciclo: o dinheiro sai da caixinha para
+  // pagar uma delas, e o dia dela é a data de tirar sugerida.
   const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
   const seen = new Set<string>();
   const upcomingBills = forecastPeriods({

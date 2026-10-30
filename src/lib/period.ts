@@ -346,7 +346,7 @@ function daysInMonth(year: number, month: number): number {
 }
 
 /** Clamps a day-of-month (1-31) to a real date, e.g. 31 in February -> Feb 28/29. */
-function dateForDayInMonth(year: number, month: number, day: number): Date {
+export function dateForDayInMonth(year: number, month: number, day: number): Date {
   const clampedDay = Math.min(day, daysInMonth(year, month));
   return new Date(year, month, clampedDay);
 }

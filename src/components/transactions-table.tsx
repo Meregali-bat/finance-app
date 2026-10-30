@@ -434,7 +434,7 @@ export function TransactionsTable({
     // vez de só dizer o nome da tela.
     const elsewhere =
       item.kind === "cardFixedExpense"
-        ? { href: "/rendas", label: "Abrir em Fixos" }
+        ? { href: "/rendas?aba=despesas", label: "Abrir em Fixos" }
         : (item.kind === "cardEstimate" || item.kind === "cardBillAdjustment") && item.cardId
           ? { href: `/cartoes/${item.cardId}`, label: `Abrir no cartão ${item.cardName ?? ""}`.trim() }
           : null;

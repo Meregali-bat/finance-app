@@ -36,6 +36,8 @@ type ExpenseValues = {
   cardId?: string | null;
   categoryId?: string | null;
   installmentCount?: number | null;
+  /** Parcelas adiadas para depois da última: já contadas, fora do número acima. */
+  deferredAfterLast?: number;
 };
 
 export function ExpenseFormDialog({
@@ -85,8 +87,8 @@ export function ExpenseFormDialog({
                 ? iconButton({ tone: "ghost", size: "sm" })
                 : iconButton({ tone: "cta", size: "lg" })
             }
-            aria-label={isEdit ? "Editar despesa" : "Nova despesa"}
-            title={isEdit ? "Editar despesa" : "Nova despesa"}
+            aria-label={isEdit ? `Editar ${expense.label}` : "Nova despesa"}
+            title={isEdit ? `Editar ${expense.label}` : "Nova despesa"}
           />
         }
       >
@@ -172,6 +174,9 @@ export function ExpenseFormDialog({
               <p className="text-xs text-muted-foreground">
                 Para financiamentos e carnês, a partir do próximo vencimento. Permite adiar uma
                 parcela para depois da última.
+                {expense?.deferredAfterLast
+                  ? ` ${expense.deferredAfterLast === 1 ? "A adiada para depois da última já está contada à parte" : "As adiadas para depois da última já estão contadas à parte"}: não some aqui.`
+                  : ""}
               </p>
             </div>
           )}
