@@ -1,5 +1,6 @@
 "use client";
 
+import { unwrap } from "@/lib/action-result";
 import { useState, useTransition } from "react";
 import { TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -43,6 +44,8 @@ export function JarYieldDialog({
   lots,
   cdiPercent,
   context,
+  leaving = [],
+  onSaved,
 }: {
   jarId: string;
   jarName: string;
@@ -50,6 +53,10 @@ export function JarYieldDialog({
   lots: LotView[];
   cdiPercent: number | null;
   context: YieldContext;
+  /** O que já tem data de volta: sai antes, e a simulação diz isso. */
+  leaving?: { amount: number; date: string }[];
+  /** Salvo: o aviso é de quem chama. */
+  onSaved?: (percent: number | null) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [percentText, setPercentText] = useState(String(cdiPercent ?? 100));
@@ -64,8 +71,10 @@ export function JarYieldDialog({
     setError(null);
     start(async () => {
       try {
-        await setJarYield(jarId, formData);
+        unwrap(await setJarYield(jarId, formData));
         setOpen(false);
+        const typed = String(formData.get("cdiPercent") ?? "").replace(",", ".").trim();
+        onSaved?.(typed ? Number(typed) : null);
       } catch (e) {
         setError(errorMessage(e, "Não deu para salvar."));
       }
@@ -150,13 +159,24 @@ export function JarYieldDialog({
 
           {lots.length > 0 && (
             <p className="-mt-1 text-[12.5px] text-muted-foreground">
-              O saldo pelas datas em que entrou:{" "}
+              {leaving.length > 0 ? "O que fica, pelas datas em que entrou: " : "O saldo pelas datas em que entrou: "}
               {lots
                 .map(
                   (lot) => `${formatCurrency(lot.amount)} desde ${shortDay(dayFromKey(lot.from))}`,
                 )
                 .join(" · ")}
               . Para uma entrada de outro dia, use o Guardar e informe quando entrou.
+            </p>
+          )}
+          {/* O que tem data de volta sai antes do resgate simulado: somá-lo
+              mostrava um rendimento que ele não vai ter. */}
+          {leaving.length > 0 && (
+            <p className="-mt-1 text-[12.5px] text-muted-foreground tabular-nums">
+              Fora da simulação:{" "}
+              {leaving
+                .map((r) => `${formatCurrency(r.amount)} sai em ${shortDay(dayFromKey(r.date))}`)
+                .join(" · ")}
+              .
             </p>
           )}
 

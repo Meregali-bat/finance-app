@@ -1,7 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/auth-helpers";
 import { formatCurrency, formatShortDate } from "@/lib/format";
-import { dateForDayInMonth, installmentsLeft, storedDay } from "@/lib/period";
+import Link from "next/link";
+import { dateForDayInMonth, getPeriodBounds, installmentsLeft, storedDay } from "@/lib/period";
 import { EmptyState } from "@/components/ui/empty-state";
 import { FixedTabs, type FixedTab } from "@/components/fixed-tabs";
 import { ListRow, stagger } from "@/components/list-row";
@@ -52,7 +53,7 @@ export default async function FixedPage({
     // As confirmações recentes: dizem se a renda deste mês já chegou.
     prisma.incomeReceipt.findMany({
       where: { userId, occurrenceDate: { gte: recent } },
-      select: { incomeId: true, occurrenceDate: true },
+      select: { incomeId: true, occurrenceDate: true, amount: true },
     }),
     // As apagadas ficam no banco para o Histórico, mas não na lista.
     prisma.fixedExpense.findMany({
@@ -69,8 +70,42 @@ export default async function FixedPage({
       },
     }),
     prisma.creditCard.findMany({ where: { userId, active: true, deletedAt: null } }),
-    prisma.category.findMany({ where: { userId }, orderBy: { name: "asc" } }),
+    prisma.category.findMany({
+      where: { userId },
+      orderBy: { name: "asc" },
+      include: { _count: { select: { transactions: true, cardPurchases: true, fixedExpenses: true } } },
+    }),
   ]);
+
+  // O ciclo de pagamento de agora, o mesmo da Início e da Previsão: o estado de
+  // cada linha é o deste ciclo, não o do mês do calendário.
+  const { periodStart, periodEnd } = getPeriodBounds(
+    incomes.map((i) => ({
+      id: i.id,
+      amount: Number(i.amount),
+      dayOfMonth: i.dayOfMonth,
+      createdAt: i.createdAt,
+      active: i.active,
+    })),
+    today,
+    receipts.map((r) => ({
+      incomeId: r.incomeId,
+      occurrenceDate: r.occurrenceDate,
+      amount: Number(r.amount),
+    })),
+  );
+  /** Os vencimentos de um dia do mês dentro do ciclo, e o primeiro depois dele. */
+  function dueDatesInCycle(day: number) {
+    const dates: Date[] = [];
+    for (let offset = -1; offset <= 2; offset++) {
+      const d = dateForDayInMonth(periodStart.getFullYear(), periodStart.getMonth() + offset, day);
+      if (d.getTime() >= periodStart.getTime() && d.getTime() < periodEnd.getTime()) dates.push(d);
+    }
+    let next = dateForDayInMonth(periodEnd.getFullYear(), periodEnd.getMonth(), day);
+    if (next.getTime() < periodEnd.getTime())
+      next = dateForDayInMonth(periodEnd.getFullYear(), periodEnd.getMonth() + 1, day);
+    return { dates, next };
+  }
 
   const cards = creditCards.map((c) => ({ id: c.id, name: c.name }));
   // A aba Categorias lista todas para gerenciar; os formulários só oferecem as ativas.
@@ -78,6 +113,7 @@ export default async function FixedPage({
     .filter((c) => c.active)
     .map((c) => ({ id: c.id, name: c.name }));
   const cardNameById = new Map(cards.map((c) => [c.id, c.name]));
+  const cardDueById = new Map(creditCards.map((c) => [c.id, c.dueDay]));
 
   const rows = expenses.map((expense) => {
     // Quantas faltam, e não o número salvo: é o que a pessoa confere com o
@@ -101,7 +137,11 @@ export default async function FixedPage({
     return { expense, left, deferrals, afterLast, ended: left?.remaining === 0 && afterLast.length === 0 };
   });
 
-  /** Como está a despesa neste mês: paga, adiada, vencida ou por vencer. */
+  /**
+   * Como está a despesa neste ciclo: a primeira cobrança que falta (vencida,
+   * adiada ou por vencer); paga, se todas foram; ou a próxima, se nenhuma cai
+   * nele.
+   */
   function expenseState(row: (typeof rows)[number]): string | null {
     const { expense, deferrals } = row;
     if (!expense.active) {
@@ -109,24 +149,36 @@ export default async function FixedPage({
       return since ? `pausada desde ${dayMonth(since)}` : "pausada";
     }
     if (row.ended) return null;
-    if (expense.cardId) return "entra na fatura do cartão";
+    if (expense.cardId) {
+      const due = cardDueById.get(expense.cardId);
+      return due ? `na fatura que vence dia ${due}` : "na fatura do cartão";
+    }
     if (expense.dueDay == null) return null;
-    const due = dateForDayInMonth(today.getFullYear(), today.getMonth(), expense.dueDay);
-    const paid = expense.payments.find((p) => sameMonth(storedDay(p.dueDate), due));
-    if (paid) return `paga em ${dayMonth(paid.paidAt)}`;
-    const deferred = deferrals.find((d) => sameMonth(storedDay(d.dueDate), due));
-    if (deferred) return `adiada para ${dayMonth(deferred.targetDueDate)}`;
-    return due.getTime() < todayStart.getTime() ? `venceu ${dayMonth(due)}` : `vence ${dayMonth(due)}`;
+    const { dates, next } = dueDatesInCycle(expense.dueDay);
+    const paidFor = (due: Date) => expense.payments.find((p) => sameMonth(storedDay(p.dueDate), due));
+    const open = dates.find((due) => !paidFor(due));
+    if (open) {
+      const deferred = deferrals.find((d) => sameMonth(storedDay(d.dueDate), open));
+      if (deferred) return `adiada para ${dayMonth(storedDay(deferred.targetDueDate))}`;
+      return open.getTime() < todayStart.getTime() ? `venceu ${dayMonth(open)}` : `vence ${dayMonth(open)}`;
+    }
+    const paid = dates.length > 0 ? paidFor(dates.at(-1)!) : undefined;
+    return paid
+      ? `paga em ${dayMonth(paid.paidAt)} · próxima ${dayMonth(next)}`
+      : `próxima ${dayMonth(next)}`;
   }
 
-  /** Como está a renda neste mês: recebida, a confirmar ou por chegar. */
+  /** Como está a renda neste ciclo: recebida (e quando vem a próxima), a confirmar ou por chegar. */
   function incomeState(income: (typeof incomes)[number]): string {
     if (!income.active) return "pausada";
-    const payday = dateForDayInMonth(today.getFullYear(), today.getMonth(), income.dayOfMonth);
-    const receipt = receipts.find(
-      (r) => r.incomeId === income.id && sameMonth(r.occurrenceDate, payday),
-    );
-    if (receipt) return `recebida em ${dayMonth(receipt.occurrenceDate)}`;
+    const { dates, next } = dueDatesInCycle(income.dayOfMonth);
+    // A confirmação guarda o dia em que o dinheiro chegou, que pode ser antes
+    // do dia do pagamento (o salário do 15 que caiu no 5).
+    const receipt = receipts
+      .filter((r) => r.incomeId === income.id && r.occurrenceDate.getTime() >= periodStart.getTime())
+      .at(-1);
+    if (receipt) return `recebida em ${dayMonth(receipt.occurrenceDate)} · próxima ${dayMonth(next)}`;
+    const payday = dates[0] ?? next;
     return payday.getTime() < todayStart.getTime()
       ? `a confirmar desde ${dayMonth(payday)}`
       : `chega ${dayMonth(payday)}`;
@@ -164,7 +216,10 @@ export default async function FixedPage({
           label: "Sobra fixa",
           value: fixedLeft,
           tone: fixedLeft < 0 ? "text-negative" : "",
-          note: "antes do dia a dia",
+          // Não é o que sobra no ciclo: as parcelas e faturas do cartão ficam
+          // de fora. Quem diz isso é a Previsão.
+          note: "sem faturas do cartão",
+          href: "/previsao",
         },
       ].map((figure) => (
         <div
@@ -182,6 +237,17 @@ export default async function FixedPage({
           </p>
           <p className="col-span-2 text-[11.5px] text-muted-foreground tabular-nums">
             {figure.note}
+            {"href" in figure && figure.href && (
+              <>
+                {" · "}
+                <Link
+                  href={figure.href}
+                  className="font-semibold text-foreground underline decoration-border underline-offset-2 hover:decoration-current"
+                >
+                  o ciclo na Previsão
+                </Link>
+              </>
+            )}
           </p>
         </div>
       ))}
@@ -219,8 +285,12 @@ export default async function FixedPage({
             <>
               <ToggleActiveButton
                 active={expense.active}
-                label={`${expense.active ? "Pausar" : "Retomar"} ${expense.label}`}
+                label={`${expense.label} em vigor`}
                 titles={{ on: "Pausar: sai dos próximos ciclos", off: "Retomar" }}
+                doneText={{
+                  off: `${expense.label} pausada: sai dos ciclos a partir de hoje`,
+                  on: `${expense.label} de volta aos ciclos`,
+                }}
                 onToggle={toggleFixedExpenseActive.bind(null, expense.id)}
               />
               <ExpenseFormDialog
@@ -248,7 +318,7 @@ export default async function FixedPage({
           {/* Um adiamento não é dinheiro e não aparece no Histórico; é aqui
               que ele se vê e se desfaz. */}
           {deferrals.map((deferral) => {
-            const from = formatShortDate(deferral.dueDate, "UTC");
+            const from = dayMonth(storedDay(deferral.dueDate));
             const overdue = storedDay(deferral.dueDate).getTime() < todayStart.getTime();
             return (
               <div
@@ -256,7 +326,7 @@ export default async function FixedPage({
                 className="flex items-center justify-between gap-2 rounded-xl bg-muted py-1 pr-1 pl-3 text-xs text-muted-foreground"
               >
                 <span className="tabular-nums">
-                  Adiada: {from} → {formatShortDate(deferral.targetDueDate)} (
+                  Adiada: {from} → {dayMonth(storedDay(deferral.targetDueDate))} (
                   {formatCurrency(Number(deferral.amount))}
                   {deferral.mode === "end" ? ", depois da última" : ""})
                 </span>
@@ -310,8 +380,12 @@ export default async function FixedPage({
                         <>
                           <ToggleActiveButton
                             active={income.active}
-                            label={`${income.active ? "Pausar" : "Retomar"} ${income.label}`}
+                            label={`${income.label} em vigor`}
                             titles={{ on: "Pausar: sai dos próximos ciclos", off: "Retomar" }}
+                            doneText={{
+                              off: `${income.label} pausada: deixa de ser prevista`,
+                              on: `${income.label} de volta à previsão`,
+                            }}
                             // A única renda marca o ciclo: sem ela, a Início e
                             // a Previsão perdem o período. Pergunta antes.
                             confirmOff={
@@ -383,29 +457,53 @@ export default async function FixedPage({
               />
             ) : (
               <ul className="grid grid-cols-[minmax(0,1fr)] gap-2 xl:grid-cols-2">
-                {categories.map((category, index) => (
-                  <li key={category.id} className="rise-in" style={stagger(index, 80, 45)}>
-                    <ListRow
-                      dim={!category.active}
-                      title={category.name}
-                      trailing={
-                        <>
-                          <ToggleActiveButton
-                            active={category.active}
-                            label={`${category.active ? "Desativar" : "Ativar"} ${category.name}`}
-                            onToggle={toggleCategoryActive.bind(null, category.id)}
-                          />
-                          <CategoryFormDialog category={{ id: category.id, name: category.name }} />
-                          <DeleteIconButton
-                            action={deleteCategory.bind(null, category.id)}
-                            itemLabel={category.name}
-                            confirmMessage={`Excluir a categoria "${category.name}"?`}
-                          />
-                        </>
-                      }
-                    />
-                  </li>
-                ))}
+                {/* As desativadas por último: no meio da lista, uma apagada entre
+                    as ativas parecia um erro de desenho. */}
+                {[...categories]
+                  .sort((a, b) => Number(b.active) - Number(a.active))
+                  .map((category, index) => {
+                    const uses =
+                      category._count.transactions +
+                      category._count.cardPurchases +
+                      category._count.fixedExpenses;
+                    return (
+                      <li key={category.id} className="rise-in" style={stagger(index, 80, 45)}>
+                        <ListRow
+                          dim={!category.active}
+                          title={category.name}
+                          subtitle={[
+                            uses === 0 ? "sem uso" : uses === 1 ? "1 lançamento" : `${uses} lançamentos`,
+                            !category.active && "desativada: some dos formulários",
+                          ]
+                            .filter(Boolean)
+                            .join(" · ")}
+                          trailing={
+                            <>
+                              <ToggleActiveButton
+                                active={category.active}
+                                label={`${category.name} em uso`}
+                                titles={{ on: "Desativar: some dos formulários", off: "Ativar" }}
+                                onToggle={toggleCategoryActive.bind(null, category.id)}
+                              />
+                              <CategoryFormDialog category={{ id: category.id, name: category.name }} />
+                              {/* Excluir em uso deixava o histórico todo "Sem
+                                  categoria", sem volta: só a vazia se exclui. */}
+                              <DeleteIconButton
+                                action={deleteCategory.bind(null, category.id)}
+                                itemLabel={category.name}
+                                disabledReason={
+                                  uses > 0
+                                    ? `"${category.name}" está em ${uses === 1 ? "1 lançamento" : `${uses} lançamentos`}. Excluir os deixaria sem categoria para sempre: desative-a, e ela some dos formulários sem mexer no histórico.`
+                                    : undefined
+                                }
+                                confirmMessage={`Excluir a categoria "${category.name}"? Ela não está em nenhum lançamento.`}
+                              />
+                            </>
+                          }
+                        />
+                      </li>
+                    );
+                  })}
               </ul>
             ),
         }}

@@ -1,5 +1,6 @@
 "use client";
 
+import { unwrap } from "@/lib/action-result";
 import { useState, useTransition } from "react";
 import { ArrowDownToLine, ArrowUpFromLine } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -75,6 +76,21 @@ export function JarDepositDialog({
   // Com data para tirar, o dinheiro está estacionado, e não guardado: volta
   // para a Previsão no dia e não conta nas fatias.
   const [planned, setPlanned] = useState(false);
+  // Cada abertura é um formulário novo: cancelar com Esc deixava o valor e o
+  // aviso de qual volta ele consumia para a próxima vez.
+  const [session, setSession] = useState(0);
+
+  function handleOpenChange(next: boolean) {
+    setOpen(next);
+    if (!next) return;
+    setSession((n) => n + 1);
+    setAmount(0);
+    setFill(0);
+    setUntil(yieldContext ? suggestedUntil(yieldContext) : "");
+    setDate(yieldContext?.today ?? "");
+    setPlanned(false);
+    setError(null);
+  }
   const canPlan = !withdraw && yieldContext != null;
   const showYield = !withdraw && cdiPercent != null && yieldContext != null;
   const [isPending, startTransition] = useTransition();
@@ -84,7 +100,7 @@ export function JarDepositDialog({
     setError(null);
     startTransition(async () => {
       try {
-        const result = await (withdraw ? withdrawFromJar : depositToJar)(jarId, formData);
+        const result = unwrap(await (withdraw ? withdrawFromJar : depositToJar)(jarId, formData));
         setOpen(false);
         onDone?.({ depositId: result.depositId, amount: Number(formData.get("amount")) });
       } catch (e) {
@@ -94,7 +110,7 @@ export function JarDepositDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger
         disabled={disabled}
         render={
@@ -124,7 +140,7 @@ export function JarDepositDialog({
             {withdraw ? "Resgatar de" : "Guardar em"} &ldquo;{jarName}&rdquo;
           </DialogTitle>
         </DialogHeader>
-        <form action={handleSubmit} className="flex flex-col gap-4">
+        <form key={session} action={handleSubmit} className="flex flex-col gap-4">
           <div className="grid grid-cols-2 gap-3">
             <div className="flex min-w-0 flex-col gap-2">
               <Label htmlFor="amount">Valor</Label>
@@ -157,27 +173,34 @@ export function JarDepositDialog({
                 <div className="min-w-0">
                   <Label htmlFor="planned-switch">Vou tirar numa data</Label>
                   <p className="text-xs text-muted-foreground">
-                    Volta para a Previsão nesse dia e não conta como guardado nas fatias.
+                    Volta para a Previsão nesse dia e não entra na fatia de guardar.
                   </p>
                 </div>
                 <Switch id="planned-switch" checked={planned} onCheckedChange={setPlanned} />
               </div>
-              {(planned || showYield) && (
+              {/* A data e os atalhos só com o resgate marcado: sem ele, um campo
+                  de data com uma conta escolhida parecia uma data sendo salva. */}
+              {planned && (
                 <div className="flex flex-col gap-2">
-                  <Label htmlFor="until">{planned ? "Tirar em" : "Simular até"}</Label>
+                  <Label htmlFor="until">Tirar em</Label>
                   <Input
                     id="until"
                     // Só vai para o servidor quando é um resgate previsto; sem
                     // ele, a data serve só à simulação do rendimento.
-                    name={planned ? "plannedWithdrawalAt" : undefined}
+                    name="plannedWithdrawalAt"
                     type="date"
                     value={until}
                     min={yieldContext.today}
-                    required={planned}
+                    required
                     onChange={(e) => setUntil(e.target.value)}
                   />
                   <UntilChips context={yieldContext} value={until} onChange={setUntil} />
                 </div>
+              )}
+              {showYield && !planned && until && (
+                <p className="text-xs text-muted-foreground">
+                  Simulado até {shortDay(dayFromKey(until))}, a próxima conta grande.
+                </p>
               )}
               {showYield && (
                 <JarYieldPreview
@@ -198,7 +221,11 @@ export function JarDepositDialog({
             <Input
               id="note"
               name="note"
-              placeholder={withdraw ? "Conserto do carro" : "Sobra de julho"}
+              placeholder={
+                withdraw
+                  ? "Conserto do carro"
+                  : `Sobra de ${new Intl.DateTimeFormat("pt-BR", { month: "long" }).format(new Date())}`
+              }
             />
           </div>
           {error && (
@@ -262,7 +289,7 @@ function WithdrawContext({
           onClick={() => onFill(all)}
           className="h-9 shrink-0 rounded-full bg-card px-3 font-semibold text-foreground ring-1 ring-(--hairline) transition-colors hover:bg-muted"
         >
-          Tudo
+          Tudo · {formatCurrency(all)}
         </button>
       </div>
       {used.map((r) => (
@@ -271,9 +298,14 @@ function WithdrawContext({
           de contar com ele.
         </p>
       ))}
-      {extra >= 0.005 && (
-        <p>Passa do guardado: os {formatCurrency(extra)} a mais contam como rendimento.</p>
-      )}
+      {/* "Tudo" é o líquido de hoje, que já inclui o rendimento: dizer isso,
+          e não avisar como se fosse engano. */}
+      {extra >= 0.005 &&
+        (Math.abs(amount - all) < 0.005 ? (
+          <p>Inclui {formatCurrency(extra)} de rendimento líquido.</p>
+        ) : (
+          <p>Passa do guardado: os {formatCurrency(extra)} a mais contam como rendimento.</p>
+        ))}
     </div>
   );
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import { unwrap } from "@/lib/action-result";
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -161,7 +162,7 @@ export function IncomeStep({ incomes }: { incomes: IncomeView[] }) {
     const first = incomes.length === 0;
     startTransition(async () => {
       try {
-        await createIncome(formData);
+        unwrap(await createIncome(formData));
         if (first) {
           router.push(stepHref(2));
         } else {
@@ -342,7 +343,7 @@ export function ExpensesStep({ expenses }: { expenses: ExpenseView[] }) {
     formData.set("label", label);
     startTransition(async () => {
       try {
-        await createFixedExpense(formData);
+        unwrap(await createFixedExpense(formData));
         setLabel("");
         setFormKey((k) => k + 1);
         router.refresh();

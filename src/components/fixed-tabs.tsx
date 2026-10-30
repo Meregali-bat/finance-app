@@ -49,7 +49,8 @@ export function FixedTabs({
         subtitle={TABS.find((t) => t.value === tab)?.subtitle}
         action={actions[tab]}
       />
-      {summary}
+      {/* O resumo é de dinheiro: nas categorias ele só empurrava a lista. */}
+      {tab !== "categorias" && summary}
       <Tabs
         value={tab}
         onValueChange={(value) => choose(value as Tab)}

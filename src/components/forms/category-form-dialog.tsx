@@ -1,5 +1,6 @@
 "use client";
 
+import { unwrap } from "@/lib/action-result";
 import { useState, useTransition } from "react";
 import { Plus, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -33,9 +34,9 @@ export function CategoryFormDialog({ category }: { category?: CategoryValues }) 
     startTransition(async () => {
       try {
         if (isEdit) {
-          await updateCategory(category.id, formData);
+          unwrap(await updateCategory(category.id, formData));
         } else {
-          await createCategory(formData);
+          unwrap(await createCategory(formData));
         }
         setOpen(false);
       } catch (e) {
@@ -55,8 +56,8 @@ export function CategoryFormDialog({ category }: { category?: CategoryValues }) 
                 ? iconButton({ tone: "ghost", size: "sm" })
                 : iconButton({ tone: "cta", size: "lg" })
             }
-            aria-label={isEdit ? "Editar categoria" : "Nova categoria"}
-            title={isEdit ? "Editar categoria" : "Nova categoria"}
+            aria-label={isEdit ? `Editar ${category?.name}` : "Nova categoria"}
+            title={isEdit ? `Editar ${category?.name}` : "Nova categoria"}
           />
         }
       >

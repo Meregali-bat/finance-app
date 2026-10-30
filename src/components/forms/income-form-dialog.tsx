@@ -1,5 +1,6 @@
 "use client";
 
+import { unwrap } from "@/lib/action-result";
 import { useState, useTransition } from "react";
 import { Plus, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -36,9 +37,9 @@ export function IncomeFormDialog({ income }: { income?: IncomeValues }) {
     startTransition(async () => {
       try {
         if (isEdit) {
-          await updateIncome(income.id, formData);
+          unwrap(await updateIncome(income.id, formData));
         } else {
-          await createIncome(formData);
+          unwrap(await createIncome(formData));
         }
         setOpen(false);
       } catch (e) {

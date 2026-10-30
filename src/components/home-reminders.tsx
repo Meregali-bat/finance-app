@@ -42,7 +42,7 @@ export type HomeReminder =
       payAction: (formData: FormData) => Promise<{ paymentId: string }>;
       cards?: { id: string; name: string }[];
       defer: {
-        action: (formData: FormData) => Promise<void>;
+        action: (formData: FormData) => Promise<unknown>;
         nextMonthTarget: Date;
         endTarget: Date | null;
       } | null;
