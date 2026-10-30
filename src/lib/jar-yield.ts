@@ -152,20 +152,54 @@ export interface YieldLot {
  * O que sobra de cada entrada depois dos resgates, do mais antigo para o mais
  * novo — como os bancos tiram: primeiro o que entrou primeiro. Cada sobra rende
  * e paga imposto pela própria data.
+ *
+ * Um resgate no mesmo dia de uma entrada desfaz antes essa entrada: o dinheiro
+ * que entrou e saiu no dia nem chegou a render, e o que já rendia fica lá.
+ *
+ * Com o CDI, o resgate é como o Nubank faz: o valor pedido é o que cai na
+ * conta, já sem IOF e IR, e sai de cada entrada com o rendimento dela até o
+ * dia. Parte do resgate é rendimento, então sai menos do guardado que o valor
+ * pedido. Sem o CDI, o resgate tira do guardado o valor inteiro.
  */
-export function remainingLots(movements: { date: Date; amount: number }[]): YieldLot[] {
+export function remainingLots(
+  movements: { date: Date; amount: number }[],
+  rate?: { cdiAnnualPercent: number; cdiPercent: number },
+): YieldLot[] {
   const lots: YieldLot[] = [];
   const sorted = [...movements].sort((a, b) => a.date.getTime() - b.date.getTime());
+
+  /** Quanto cai na conta por real guardado desta entrada, se resgatado no dia. */
+  function netPerReal(lot: YieldLot, day: Date) {
+    if (!rate) return 1;
+    // Num valor grande, para o arredondamento em centavos não pesar.
+    return simulateYield({ ...rate, amount: 1_000_000, from: lot.from, to: day }).total / 1_000_000;
+  }
+
+  /** Tira `out` (líquido) da entrada; devolve o que ainda falta tirar. */
+  function takeFrom(lot: YieldLot, out: number, day: Date) {
+    const unit = netPerReal(lot, day);
+    const available = cents(lot.amount * unit);
+    if (out >= available) {
+      lot.amount = 0;
+      return cents(out - available);
+    }
+    lot.amount = cents(lot.amount - out / unit);
+    return 0;
+  }
+
   for (const m of sorted) {
     if (m.amount > 0) {
       lots.push({ from: m.date, amount: m.amount });
       continue;
     }
     let out = -m.amount;
+    // As entradas do dia ficam no fim da lista: o resgate sai delas primeiro.
+    while (out > 0.005 && lots.length > 0 && lots.at(-1)!.from.getTime() === m.date.getTime()) {
+      out = takeFrom(lots.at(-1)!, out, m.date);
+      if (lots.at(-1)!.amount <= 0.005) lots.pop();
+    }
     while (out > 0.005 && lots.length > 0) {
-      const take = Math.min(out, lots[0].amount);
-      lots[0].amount = cents(lots[0].amount - take);
-      out = cents(out - take);
+      out = takeFrom(lots[0], out, m.date);
       if (lots[0].amount <= 0.005) lots.shift();
     }
   }

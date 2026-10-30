@@ -32,6 +32,8 @@ export default async function JarsPage() {
       include: {
         jarWithdrawalPlans: true,
         deposits: {
+          // Na ordem em que aconteceram: no mesmo dia, o resgate vem depois da entrada.
+          orderBy: { createdAt: "asc" },
           select: {
             id: true,
             amount: true,
@@ -93,7 +95,11 @@ export default async function JarsPage() {
     if (Math.abs(gap) >= 0.005) {
       movements.push({ date: utcDay(gap > 0 ? jar.createdAt : new Date()), amount: gap });
     }
-    return remainingLots(movements).map((lot) => ({
+    const rate =
+      jar.cdiPercent === null
+        ? undefined
+        : { cdiAnnualPercent: cdi.annualPercent, cdiPercent: Number(jar.cdiPercent) };
+    return remainingLots(movements, rate).map((lot) => ({
       from: lot.from.toISOString().slice(0, 10),
       amount: lot.amount,
     }));
