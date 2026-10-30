@@ -5,7 +5,7 @@ import Link from "next/link";
 import { dateForDayInMonth, getPeriodBounds, installmentsLeft, storedDay } from "@/lib/period";
 import { EmptyState } from "@/components/ui/empty-state";
 import { FixedTabs, type FixedTab } from "@/components/fixed-tabs";
-import { ListRow, stagger } from "@/components/list-row";
+import { ListRow, SubtitleParts, stagger } from "@/components/list-row";
 import { StatLabel } from "@/components/page-header";
 import { IncomeFormDialog } from "@/components/forms/income-form-dialog";
 import { ExpenseFormDialog } from "@/components/forms/expense-form-dialog";
@@ -20,6 +20,9 @@ import {
 } from "@/lib/actions/expense";
 import { deleteCategory, toggleCategoryActive } from "@/lib/actions/category";
 import { cn } from "@/lib/utils";
+
+/** O estado de uma linha e quanto ele pede atenção. */
+type RowState = { text: string; tone?: "overdue" | "soon" };
 
 const FIXED_TABS: readonly FixedTab[] = ["rendas", "despesas", "categorias"];
 
@@ -142,16 +145,16 @@ export default async function FixedPage({
    * adiada ou por vencer); paga, se todas foram; ou a próxima, se nenhuma cai
    * nele.
    */
-  function expenseState(row: (typeof rows)[number]): string | null {
+  function expenseState(row: (typeof rows)[number]): RowState | null {
     const { expense, deferrals } = row;
     if (!expense.active) {
       const since = expense.pauses[0]?.startedAt;
-      return since ? `pausada desde ${dayMonth(since)}` : "pausada";
+      return { text: since ? `pausada desde ${dayMonth(since)}` : "pausada" };
     }
     if (row.ended) return null;
     if (expense.cardId) {
       const due = cardDueById.get(expense.cardId);
-      return due ? `na fatura que vence dia ${due}` : "na fatura do cartão";
+      return { text: due ? `na fatura que vence dia ${due}` : "na fatura do cartão" };
     }
     if (expense.dueDay == null) return null;
     const { dates, next } = dueDatesInCycle(expense.dueDay);
@@ -159,14 +162,34 @@ export default async function FixedPage({
     const open = dates.find((due) => !paidFor(due));
     if (open) {
       const deferred = deferrals.find((d) => sameMonth(storedDay(d.dueDate), open));
-      if (deferred) return `adiada para ${dayMonth(storedDay(deferred.targetDueDate))}`;
-      return open.getTime() < todayStart.getTime() ? `venceu ${dayMonth(open)}` : `vence ${dayMonth(open)}`;
+      if (deferred) return { text: `adiada para ${dayMonth(storedDay(deferred.targetDueDate))}` };
+      const days = Math.round((open.getTime() - todayStart.getTime()) / 86_400_000);
+      if (days < 0) return { text: `venceu ${dayMonth(open)}`, tone: "overdue" };
+      return {
+        text: days === 0 ? "vence hoje" : `vence ${dayMonth(open)}`,
+        tone: days <= 3 ? "soon" : undefined,
+      };
     }
     const paid = dates.length > 0 ? paidFor(dates.at(-1)!) : undefined;
-    return paid
-      ? `paga em ${dayMonth(paid.paidAt)} · próxima ${dayMonth(next)}`
-      : `próxima ${dayMonth(next)}`;
+    return {
+      text: paid
+        ? `paga em ${dayMonth(paid.paidAt)} · próxima ${dayMonth(next)}`
+        : `próxima ${dayMonth(next)}`,
+    };
   }
+
+  /** O estado numa linha só dele: vencida em vermelho, perto de vencer em destaque. */
+  const stateLine = (state: RowState) => (
+    <span
+      className={cn(
+        "block",
+        state.tone === "overdue" && "font-medium text-negative",
+        state.tone === "soon" && "font-medium text-foreground",
+      )}
+    >
+      <SubtitleParts text={state.text} />
+    </span>
+  );
 
   /** Como está a renda neste ciclo: recebida (e quando vem a próxima), a confirmar ou por chegar. */
   function incomeState(income: (typeof incomes)[number]): string {
@@ -216,9 +239,9 @@ export default async function FixedPage({
           label: "Sobra fixa",
           value: fixedLeft,
           tone: fixedLeft < 0 ? "text-negative" : "",
-          // Não é o que sobra no ciclo: as parcelas e faturas do cartão ficam
-          // de fora. Quem diz isso é a Previsão.
-          note: "sem faturas do cartão",
+          // Não é o que sobra no ciclo: as compras do cartão (parcelas, o dia
+          // a dia) ficam de fora. Quem diz isso é a Previsão.
+          note: "fora as compras no cartão",
           href: "/previsao",
         },
       ].map((figure) => (
@@ -258,6 +281,7 @@ export default async function FixedPage({
 
   const expenseItem = (row: (typeof rows)[number], index: number) => {
     const { expense, left, deferrals, afterLast } = row;
+    const state = expenseState(row);
     const cardName = expense.cardId ? cardNameById.get(expense.cardId) : undefined;
     // Uma parcela adiada para depois da última também falta, e é ela a última.
     const lastDeferred = afterLast.at(-1)?.targetDueDate;
@@ -265,22 +289,27 @@ export default async function FixedPage({
       left &&
       (row.ended
         ? "parcelas encerradas"
-        : [
-            left.remaining === 1 ? "falta 1 parcela" : `faltam ${left.remaining} parcelas`,
-            afterLast.length > 0 &&
-              `+ ${afterLast.length === 1 ? "1 adiada" : `${afterLast.length} adiadas`}`,
-          ]
-            .filter(Boolean)
-            .join(" ") + ` · última em ${formatShortDate(lastDeferred ?? left.last)}`);
+        : // A adiada para depois da última já está no aviso de baixo e na
+          // data da última: repetir "+ 1 adiada" aqui só alongava a linha.
+          `${left.remaining === 1 ? "falta 1 parcela" : `faltam ${left.remaining} parcelas`} · última em ${formatShortDate(lastDeferred ?? left.last)}`);
     return (
       <li key={expense.id} className="rise-in" style={stagger(index, 80, 45)}>
         <ListRow
           dim={!expense.active}
           title={expense.label}
           value={formatCurrency(Number(expense.amount))}
-          subtitle={[cardName ?? `todo dia ${expense.dueDay}`, installments, expenseState(row)]
-            .filter(Boolean)
-            .join(" · ")}
+          // Onde sai e as parcelas em cima; o estado numa linha só dele, que é
+          // o que se procura. "todo dia N" só quando não há data nenhuma.
+          subtitle={
+            <>
+              <SubtitleParts
+                text={[cardName ?? (state && expense.active ? null : `todo dia ${expense.dueDay}`), installments]
+                  .filter(Boolean)
+                  .join(" · ")}
+              />
+              {state && stateLine(state)}
+            </>
+          }
           trailing={
             <>
               <ToggleActiveButton
@@ -349,8 +378,11 @@ export default async function FixedPage({
     );
   };
 
-  const onAccount = rows.filter((r) => !r.expense.cardId);
-  const onCard = rows.filter((r) => r.expense.cardId);
+  // As de parcelas encerradas no fim: não cobram mais nada.
+  const byEnded = (a: (typeof rows)[number], b: (typeof rows)[number]) =>
+    Number(a.ended) - Number(b.ended);
+  const onAccount = rows.filter((r) => !r.expense.cardId).sort(byEnded);
+  const onCard = rows.filter((r) => r.expense.cardId).sort(byEnded);
 
   return (
     <div className="flex flex-col gap-5 lg:gap-6">
@@ -375,7 +407,7 @@ export default async function FixedPage({
                       title={income.label}
                       value={formatCurrency(Number(income.amount))}
                       valueClassName={income.active ? "text-positive" : undefined}
-                      subtitle={`todo dia ${income.dayOfMonth} · ${incomeState(income)}`}
+                      subtitle={incomeState(income)}
                       trailing={
                         <>
                           <ToggleActiveButton
@@ -440,7 +472,9 @@ export default async function FixedPage({
                         {group.label}
                         <span className="tabular-nums">{formatCurrency(group.total)} por mês</span>
                       </h2>
-                      <ul className="grid grid-cols-[minmax(0,1fr)] items-start gap-2 xl:grid-cols-2">
+                      {/* Uma coluna: em duas, a linha com adiamento abria um buraco
+                          ao lado e a ordem dos vencimentos ziguezagueava. */}
+                      <ul className="grid grid-cols-[minmax(0,1fr)] gap-2">
                         {group.list.map((row, index) =>
                           expenseItem(row, index + groupIndex * onAccount.length),
                         )}
@@ -459,13 +493,17 @@ export default async function FixedPage({
               <ul className="grid grid-cols-[minmax(0,1fr)] gap-2 xl:grid-cols-2">
                 {/* As desativadas por último: no meio da lista, uma apagada entre
                     as ativas parecia um erro de desenho. */}
-                {[...categories]
-                  .sort((a, b) => Number(b.active) - Number(a.active))
-                  .map((category, index) => {
-                    const uses =
+                {categories
+                  .map((category) => ({
+                    category,
+                    uses:
                       category._count.transactions +
                       category._count.cardPurchases +
-                      category._count.fixedExpenses;
+                      category._count.fixedExpenses,
+                  }))
+                  // As mais usadas primeiro, que são as que se procuram.
+                  .sort((a, b) => Number(b.category.active) - Number(a.category.active) || b.uses - a.uses)
+                  .map(({ category, uses }, index) => {
                     return (
                       <li key={category.id} className="rise-in" style={stagger(index, 80, 45)}>
                         <ListRow
@@ -483,21 +521,25 @@ export default async function FixedPage({
                                 active={category.active}
                                 label={`${category.name} em uso`}
                                 titles={{ on: "Desativar: some dos formulários", off: "Ativar" }}
+                                doneText={{
+                                  off: `${category.name} desativada: some dos formulários`,
+                                  on: `${category.name} de volta aos formulários`,
+                                }}
                                 onToggle={toggleCategoryActive.bind(null, category.id)}
                               />
-                              <CategoryFormDialog category={{ id: category.id, name: category.name }} />
-                              {/* Excluir em uso deixava o histórico todo "Sem
-                                  categoria", sem volta: só a vazia se exclui. */}
-                              <DeleteIconButton
-                                action={deleteCategory.bind(null, category.id)}
-                                itemLabel={category.name}
-                                disabledReason={
-                                  uses > 0
-                                    ? `"${category.name}" está em ${uses === 1 ? "1 lançamento" : `${uses} lançamentos`}. Excluir os deixaria sem categoria para sempre: desative-a, e ela some dos formulários sem mexer no histórico.`
-                                    : undefined
-                                }
-                                confirmMessage={`Excluir a categoria "${category.name}"? Ela não está em nenhum lançamento.`}
+                              <CategoryFormDialog
+                                category={{ id: category.id, name: category.name }}
+                                uses={uses}
                               />
+                              {/* Só a vazia se exclui. A lixeira apagada em toda linha em uso virava
+                                  ruído; o porquê fica no editar. */}
+                              {uses === 0 && (
+                                <DeleteIconButton
+                                  action={deleteCategory.bind(null, category.id)}
+                                  itemLabel={category.name}
+                                  confirmMessage={`Excluir a categoria "${category.name}"? Ela não está em nenhum lançamento.`}
+                                />
+                              )}
                             </>
                           }
                         />

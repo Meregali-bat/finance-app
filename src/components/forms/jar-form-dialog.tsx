@@ -58,6 +58,24 @@ export function JarFormDialog() {
             <Label htmlFor="name">Nome</Label>
             <Input id="name" name="name" placeholder="Viagem" required />
           </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="cdiPercent">Rende do CDI (opcional)</Label>
+            <div className="relative">
+              <Input
+                id="cdiPercent"
+                name="cdiPercent"
+                inputMode="decimal"
+                placeholder="100"
+                className="pr-8 tabular-nums"
+              />
+              <span className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-muted-foreground">
+                %
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Vazio, ela não mostra rendimento. Dá para mudar depois.
+            </p>
+          </div>
           {error && (
             <p role="alert" className="text-sm text-negative">
               {error}

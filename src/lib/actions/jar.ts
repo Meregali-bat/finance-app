@@ -18,8 +18,13 @@ export async function createJar(formData: FormData) {
       name: formData.get("name"),
       color: formData.get("color") || undefined,
     });
+    // Quanto rende já na criação: antes era preciso abrir outro diálogo.
+    const raw = String(formData.get("cdiPercent") ?? "")
+      .replace(",", ".")
+      .trim();
+    const { cdiPercent } = yieldSchema.parse({ cdiPercent: raw === "" ? null : raw });
 
-    await prisma.jar.create({ data: { ...data, userId } });
+    await prisma.jar.create({ data: { ...data, cdiPercent, userId } });
     revalidatePath("/caixinhas");
     revalidatePath("/");
   });
