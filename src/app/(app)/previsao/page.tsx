@@ -578,7 +578,8 @@ export default async function ForecastPage({
           )._sum.balance ?? 0,
         ) - (inputs.jarReturns ?? []).reduce((sum, r) => sum + r.amount, 0)
       : 0;
-  const hasJarBalance = freeInJars >= 0.005;
+  // Centavos não cobrem falta nenhuma: o link aparece a partir de R$ 1.
+  const hasJarBalance = freeInJars >= 1;
   const exitLinks = (target: PeriodForecast) => (
     <div className="flex flex-wrap gap-x-4 gap-y-1 text-[13px] font-medium">
       {target.offset === 0 ? (

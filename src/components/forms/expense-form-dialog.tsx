@@ -1,5 +1,6 @@
 "use client";
 
+import { unwrap } from "@/lib/action-result";
 import { useState, useTransition } from "react";
 import { Plus, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -65,9 +66,9 @@ export function ExpenseFormDialog({
     startTransition(async () => {
       try {
         if (isEdit) {
-          await updateFixedExpense(expense.id, formData);
+          unwrap(await updateFixedExpense(expense.id, formData));
         } else {
-          await createFixedExpense(formData);
+          unwrap(await createFixedExpense(formData));
         }
         setOpen(false);
       } catch (e) {

@@ -1,5 +1,6 @@
 "use client";
 
+import { unwrap } from "@/lib/action-result";
 import { useState, useTransition } from "react";
 import { CalendarClock } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -50,6 +51,7 @@ export function JarScheduleDialog({
   lots,
   cdiPercent,
   context,
+  onDone,
 }: {
   jarId: string;
   jarName: string;
@@ -58,6 +60,8 @@ export function JarScheduleDialog({
   lots: LotView[];
   cdiPercent: number | null;
   context: YieldContext;
+  /** Agendado: o toast com o "Desfazer" é de quem chama. */
+  onDone?: (plan: { planId: string; amount: number; date: string }) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [amount, setAmount] = useState(available);
@@ -69,8 +73,9 @@ export function JarScheduleDialog({
     setError(null);
     start(async () => {
       try {
-        await scheduleJarWithdrawal(jarId, formData);
+        const plan = unwrap(await scheduleJarWithdrawal(jarId, formData));
         setOpen(false);
+        onDone?.(plan);
       } catch (e) {
         setError(errorMessage(e, "Não deu para agendar."));
       }

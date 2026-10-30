@@ -82,7 +82,16 @@ export function ListRow({
         {icon && <IconSquare tone={tone}>{icon}</IconSquare>}
         <div className={cn("min-w-0 flex-1 transition-opacity", dim && "opacity-50")}>
           <div className="flex items-baseline justify-between gap-2">
-            <p className="truncate text-[14.5px] font-semibold">{title}</p>
+            {/* Com o valor na mesma linha, cortar o nome fazia "Empréstimo pai" e
+                "Empréstimo sicoob" virarem o mesmo "Emprestim…": quebra em duas. */}
+            <p
+              className={cn(
+                "text-[14.5px] font-semibold",
+                stacked ? "line-clamp-2 break-words sm:truncate" : "truncate",
+              )}
+            >
+              {title}
+            </p>
             {stacked && (
               <span
                 className={cn(

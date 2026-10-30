@@ -1,5 +1,6 @@
 "use client";
 
+import { unwrap } from "@/lib/action-result";
 import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -38,7 +39,7 @@ export function DeferExpenseDialog({
   onDone,
 }: {
   /** `deferFixedExpense` já ligada ao id da despesa. */
-  action: (formData: FormData) => Promise<void>;
+  action: (formData: FormData) => Promise<unknown>;
   label: string;
   dueDate: Date;
   amount: number;
@@ -57,7 +58,7 @@ export function DeferExpenseDialog({
     setError(null);
     startTransition(async () => {
       try {
-        await action(formData);
+        unwrap(await action(formData));
         setOpen(false);
         onDone?.();
       } catch (e) {

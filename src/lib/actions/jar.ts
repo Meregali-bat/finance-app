@@ -4,6 +4,7 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/auth-helpers";
+import { Refusal, refusing } from "@/lib/action-result";
 
 const jarSchema = z.object({
   name: z.string().trim().min(1, "Informe um nome").max(80),
@@ -11,15 +12,17 @@ const jarSchema = z.object({
 });
 
 export async function createJar(formData: FormData) {
-  const userId = await requireUserId();
-  const data = jarSchema.parse({
-    name: formData.get("name"),
-    color: formData.get("color") || undefined,
-  });
+  return refusing(async () => {
+    const userId = await requireUserId();
+    const data = jarSchema.parse({
+      name: formData.get("name"),
+      color: formData.get("color") || undefined,
+    });
 
-  await prisma.jar.create({ data: { ...data, userId } });
-  revalidatePath("/caixinhas");
-  revalidatePath("/");
+    await prisma.jar.create({ data: { ...data, userId } });
+    revalidatePath("/caixinhas");
+    revalidatePath("/");
+  });
 }
 
 const yieldSchema = z.object({
@@ -29,13 +32,15 @@ const yieldSchema = z.object({
 
 /** Quanto do CDI a caixinha rende: é o que a simulação de rendimento usa. */
 export async function setJarYield(jarId: string, formData: FormData) {
-  const userId = await requireUserId();
-  const raw = String(formData.get("cdiPercent") ?? "")
-    .replace(",", ".")
-    .trim();
-  const { cdiPercent } = yieldSchema.parse({ cdiPercent: raw === "" ? null : raw });
-  await prisma.jar.update({ where: { id: jarId, userId }, data: { cdiPercent } });
-  revalidatePath("/caixinhas");
+  return refusing(async () => {
+    const userId = await requireUserId();
+    const raw = String(formData.get("cdiPercent") ?? "")
+      .replace(",", ".")
+      .trim();
+    const { cdiPercent } = yieldSchema.parse({ cdiPercent: raw === "" ? null : raw });
+    await prisma.jar.update({ where: { id: jarId, userId }, data: { cdiPercent } });
+    revalidatePath("/caixinhas");
+  });
 }
 
 /**
@@ -44,15 +49,17 @@ export async function setJarYield(jarId: string, formData: FormData) {
  * saldo e ao orçamento sem nada ter voltado. O saldo sai antes, por um resgate.
  */
 export async function deleteJar(id: string) {
-  const userId = await requireUserId();
-  const jar = await prisma.jar.findUnique({ where: { id, userId } });
-  if (!jar) return;
-  if (Math.abs(Number(jar.balance)) >= 0.005) {
-    throw new Error("Resgate o saldo da caixinha antes de apagá-la.");
-  }
-  await prisma.jar.update({ where: { id, userId }, data: { deletedAt: new Date() } });
-  revalidatePath("/caixinhas");
-  revalidatePath("/");
+  return refusing(async () => {
+    const userId = await requireUserId();
+    const jar = await prisma.jar.findUnique({ where: { id, userId } });
+    if (!jar) return;
+    if (Math.abs(Number(jar.balance)) >= 0.005) {
+      throw new Refusal("Resgate o saldo da caixinha antes de apagá-la.");
+    }
+    await prisma.jar.update({ where: { id, userId }, data: { deletedAt: new Date() } });
+    revalidatePath("/caixinhas");
+    revalidatePath("/");
+  });
 }
 
 const depositSchema = z.object({
@@ -77,51 +84,53 @@ function movementInstant(date: string | undefined): Date | undefined {
   const chosen = new Date(y, m - 1, d, 12);
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   if (chosen.getTime() >= today.getTime() + 86_400_000) {
-    throw new Error("A data não pode ser depois de hoje.");
+    throw new Refusal("A data não pode ser depois de hoje.");
   }
   if (chosen.getTime() >= today.getTime()) return undefined;
   return chosen;
 }
 
 export async function depositToJar(jarId: string, formData: FormData) {
-  const userId = await requireUserId();
-  const data = depositSchema.parse({
-    amount: formData.get("amount"),
-    note: formData.get("note") || undefined,
-    date: formData.get("date") || undefined,
-    plannedWithdrawalAt: formData.get("plannedWithdrawalAt") || undefined,
+  return refusing(async () => {
+    const userId = await requireUserId();
+    const data = depositSchema.parse({
+      amount: formData.get("amount"),
+      note: formData.get("note") || undefined,
+      date: formData.get("date") || undefined,
+      plannedWithdrawalAt: formData.get("plannedWithdrawalAt") || undefined,
+    });
+    const createdAt = movementInstant(data.date);
+    const plannedWithdrawalAt = data.plannedWithdrawalAt
+      ? new Date(`${data.plannedWithdrawalAt}T00:00:00.000Z`)
+      : null;
+    if (plannedWithdrawalAt && data.date && data.plannedWithdrawalAt! <= data.date) {
+      throw new Refusal("O dia de tirar precisa ser depois do dia em que entrou.");
+    }
+
+    const [deposit] = await prisma.$transaction([
+      prisma.jarDeposit.create({
+        data: {
+          amount: data.amount,
+          note: data.note,
+          createdAt,
+          plannedWithdrawalAt,
+          jarId,
+          userId,
+        },
+        select: { id: true },
+      }),
+      prisma.jar.update({
+        where: { id: jarId, userId },
+        data: { balance: { increment: data.amount } },
+      }),
+    ]);
+
+    revalidatePath("/caixinhas");
+    revalidatePath("/");
+    revalidatePath("/previsao");
+    // O id volta para o "Desfazer" do toast.
+    return { depositId: deposit.id };
   });
-  const createdAt = movementInstant(data.date);
-  const plannedWithdrawalAt = data.plannedWithdrawalAt
-    ? new Date(`${data.plannedWithdrawalAt}T00:00:00.000Z`)
-    : null;
-  if (plannedWithdrawalAt && data.date && data.plannedWithdrawalAt! <= data.date) {
-    throw new Error("O dia de tirar precisa ser depois do dia em que entrou.");
-  }
-
-  const [deposit] = await prisma.$transaction([
-    prisma.jarDeposit.create({
-      data: {
-        amount: data.amount,
-        note: data.note,
-        createdAt,
-        plannedWithdrawalAt,
-        jarId,
-        userId,
-      },
-      select: { id: true },
-    }),
-    prisma.jar.update({
-      where: { id: jarId, userId },
-      data: { balance: { increment: data.amount } },
-    }),
-  ]);
-
-  revalidatePath("/caixinhas");
-  revalidatePath("/");
-  revalidatePath("/previsao");
-  // O id volta para o "Desfazer" do toast.
-  return { depositId: deposit.id };
 }
 
 /**
@@ -130,46 +139,48 @@ export async function depositToJar(jarId: string, formData: FormData) {
  * saída, então o resgate entra pelo mesmo caminho, com o sinal trocado.
  */
 export async function withdrawFromJar(jarId: string, formData: FormData) {
-  const userId = await requireUserId();
-  const data = depositSchema.parse({
-    amount: formData.get("amount"),
-    note: formData.get("note") || undefined,
-    date: formData.get("date") || undefined,
+  return refusing(async () => {
+    const userId = await requireUserId();
+    const data = depositSchema.parse({
+      amount: formData.get("amount"),
+      note: formData.get("note") || undefined,
+      date: formData.get("date") || undefined,
+    });
+    const createdAt = movementInstant(data.date);
+
+    const jar = await prisma.jar.findUnique({ where: { id: jarId, userId } });
+    if (!jar) throw new Refusal("Caixinha não encontrada");
+    // Pode passar do saldo: a caixinha rende (CDB), e o que vier a mais é o
+    // rendimento. O saldo vai a zero, nunca negativo; o valor inteiro volta
+    // para o disponível.
+    const balance = Math.max(0, Number(jar.balance));
+    const decrement = Math.min(data.amount, balance);
+    const overdraw = data.amount - decrement > 0.005;
+
+    const [deposit] = await prisma.$transaction([
+      prisma.jarDeposit.create({
+        data: {
+          amount: -data.amount,
+          note: data.note ?? (overdraw ? "Resgate com rendimento" : "Resgate"),
+          ...(overdraw ? { balanceChange: -decrement } : {}),
+          createdAt,
+          jarId,
+          userId,
+        },
+        select: { id: true },
+      }),
+      prisma.jar.update({
+        where: { id: jarId, userId },
+        data: { balance: { decrement } },
+      }),
+    ]);
+
+    revalidatePath("/caixinhas");
+    revalidatePath("/");
+    revalidatePath("/historico");
+    revalidatePath("/previsao");
+    return { depositId: deposit.id };
   });
-  const createdAt = movementInstant(data.date);
-
-  const jar = await prisma.jar.findUnique({ where: { id: jarId, userId } });
-  if (!jar) throw new Error("Caixinha não encontrada");
-  // Pode passar do saldo: a caixinha rende (CDB), e o que vier a mais é o
-  // rendimento. O saldo vai a zero, nunca negativo; o valor inteiro volta
-  // para o disponível.
-  const balance = Math.max(0, Number(jar.balance));
-  const decrement = Math.min(data.amount, balance);
-  const overdraw = data.amount - decrement > 0.005;
-
-  const [deposit] = await prisma.$transaction([
-    prisma.jarDeposit.create({
-      data: {
-        amount: -data.amount,
-        note: data.note ?? (overdraw ? "Resgate com rendimento" : "Resgate"),
-        ...(overdraw ? { balanceChange: -decrement } : {}),
-        createdAt,
-        jarId,
-        userId,
-      },
-      select: { id: true },
-    }),
-    prisma.jar.update({
-      where: { id: jarId, userId },
-      data: { balance: { decrement } },
-    }),
-  ]);
-
-  revalidatePath("/caixinhas");
-  revalidatePath("/");
-  revalidatePath("/historico");
-  revalidatePath("/previsao");
-  return { depositId: deposit.id };
 }
 
 /**
@@ -214,31 +225,36 @@ const scheduleSchema = z.object({
  * com ele de volta nesse dia, como um depósito feito com data para tirar.
  */
 export async function scheduleJarWithdrawal(jarId: string, formData: FormData) {
-  const userId = await requireUserId();
-  const data = scheduleSchema.parse({
-    amount: formData.get("amount"),
-    date: formData.get("date"),
-  });
-  const jar = await prisma.jar.findUnique({ where: { id: jarId, userId } });
-  if (!jar) throw new Error("Caixinha não encontrada");
-  if (data.amount > Number(jar.balance) + 0.005) {
-    throw new Error("O valor passa do que está na caixinha.");
-  }
-  const now = new Date();
-  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-  if (data.date < today) throw new Error("A data de tirar não pode ser antes de hoje.");
+  return refusing(async () => {
+    const userId = await requireUserId();
+    const data = scheduleSchema.parse({
+      amount: formData.get("amount"),
+      date: formData.get("date"),
+    });
+    const jar = await prisma.jar.findUnique({ where: { id: jarId, userId } });
+    if (!jar) throw new Refusal("Caixinha não encontrada");
+    if (data.amount > Number(jar.balance) + 0.005) {
+      throw new Refusal("O valor passa do que está na caixinha.");
+    }
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    if (data.date < today) throw new Refusal("A data de tirar não pode ser antes de hoje.");
 
-  await prisma.jarWithdrawalPlan.create({
-    data: {
-      userId,
-      jarId,
-      amount: data.amount,
-      date: new Date(`${data.date}T00:00:00.000Z`),
-    },
+    const plan = await prisma.jarWithdrawalPlan.create({
+      data: {
+        userId,
+        jarId,
+        amount: data.amount,
+        date: new Date(`${data.date}T00:00:00.000Z`),
+      },
+      select: { id: true },
+    });
+    revalidatePath("/caixinhas");
+    revalidatePath("/");
+    revalidatePath("/previsao");
+    // Para o toast poder desfazer.
+    return { planId: plan.id, amount: data.amount, date: data.date };
   });
-  revalidatePath("/caixinhas");
-  revalidatePath("/");
-  revalidatePath("/previsao");
 }
 
 /** O que o "Desfazer" precisa para pôr uma data de volta como estava. */
@@ -292,27 +308,29 @@ export async function cancelJarReturn(source: {
 
 /** O "Desfazer" de `cancelJarReturn`: a data volta, com o mesmo id e a mesma ordem. */
 export async function restoreJarReturn(cancelled: CancelledJarReturn) {
-  const userId = await requireUserId();
-  if (cancelled.kind === "schedule") {
-    const jar = await prisma.jar.findFirst({ where: { id: cancelled.jarId, userId } });
-    if (!jar) throw new Error("Caixinha não encontrada");
-    await prisma.jarWithdrawalPlan.create({
-      data: {
-        id: cancelled.id,
-        userId,
-        jarId: jar.id,
-        amount: cancelled.amount,
-        date: new Date(cancelled.date),
-        createdAt: new Date(cancelled.createdAt),
-      },
-    });
-  } else {
-    await prisma.jarDeposit.updateMany({
-      where: { id: cancelled.id, userId },
-      data: { plannedWithdrawalAt: new Date(cancelled.plannedWithdrawalAt) },
-    });
-  }
-  revalidatePath("/caixinhas");
-  revalidatePath("/");
-  revalidatePath("/previsao");
+  return refusing(async () => {
+    const userId = await requireUserId();
+    if (cancelled.kind === "schedule") {
+      const jar = await prisma.jar.findFirst({ where: { id: cancelled.jarId, userId } });
+      if (!jar) throw new Refusal("Caixinha não encontrada");
+      await prisma.jarWithdrawalPlan.create({
+        data: {
+          id: cancelled.id,
+          userId,
+          jarId: jar.id,
+          amount: cancelled.amount,
+          date: new Date(cancelled.date),
+          createdAt: new Date(cancelled.createdAt),
+        },
+      });
+    } else {
+      await prisma.jarDeposit.updateMany({
+        where: { id: cancelled.id, userId },
+        data: { plannedWithdrawalAt: new Date(cancelled.plannedWithdrawalAt) },
+      });
+    }
+    revalidatePath("/caixinhas");
+    revalidatePath("/");
+    revalidatePath("/previsao");
+  });
 }

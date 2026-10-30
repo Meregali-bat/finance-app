@@ -186,6 +186,7 @@ export function UntilChips({
             type="button"
             onClick={() => onChange(chip.date)}
             aria-pressed={active}
+            title={chip.amount > 0 ? `${chip.label}: ${formatCurrency(chip.amount)}` : undefined}
             className={
               active
                 ? "flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-foreground px-3 text-[12.5px] font-semibold text-background"

@@ -1,5 +1,6 @@
 "use client";
 
+import { unwrap } from "@/lib/action-result";
 import { useState, useTransition } from "react";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -26,7 +27,7 @@ export function JarFormDialog() {
     setError(null);
     startTransition(async () => {
       try {
-        await createJar(formData);
+        unwrap(await createJar(formData));
         setOpen(false);
       } catch (e) {
         setError(errorMessage(e, "Erro ao salvar"));

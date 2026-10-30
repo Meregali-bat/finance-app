@@ -1,5 +1,6 @@
 "use client";
 
+import { unwrap } from "@/lib/action-result";
 import { useRef, useState, useTransition } from "react";
 import { PiggyBank } from "lucide-react";
 import { StatLabel } from "@/components/page-header";
@@ -53,6 +54,10 @@ export type JarView = {
 const committedOf = (jar: JarView) =>
   jar.returns.filter((r) => !r.overdue).reduce((sum, r) => sum + r.amount, 0);
 
+/** O guardado que não tem data de volta nenhuma: o que dá para agendar. */
+const unscheduledOf = (jar: JarView) =>
+  Math.max(0, Math.round((jar.balance - jar.returns.reduce((sum, r) => sum + r.amount, 0)) * 100) / 100);
+
 /**
  * As entradas que ainda não têm data de volta: as datas pegam primeiro as
  * mais antigas, e o que sobra é o que entrou por último. É delas que um novo
@@ -90,7 +95,8 @@ export function JarsGrid({ jars, yieldContext }: { jars: JarView[]; yieldContext
   const earned = jars.reduce((sum, jar) => sum + (jar.now ? jar.now.total - jar.balance : 0), 0);
   // O que já tem data de volta está no número do dia; só o resto é folga.
   const committed = jars.reduce((sum, jar) => sum + committedOf(jar), 0);
-  const free = Math.max(0, jars.reduce((sum, jar) => sum + jar.balance, 0) - committed);
+  const saved = jars.reduce((sum, jar) => sum + jar.balance, 0);
+  const free = Math.max(0, saved - committed);
   const estimated = yieldContext.cdiSource === "estimate";
 
   function done(jar: JarView, withdraw: boolean, depositId: string, amount: number) {
@@ -100,6 +106,16 @@ export function JarsGrid({ jars, yieldContext }: { jars: JarView[]; yieldContext
       hasUndo: true,
       text: `${formatCurrency(amount)} ${withdraw ? "resgatados de" : "guardados em"} ${jar.name}`,
       undo: () => undoJarDeposit(depositId),
+    });
+  }
+
+  function scheduled(jar: JarView, plan: { planId: string; amount: number; date: string }) {
+    setError(null);
+    setToast({
+      id: ++seq.current,
+      hasUndo: true,
+      text: `${formatCurrency(plan.amount)} de ${jar.name} volta em ${shortDay(dayFromKey(plan.date))}, já na Previsão`,
+      undo: () => cancelJarReturn({ kind: "schedule", id: plan.planId }),
     });
   }
 
@@ -114,7 +130,7 @@ export function JarsGrid({ jars, yieldContext }: { jars: JarView[]; yieldContext
           hasUndo: true,
           // O efeito, e não só o fato: sem a data, esse dinheiro sai do número do dia.
           text: `Sem data: ${formatCurrency(r.amount)} de ${jar.name} saiu da Previsão`,
-          undo: () => restoreJarReturn(cancelled),
+          undo: async () => unwrap(await restoreJarReturn(cancelled)),
         });
       } catch (e) {
         setError(errorMessage(e, "Não deu para cancelar"));
@@ -141,23 +157,26 @@ export function JarsGrid({ jars, yieldContext }: { jars: JarView[]; yieldContext
         className="rise-in flex flex-col gap-1"
         style={{ "--rise-delay": "60ms" } as React.CSSProperties}
       >
-        <StatLabel>Total guardado</StatLabel>
+        {/* "Guardado" é sempre o que entrou; o número grande é o valor de
+            hoje, com o rendimento. A linha de baixo fecha a soma. */}
+        <StatLabel>{earned > 0.005 ? "Valor hoje" : "Total guardado"}</StatLabel>
         <CountUpCurrency
           value={total}
           className="font-heading text-[40px] leading-none font-bold tracking-[-0.045em] tabular-nums"
         />
         {earned > 0.005 && (
           <p className="text-[13px] text-muted-foreground tabular-nums">
-            <span className="font-medium text-positive">+{formatCurrency(earned)}</span> de
-            rendimento até hoje{estimated ? " (CDI estimado)" : ""}
+            {formatCurrency(saved)} guardado +{" "}
+            <span className="font-medium text-positive">{formatCurrency(earned)}</span> de
+            rendimento{estimated ? " (CDI estimado)" : ""}
           </p>
         )}
         {/* O que é folga e o que já está prometido: a Previsão manda resgatar
             quando falta, e o dinheiro com data de volta já está nessa conta. */}
         {committed >= 0.005 && (
           <p className="text-[13px] text-muted-foreground tabular-nums">
-            <b className="font-semibold text-foreground">{formatCurrency(free)}</b> livres ·{" "}
-            {formatCurrency(committed)} com data de volta, já contados na Previsão
+            Do guardado: <b className="font-semibold text-foreground">{formatCurrency(free)}</b>{" "}
+            livres · {formatCurrency(committed)} com data de volta, já contados na Previsão
           </p>
         )}
       </div>
@@ -203,27 +222,18 @@ export function JarsGrid({ jars, yieldContext }: { jars: JarView[]; yieldContext
                 )}
               />
               {jar.now && (
-                // Como o banco mostra: o número grande é o bruto de hoje, com o
-                // que rendeu; ao lado, o que sairia num resgate agora, já sem
-                // IOF e IR. Cada um diz qual é.
-                <>
-                  <p className="text-[12px] text-muted-foreground">bruto hoje, com rendimento</p>
-                  <dl className="mt-1.5 grid grid-cols-2 gap-x-2 text-[12px] tabular-nums">
-                    <div className="min-w-0">
-                      <dt className="text-muted-foreground">Rendeu</dt>
-                      <dd className="truncate font-semibold text-positive">
-                        +{formatCurrency(jar.now.total - jar.balance)}
-                      </dd>
-                    </div>
-                    <div className="min-w-0">
-                      <dt className="text-muted-foreground">Se resgatar hoje</dt>
-                      <dd className="truncate font-semibold">
-                        {formatCurrency(jar.now.net)}{" "}
-                        <span className="font-normal text-muted-foreground">líquido</span>
-                      </dd>
-                    </div>
-                  </dl>
-                </>
+                // O número grande é o valor de hoje, com o rendimento; embaixo,
+                // o que sai de fato num resgate agora, já sem IOF e IR. Uma
+                // linha só: quatro valores parecidos lado a lado confundiam.
+                <p className="text-[12.5px] text-muted-foreground tabular-nums">
+                  rendeu{" "}
+                  <span className="text-positive">
+                    +{formatCurrency(jar.now.total - jar.balance)}
+                  </span>{" "}
+                  · se resgatar hoje,{" "}
+                  <b className="font-semibold text-foreground">{formatCurrency(jar.now.net)}</b>{" "}
+                  líquido
+                </p>
               )}
             </div>
             {jar.returns.length > 0 && (
@@ -238,19 +248,18 @@ export function JarsGrid({ jars, yieldContext }: { jars: JarView[]; yieldContext
                   >
                     <span className="min-w-0 pt-1.5">
                       {/* O guardado é o que a Previsão conta; o rendimento até lá
-                          é um extra, líquido, que ela deixa de fora. */}
-                      {r.overdue
-                        ? `${formatCurrency(r.amount)} era para voltar em ${shortDay(dayFromKey(r.date))}: resgate para contar`
-                        : `${formatCurrency(r.amount)} volta em ${shortDay(dayFromKey(r.date))}, já na Previsão`}
-                      {r.withYield != null && r.withYield - r.amount >= 0.005 && (
-                        <span className="block">
-                          líquido no dia {formatCurrency(r.withYield)}
-                          <span className="text-positive">
-                            {" "}
-                            (+{formatCurrency(r.withYield - r.amount)})
-                          </span>
-                        </span>
-                      )}
+                          é um extra que ela deixa de fora, e fica na dica. */}
+                      <span
+                        title={
+                          r.withYield != null && r.withYield - r.amount >= 0.005
+                            ? `Com o rendimento até lá, ${formatCurrency(r.withYield)} líquido`
+                            : undefined
+                        }
+                      >
+                        {r.overdue
+                          ? `${formatCurrency(r.amount)} era para voltar em ${shortDay(dayFromKey(r.date))}: resgate para contar`
+                          : `${formatCurrency(r.amount)} volta em ${shortDay(dayFromKey(r.date))}, já na Previsão`}
+                      </span>
                     </span>
                     <button
                       type="button"
@@ -266,36 +275,43 @@ export function JarsGrid({ jars, yieldContext }: { jars: JarView[]; yieldContext
                 ))}
               </ul>
             )}
-            {jar.returns.length > 0 &&
-              jar.balance - jar.returns.reduce((sum, r) => sum + r.amount, 0) >= 0.005 && (
-                <p className="-mt-2 text-[12.5px] text-muted-foreground tabular-nums">
-                  {formatCurrency(jar.balance - jar.returns.reduce((sum, r) => sum + r.amount, 0))}{" "}
-                  sem data de volta
-                </p>
-              )}
+            {jar.returns.length > 0 && unscheduledOf(jar) >= 0.005 && (
+              <p className="-mt-2 text-[12.5px] text-muted-foreground tabular-nums">
+                {formatCurrency(unscheduledOf(jar))} sem data de volta
+              </p>
+            )}
             {/* Lado a lado quando cabe: no card largo do celular, uma embaixo da
                 outra só alongava a caixinha. */}
             <div className="flex flex-wrap items-center gap-x-5 gap-y-1">
-              {jar.balance - jar.returns.reduce((sum, r) => sum + r.amount, 0) > 0.005 && (
+              {unscheduledOf(jar) >= 0.005 && (
                 <JarScheduleDialog
                   jarId={jar.id}
                   jarName={jar.name}
-                  available={
-                    Math.round(
-                      (jar.balance - jar.returns.reduce((sum, r) => sum + r.amount, 0)) * 100,
-                    ) / 100
-                  }
+                  available={unscheduledOf(jar)}
                   lots={freeLots(jar)}
                   cdiPercent={jar.cdiPercent}
                   context={yieldContext}
+                  onDone={(plan) => scheduled(jar, plan)}
                 />
               )}
+              {/* A simulação usa só o que fica: o que tem data sai antes. */}
               <JarYieldDialog
                 jarId={jar.id}
                 jarName={jar.name}
-                lots={jar.lots}
+                lots={freeLots(jar)}
+                leaving={jar.returns.filter((r) => !r.overdue)}
                 cdiPercent={jar.cdiPercent}
                 context={yieldContext}
+                onSaved={(percent) =>
+                  setToast({
+                    id: ++seq.current,
+                    hasUndo: false,
+                    text: percent
+                      ? `${jar.name} rende ${percent}% do CDI`
+                      : `${jar.name} sem rendimento`,
+                    undo: async () => {},
+                  })
+                }
               />
             </div>
             <div className="flex gap-2">

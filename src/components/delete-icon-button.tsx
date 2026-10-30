@@ -1,5 +1,6 @@
 "use client";
 
+import { unwrap } from "@/lib/action-result";
 import { useState, useTransition } from "react";
 import { Trash2, Undo2 } from "lucide-react";
 import { iconButton } from "@/components/ui/icon-button";
@@ -15,7 +16,7 @@ export function DeleteIconButton({
   disabledReason,
   title,
 }: {
-  action: () => Promise<void>;
+  action: () => Promise<unknown>;
   confirmMessage: string;
   className?: string;
   /** Desfazer uma marcação (pagamento, recebimento), e não apagar: outra
@@ -46,10 +47,16 @@ export function DeleteIconButton({
           title ??
           (undo ? "Desfazer pagamento" : itemLabel ? `${verb}: ${itemLabel}` : verb)
         }
+        // Continua focável e tocável quando não dá: o toque abre o motivo. Só
+        // com `disabled`, o motivo morava numa dica que o celular não mostra.
         aria-disabled={disabledReason ? true : undefined}
-        disabled={isPending || !!disabledReason}
+        disabled={isPending}
         onClick={() => setOpen(true)}
-        className={iconButton({ tone: "ghost", size: "sm", className })}
+        className={iconButton({
+          tone: "ghost",
+          size: "sm",
+          className: [className, disabledReason && "opacity-50"].filter(Boolean).join(" "),
+        })}
       >
         {undo ? <Undo2 aria-hidden="true" /> : <Trash2 aria-hidden="true" />}
       </button>
@@ -59,15 +66,25 @@ export function DeleteIconButton({
           setOpen(next);
           if (!next) setError(null);
         }}
-        title={error ? `Não deu para ${verb.toLowerCase()}` : `${verb}?`}
-        description={error ?? confirmMessage}
-        confirmLabel={verb}
-        destructive={!undo}
+        title={
+          disabledReason
+            ? `Ainda não dá para ${verb.toLowerCase()}`
+            : error
+              ? `Não deu para ${verb.toLowerCase()}`
+              : `${verb}?`
+        }
+        description={disabledReason ?? error ?? confirmMessage}
+        confirmLabel={disabledReason ? "Entendi" : verb}
+        destructive={!undo && !disabledReason}
         isPending={isPending}
         onConfirm={() => {
+          if (disabledReason) {
+            setOpen(false);
+            return;
+          }
           startTransition(async () => {
             try {
-              await action();
+              unwrap(await action());
               setOpen(false);
             } catch (e) {
               setError(errorMessage(e, `Erro ao ${verb.toLowerCase()}`));

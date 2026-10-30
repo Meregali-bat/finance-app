@@ -4,6 +4,7 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/auth-helpers";
+import { refusing } from "@/lib/action-result";
 
 const incomeSchema = z.object({
   label: z.string().trim().min(1, "Informe um nome").max(80),
@@ -12,36 +13,40 @@ const incomeSchema = z.object({
 });
 
 export async function createIncome(formData: FormData) {
-  const userId = await requireUserId();
-  const data = incomeSchema.parse({
-    label: formData.get("label"),
-    amount: formData.get("amount"),
-    dayOfMonth: formData.get("dayOfMonth"),
-  });
+  return refusing(async () => {
+    const userId = await requireUserId();
+    const data = incomeSchema.parse({
+      label: formData.get("label"),
+      amount: formData.get("amount"),
+      dayOfMonth: formData.get("dayOfMonth"),
+    });
 
-  await prisma.income.create({ data: { ...data, userId } });
-  revalidatePath("/rendas");
-  revalidatePath("/");
-  revalidatePath("/previsao");
-  revalidatePath("/historico");
+    await prisma.income.create({ data: { ...data, userId } });
+    revalidatePath("/rendas");
+    revalidatePath("/");
+    revalidatePath("/previsao");
+    revalidatePath("/historico");
+  });
 }
 
 export async function updateIncome(id: string, formData: FormData) {
-  const userId = await requireUserId();
-  const data = incomeSchema.parse({
-    label: formData.get("label"),
-    amount: formData.get("amount"),
-    dayOfMonth: formData.get("dayOfMonth"),
-  });
+  return refusing(async () => {
+    const userId = await requireUserId();
+    const data = incomeSchema.parse({
+      label: formData.get("label"),
+      amount: formData.get("amount"),
+      dayOfMonth: formData.get("dayOfMonth"),
+    });
 
-  await prisma.income.update({
-    where: { id, userId },
-    data,
+    await prisma.income.update({
+      where: { id, userId },
+      data,
+    });
+    revalidatePath("/rendas");
+    revalidatePath("/");
+    revalidatePath("/previsao");
+    revalidatePath("/historico");
   });
-  revalidatePath("/rendas");
-  revalidatePath("/");
-  revalidatePath("/previsao");
-  revalidatePath("/historico");
 }
 
 /**
