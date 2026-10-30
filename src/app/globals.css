@@ -604,7 +604,7 @@
 .cta-surface:hover {
   box-shadow:
     inset 0 1px 0 rgb(255 255 255 / 0.18),
-    0 0 0 1px rgb(242 169 159 / 0.55),
+    0 0 0 1px var(--cta-ring-hover, rgb(242 169 159 / 0.55)),
     0 16px 40px -12px rgb(0 0 0 / 0.8);
 }
 

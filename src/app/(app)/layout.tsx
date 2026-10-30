@@ -1,23 +1,22 @@
 import { BottomNav } from "@/components/bottom-nav";
 import { SidebarNav } from "@/components/sidebar-nav";
 import { redirect } from "next/navigation";
-import { currentTheme } from "@/lib/theme-server";
 import { requireUserId } from "@/lib/auth-helpers";
 import { prisma } from "@/lib/prisma";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const userId = await requireUserId();
-  const [theme, user] = await Promise.all([
-    currentTheme(),
-    prisma.user.findUnique({ where: { id: userId }, select: { onboardedAt: true } }),
-  ]);
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { onboardedAt: true, name: true, email: true, avatar: true },
+  });
   // Conta nova, que ainda não terminou o primeiro uso: sem renda não existe
   // "quanto posso gastar hoje", então o app começa pelo passo a passo.
   if (!user?.onboardedAt) redirect("/comecar");
   return (
     <div className="flex min-h-screen flex-col lg:flex-row">
       <div aria-hidden="true" className="app-backdrop" />
-      <SidebarNav theme={theme} />
+      <SidebarNav user={{ name: user.name, email: user.email, avatar: user.avatar }} />
       {/* O mesmo elemento serve aos dois modos: `flex-1` ocupa o que sobra ao
           lado da barra lateral, o `max-w-*` limita e as margens automáticas
           centralizam a coluna dentro desse espaço. */}

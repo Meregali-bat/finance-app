@@ -14,6 +14,17 @@ model User {
   id                 String              @id @default(cuid())
   email              String              @unique
   passwordHash       String
+  /// Como a pessoa quer ser chamada, na tela de Perfil. Nulo = não informado.
+  name               String?
+  /// A foto do perfil, já recortada e reduzida no navegador (256px, JPEG),
+  /// como data URL. Nulo = sem foto: o app mostra as iniciais.
+  avatar             String?
+  /// "light", "dark" ou "system", salvo na conta para valer em todo aparelho.
+  /// Nulo = nunca escolheu: vale o cookie do aparelho (src/lib/theme.ts).
+  theme              String?
+  /// A paleta de cores ("wine", "ocean", "forest", "graphite", "plum").
+  /// Nulo = nunca escolheu: vinho.
+  palette            String?
   incomes            Income[]
   incomeReceipts     IncomeReceipt[]
   fixedExpenses      FixedExpense[]

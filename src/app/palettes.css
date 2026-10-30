@@ -1,0 +1,346 @@
+/*
+ * As paletas além do vinho. Cada uma redefine os mesmos tokens de
+ * globals.css, nos dois modos de uma vez: light-dark() escolhe o valor pelo
+ * color-scheme que o modo (data-theme) já define lá — claro, escuro ou o do
+ * aparelho. Assim cada paleta é um bloco só, e não três.
+ *
+ * O seletor html:root[...] pesa mais que :root[data-theme=...]: a paleta
+ * vence o modo em qualquer ordem. O coral e o card "no vermelho" não mudam:
+ * são avisos, não a marca. Contraste: texto e destaque passam de 4,5:1 sobre
+ * o fundo e os cards nos dois modos; branco sobre a cor da marca (o botão)
+ * passa de 7:1.
+ */
+
+/* Oceano: fundo azul-petróleo, destaque azul-claro. O positivo segue turquesa, que lê verde ao lado do azul. */
+html:root[data-palette="ocean"] {
+  --ink-black: #05090c;
+  --coffee-bean: #0f161b;
+  --rich-mahogany: #0f1d26;
+  --rich-mahogany-2: #0e2533;
+  --rich-mahogany-3: #0c2d40;
+  --rich-mahogany-4: #0b3247;
+  --black-cherry: #0a364f;
+  --black-cherry-2: #083e5c;
+  --dark-garnet: #074466;
+  --dark-garnet-2: #064a70;
+  --brand-light: #0a5a85;
+  --background: light-dark(#f5f8fa, var(--ink-black));
+  --foreground: light-dark(#0f1e28, #e9f1f7);
+  --card-foreground: light-dark(#0f1e28, #e9f1f7);
+  --popover-foreground: light-dark(#0f1e28, #e9f1f7);
+  --secondary-foreground: light-dark(#0f1e28, #e9f1f7);
+  --accent-foreground: light-dark(#0f1e28, #e9f1f7);
+  --sidebar-foreground: light-dark(#0f1e28, #e9f1f7);
+  --sidebar-accent-foreground: light-dark(#0f1e28, #e9f1f7);
+  --card-elevated: light-dark(#edf3f7, var(--rich-mahogany));
+  --primary: light-dark(#1f5f8b, #8fc6ea);
+  --ring: light-dark(#1f5f8b, #8fc6ea);
+  --sidebar-primary: light-dark(#1f5f8b, #8fc6ea);
+  --sidebar-ring: light-dark(#1f5f8b, #8fc6ea);
+  --logo-ring: light-dark(#1f5f8b, #8fc6ea);
+  --toast-action: #8fc6ea;
+  --secondary: light-dark(#e3edf4, var(--rich-mahogany-2));
+  --accent: light-dark(#e3edf4, var(--rich-mahogany-2));
+  --sidebar-accent: light-dark(#e3edf4, var(--rich-mahogany-2));
+  --secondary-hover: light-dark(#d3e3ee, var(--rich-mahogany-3));
+  --muted: light-dark(#e9f1f6, var(--rich-mahogany));
+  --muted-foreground: light-dark(#4d6372, #9fb2bf);
+  --border: light-dark(rgb(15 30 40 / 10%), rgb(233 241 247 / 8%));
+  --sidebar-border: light-dark(rgb(15 30 40 / 10%), rgb(233 241 247 / 8%));
+  --input: light-dark(rgb(15 30 40 / 16%), rgb(233 241 247 / 12%));
+  --hairline: light-dark(rgb(15 30 40 / 0.09), rgb(233 241 247 / 0.08));
+  --hairline-strong: light-dark(rgb(15 30 40 / 0.16), rgb(233 241 247 / 0.16));
+  --track: light-dark(rgb(15 30 40 / 0.08), rgb(0 0 0 / 0.3));
+  --field: light-dark(rgb(15 30 40 / 0.03), rgb(0 0 0 / 0.25));
+  --chart-1: #4f9fd1;
+  --chart-3: #6cb6e6;
+  --chart-4: light-dark(#9fb2bf, #73858f);
+  --chart-5: light-dark(#d8e6ef, var(--rich-mahogany-3));
+  --chart-line: #cfe8f8;
+  --dot-ring: #0b3247;
+  --card-hover: light-dark(#f9fbfc, #131c22);
+  --toast: light-dark(#0f1e28, #17222a);
+  --toast-foreground: light-dark(#eef4f8, #e9f1f7);
+  --logo-dot: light-dark(#3aa0d8, #ffffff);
+  --glow-corner: light-dark(rgb(143 198 234 / 0.22), rgb(11 50 71 / 0.4));
+  --glow-float: light-dark(rgb(143 198 234 / 0.38), rgb(6 74 112 / 0.6));
+  --dots: light-dark(rgb(31 95 139 / 0.1), rgb(143 198 234 / 0.18));
+  --nav-surface: light-dark(rgb(255 255 255 / 0.78), rgb(15 22 27 / 0.75));
+  --sidebar-surface: light-dark(rgb(255 255 255 / 0.6), rgb(15 22 27 / 0.6));
+  --shadow-card: 0 1px 2px light-dark(rgb(15 35 50 / 0.06), rgb(0 0 0 / 0.4)), inset 0 0 0 1px light-dark(rgb(15 30 40 / 0.08), rgb(233 241 247 / 0.08)), inset 0 1px 0 light-dark(transparent, rgb(255 255 255 / 0.04));
+  --shadow-card-hover: 0 12px 28px -14px light-dark(rgb(15 35 50 / 0.28), rgb(0 0 0 / 0.8)), inset 0 0 0 1px light-dark(rgb(15 30 40 / 0.14), rgb(233 241 247 / 0.16));
+  --shadow-hero: 0 2px 4px light-dark(rgb(15 35 50 / 0.12), rgb(0 0 0 / 0.5)), 0 24px 60px -20px light-dark(rgb(15 35 50 / 0.45), rgb(0 0 0 / 0.9)), 0 0 0 1px light-dark(transparent, rgb(255 255 255 / 0.1)), inset 0 1px 0 rgb(255 255 255 / 0.12);
+  --shadow-panel: 0 2px 4px light-dark(rgb(15 35 50 / 0.06), rgb(0 0 0 / 0.5)), 0 24px 60px -22px light-dark(rgb(15 35 50 / 0.25), rgb(0 0 0 / 0.9)), inset 0 1px 0 light-dark(transparent, rgb(255 255 255 / 0.1)), inset 0 0 0 1px light-dark(rgb(15 30 40 / 0.06), rgb(233 241 247 / 0.06));
+  --shadow-cta: inset 0 1px 0 rgb(255 255 255 / 0.18), 0 0 0 1px light-dark(rgb(6 74 112 / 0.25), rgb(143 198 234 / 0.3)), 0 14px 34px -12px light-dark(rgb(6 74 112 / 0.45), rgb(0 0 0 / 0.8));
+  --cta-ring-hover: light-dark(rgb(31 95 139 / 0.45), rgb(143 198 234 / 0.55));
+  --hero-fg: light-dark(#0f1e28, #ffffff);
+  --hero-muted: light-dark(rgb(15 30 40 / 0.68), rgb(255 255 255 / 0.72));
+  --hero-faint: light-dark(rgb(15 30 40 / 0.66), rgb(255 255 255 / 0.66));
+  --hero-chip: light-dark(rgb(255 255 255 / 0.7), rgb(0 0 0 / 0.22));
+  --hero-line: light-dark(rgb(31 95 139 / 0.14), rgb(255 255 255 / 0.12));
+  --hero-dots: light-dark(rgb(31 95 139 / 0.16), rgb(255 255 255 / 0.18));
+  --hero-glow: light-dark(rgb(143 198 234 / 0.55), rgb(10 80 130 / 0.9));
+  --hero-bg: linear-gradient(145deg, light-dark(#ffffff, var(--black-cherry-2)) 0%, light-dark(#f0f6fa, var(--rich-mahogany-3)) 45%, light-dark(#dceaf3, var(--rich-mahogany)) 100%);
+  --hero-chart: light-dark(#1f5f8b, #cfe8f8);
+  --hero-dot-ring: light-dark(#ffffff, #0b3247);
+  --hero-ruler-past: light-dark(rgb(31 95 139 / 0.85), rgb(255 255 255 / 0.92));
+  --hero-ruler-today: light-dark(#2a6f9f, #cfe8f8);
+  --hero-ruler-future: light-dark(rgb(31 95 139 / 0.14), rgb(255 255 255 / 0.16));
+}
+
+/* Floresta: verde-musgo, destaque verde-sálvia. O positivo vira azul, para nunca se confundir com o verde da marca. */
+html:root[data-palette="forest"] {
+  --ink-black: #060a07;
+  --coffee-bean: #111912;
+  --rich-mahogany: #122114;
+  --rich-mahogany-2: #132a17;
+  --rich-mahogany-3: #14341a;
+  --rich-mahogany-4: #14391c;
+  --black-cherry: #143e1e;
+  --black-cherry-2: #134621;
+  --dark-garnet: #124c23;
+  --dark-garnet-2: #115225;
+  --brand-light: #186330;
+  --background: light-dark(#f6f9f5, var(--ink-black));
+  --foreground: light-dark(#142213, #ecf4ea);
+  --card-foreground: light-dark(#142213, #ecf4ea);
+  --popover-foreground: light-dark(#142213, #ecf4ea);
+  --secondary-foreground: light-dark(#142213, #ecf4ea);
+  --accent-foreground: light-dark(#142213, #ecf4ea);
+  --sidebar-foreground: light-dark(#142213, #ecf4ea);
+  --sidebar-accent-foreground: light-dark(#142213, #ecf4ea);
+  --card-elevated: light-dark(#eef4ec, var(--rich-mahogany));
+  --primary: light-dark(#2e6b2a, #a6d6a0);
+  --ring: light-dark(#2e6b2a, #a6d6a0);
+  --sidebar-primary: light-dark(#2e6b2a, #a6d6a0);
+  --sidebar-ring: light-dark(#2e6b2a, #a6d6a0);
+  --logo-ring: light-dark(#2e6b2a, #a6d6a0);
+  --toast-action: #a6d6a0;
+  --secondary: light-dark(#e4eee1, var(--rich-mahogany-2));
+  --accent: light-dark(#e4eee1, var(--rich-mahogany-2));
+  --sidebar-accent: light-dark(#e4eee1, var(--rich-mahogany-2));
+  --secondary-hover: light-dark(#d4e4cf, var(--rich-mahogany-3));
+  --muted: light-dark(#ebf2e8, var(--rich-mahogany));
+  --muted-foreground: light-dark(#556552, #a7b8a4);
+  --border: light-dark(rgb(20 34 19 / 10%), rgb(236 244 234 / 8%));
+  --sidebar-border: light-dark(rgb(20 34 19 / 10%), rgb(236 244 234 / 8%));
+  --input: light-dark(rgb(20 34 19 / 16%), rgb(236 244 234 / 12%));
+  --hairline: light-dark(rgb(20 34 19 / 0.09), rgb(236 244 234 / 0.08));
+  --hairline-strong: light-dark(rgb(20 34 19 / 0.16), rgb(236 244 234 / 0.16));
+  --track: light-dark(rgb(20 34 19 / 0.08), rgb(0 0 0 / 0.3));
+  --field: light-dark(rgb(20 34 19 / 0.03), rgb(0 0 0 / 0.25));
+  --chart-1: #5fa957;
+  --chart-3: #8fd486;
+  --chart-4: light-dark(#a7b8a4, #74846f);
+  --chart-5: light-dark(#d9e8d5, var(--rich-mahogany-3));
+  --chart-line: #d5efd0;
+  --dot-ring: #14391c;
+  --card-hover: light-dark(#fafcf9, #151e16);
+  --toast: light-dark(#142213, #1a241a);
+  --toast-foreground: light-dark(#eff6ed, #ecf4ea);
+  --positive: light-dark(#1b6aa8, #7cc0f0);
+  --toast-positive: #7cc0f0;
+  --chart-2: light-dark(#1b6aa8, #7cc0f0);
+  --logo-dot: light-dark(#5aa84f, #ffffff);
+  --glow-corner: light-dark(rgb(166 214 160 / 0.22), rgb(20 57 28 / 0.4));
+  --glow-float: light-dark(rgb(166 214 160 / 0.38), rgb(17 82 37 / 0.6));
+  --dots: light-dark(rgb(46 107 42 / 0.1), rgb(166 214 160 / 0.18));
+  --nav-surface: light-dark(rgb(255 255 255 / 0.78), rgb(17 25 18 / 0.75));
+  --sidebar-surface: light-dark(rgb(255 255 255 / 0.6), rgb(17 25 18 / 0.6));
+  --shadow-card: 0 1px 2px light-dark(rgb(20 40 20 / 0.06), rgb(0 0 0 / 0.4)), inset 0 0 0 1px light-dark(rgb(20 34 19 / 0.08), rgb(236 244 234 / 0.08)), inset 0 1px 0 light-dark(transparent, rgb(255 255 255 / 0.04));
+  --shadow-card-hover: 0 12px 28px -14px light-dark(rgb(20 40 20 / 0.28), rgb(0 0 0 / 0.8)), inset 0 0 0 1px light-dark(rgb(20 34 19 / 0.14), rgb(236 244 234 / 0.16));
+  --shadow-hero: 0 2px 4px light-dark(rgb(20 40 20 / 0.12), rgb(0 0 0 / 0.5)), 0 24px 60px -20px light-dark(rgb(20 40 20 / 0.45), rgb(0 0 0 / 0.9)), 0 0 0 1px light-dark(transparent, rgb(255 255 255 / 0.1)), inset 0 1px 0 rgb(255 255 255 / 0.12);
+  --shadow-panel: 0 2px 4px light-dark(rgb(20 40 20 / 0.06), rgb(0 0 0 / 0.5)), 0 24px 60px -22px light-dark(rgb(20 40 20 / 0.25), rgb(0 0 0 / 0.9)), inset 0 1px 0 light-dark(transparent, rgb(255 255 255 / 0.1)), inset 0 0 0 1px light-dark(rgb(20 34 19 / 0.06), rgb(236 244 234 / 0.06));
+  --shadow-cta: inset 0 1px 0 rgb(255 255 255 / 0.18), 0 0 0 1px light-dark(rgb(17 82 37 / 0.25), rgb(166 214 160 / 0.3)), 0 14px 34px -12px light-dark(rgb(17 82 37 / 0.45), rgb(0 0 0 / 0.8));
+  --cta-ring-hover: light-dark(rgb(46 107 42 / 0.45), rgb(166 214 160 / 0.55));
+  --hero-fg: light-dark(#142213, #ffffff);
+  --hero-muted: light-dark(rgb(20 34 19 / 0.68), rgb(255 255 255 / 0.72));
+  --hero-faint: light-dark(rgb(20 34 19 / 0.66), rgb(255 255 255 / 0.66));
+  --hero-chip: light-dark(rgb(255 255 255 / 0.7), rgb(0 0 0 / 0.22));
+  --hero-line: light-dark(rgb(46 107 42 / 0.14), rgb(255 255 255 / 0.12));
+  --hero-dots: light-dark(rgb(46 107 42 / 0.16), rgb(255 255 255 / 0.18));
+  --hero-glow: light-dark(rgb(166 214 160 / 0.55), rgb(24 110 45 / 0.9));
+  --hero-bg: linear-gradient(145deg, light-dark(#ffffff, var(--black-cherry-2)) 0%, light-dark(#f1f7ef, var(--rich-mahogany-3)) 45%, light-dark(#ddecd8, var(--rich-mahogany)) 100%);
+  --hero-chart: light-dark(#2e6b2a, #d5efd0);
+  --hero-dot-ring: light-dark(#ffffff, #14391c);
+  --hero-ruler-past: light-dark(rgb(46 107 42 / 0.85), rgb(255 255 255 / 0.92));
+  --hero-ruler-today: light-dark(#3a7d33, #d5efd0);
+  --hero-ruler-future: light-dark(rgb(46 107 42 / 0.14), rgb(255 255 255 / 0.16));
+}
+
+/* Grafite: cinza quase preto, sem matiz, e um âmbar discreto no destaque e no botão. */
+html:root[data-palette="graphite"] {
+  --ink-black: #09090a;
+  --coffee-bean: #161617;
+  --rich-mahogany: #1f1f21;
+  --rich-mahogany-2: #29292c;
+  --rich-mahogany-3: #333337;
+  --rich-mahogany-4: #38383c;
+  --black-cherry: #3d3d42;
+  --black-cherry-2: #444449;
+  --dark-garnet: #6e470e;
+  --dark-garnet-2: #7a4f10;
+  --brand-light: #8f5e15;
+  --background: light-dark(#f7f7f6, var(--ink-black));
+  --foreground: light-dark(#1c1c1e, #f2f1ef);
+  --card-foreground: light-dark(#1c1c1e, #f2f1ef);
+  --popover-foreground: light-dark(#1c1c1e, #f2f1ef);
+  --secondary-foreground: light-dark(#1c1c1e, #f2f1ef);
+  --accent-foreground: light-dark(#1c1c1e, #f2f1ef);
+  --sidebar-foreground: light-dark(#1c1c1e, #f2f1ef);
+  --sidebar-accent-foreground: light-dark(#1c1c1e, #f2f1ef);
+  --card-elevated: light-dark(#f0f0ef, var(--rich-mahogany));
+  --primary: light-dark(#8a5a0e, #f0c27a);
+  --ring: light-dark(#8a5a0e, #f0c27a);
+  --sidebar-primary: light-dark(#8a5a0e, #f0c27a);
+  --sidebar-ring: light-dark(#8a5a0e, #f0c27a);
+  --logo-ring: light-dark(#8a5a0e, #f0c27a);
+  --toast-action: #f0c27a;
+  --secondary: light-dark(#ececeb, var(--rich-mahogany-2));
+  --accent: light-dark(#ececeb, var(--rich-mahogany-2));
+  --sidebar-accent: light-dark(#ececeb, var(--rich-mahogany-2));
+  --secondary-hover: light-dark(#e0e0de, var(--rich-mahogany-3));
+  --muted: light-dark(#f0f0ef, var(--rich-mahogany));
+  --muted-foreground: light-dark(#5d5d60, #b0aeaa);
+  --border: light-dark(rgb(28 28 30 / 10%), rgb(242 241 239 / 8%));
+  --sidebar-border: light-dark(rgb(28 28 30 / 10%), rgb(242 241 239 / 8%));
+  --input: light-dark(rgb(28 28 30 / 16%), rgb(242 241 239 / 12%));
+  --hairline: light-dark(rgb(28 28 30 / 0.09), rgb(242 241 239 / 0.08));
+  --hairline-strong: light-dark(rgb(28 28 30 / 0.16), rgb(242 241 239 / 0.16));
+  --track: light-dark(rgb(28 28 30 / 0.08), rgb(0 0 0 / 0.3));
+  --field: light-dark(rgb(28 28 30 / 0.03), rgb(0 0 0 / 0.25));
+  --chart-1: #c9963f;
+  --chart-3: #f0c27a;
+  --chart-4: light-dark(#b0aeaa, #85837f);
+  --chart-5: light-dark(#e6e5e3, var(--rich-mahogany-3));
+  --chart-line: #f6dfb5;
+  --dot-ring: #38383c;
+  --card-hover: light-dark(#fbfbfa, #1b1b1c);
+  --toast: light-dark(#1c1c1e, #222224);
+  --toast-foreground: light-dark(#f4f4f3, #f2f1ef);
+  --logo-dot: light-dark(#d99a2b, #ffffff);
+  --glow-corner: light-dark(rgb(240 194 122 / 0.22), rgb(56 56 60 / 0.4));
+  --glow-float: light-dark(rgb(240 194 122 / 0.38), rgb(92 60 12 / 0.6));
+  --dots: light-dark(rgb(138 90 14 / 0.1), rgb(240 194 122 / 0.18));
+  --nav-surface: light-dark(rgb(255 255 255 / 0.78), rgb(22 22 23 / 0.75));
+  --sidebar-surface: light-dark(rgb(255 255 255 / 0.6), rgb(22 22 23 / 0.6));
+  --shadow-card: 0 1px 2px light-dark(rgb(20 20 22 / 0.06), rgb(0 0 0 / 0.4)), inset 0 0 0 1px light-dark(rgb(28 28 30 / 0.08), rgb(242 241 239 / 0.08)), inset 0 1px 0 light-dark(transparent, rgb(255 255 255 / 0.04));
+  --shadow-card-hover: 0 12px 28px -14px light-dark(rgb(20 20 22 / 0.28), rgb(0 0 0 / 0.8)), inset 0 0 0 1px light-dark(rgb(28 28 30 / 0.14), rgb(242 241 239 / 0.16));
+  --shadow-hero: 0 2px 4px light-dark(rgb(20 20 22 / 0.12), rgb(0 0 0 / 0.5)), 0 24px 60px -20px light-dark(rgb(20 20 22 / 0.45), rgb(0 0 0 / 0.9)), 0 0 0 1px light-dark(transparent, rgb(255 255 255 / 0.1)), inset 0 1px 0 rgb(255 255 255 / 0.12);
+  --shadow-panel: 0 2px 4px light-dark(rgb(20 20 22 / 0.06), rgb(0 0 0 / 0.5)), 0 24px 60px -22px light-dark(rgb(20 20 22 / 0.25), rgb(0 0 0 / 0.9)), inset 0 1px 0 light-dark(transparent, rgb(255 255 255 / 0.1)), inset 0 0 0 1px light-dark(rgb(28 28 30 / 0.06), rgb(242 241 239 / 0.06));
+  --shadow-cta: inset 0 1px 0 rgb(255 255 255 / 0.18), 0 0 0 1px light-dark(rgb(122 79 16 / 0.25), rgb(240 194 122 / 0.3)), 0 14px 34px -12px light-dark(rgb(122 79 16 / 0.45), rgb(0 0 0 / 0.8));
+  --cta-ring-hover: light-dark(rgb(138 90 14 / 0.45), rgb(240 194 122 / 0.55));
+  --hero-fg: light-dark(#1c1c1e, #ffffff);
+  --hero-muted: light-dark(rgb(28 28 30 / 0.68), rgb(255 255 255 / 0.72));
+  --hero-faint: light-dark(rgb(28 28 30 / 0.66), rgb(255 255 255 / 0.66));
+  --hero-chip: light-dark(rgb(255 255 255 / 0.7), rgb(0 0 0 / 0.22));
+  --hero-line: light-dark(rgb(138 90 14 / 0.14), rgb(255 255 255 / 0.12));
+  --hero-dots: light-dark(rgb(138 90 14 / 0.16), rgb(255 255 255 / 0.18));
+  --hero-glow: light-dark(rgb(240 194 122 / 0.55), rgb(122 79 16 / 0.9));
+  --hero-bg: linear-gradient(145deg, light-dark(#ffffff, var(--black-cherry-2)) 0%, light-dark(#f7f6f4, var(--rich-mahogany-3)) 45%, light-dark(#ecebe8, var(--rich-mahogany)) 100%);
+  --hero-chart: light-dark(#8a5a0e, #f6dfb5);
+  --hero-dot-ring: light-dark(#ffffff, #38383c);
+  --hero-ruler-past: light-dark(rgb(138 90 14 / 0.85), rgb(255 255 255 / 0.92));
+  --hero-ruler-today: light-dark(#9c6510, #f6dfb5);
+  --hero-ruler-future: light-dark(rgb(138 90 14 / 0.14), rgb(255 255 255 / 0.16));
+}
+
+/* Ameixa: berinjela escura, destaque lilás. */
+html:root[data-palette="plum"] {
+  --ink-black: #0b070c;
+  --coffee-bean: #18101a;
+  --rich-mahogany: #221226;
+  --rich-mahogany-2: #2c1332;
+  --rich-mahogany-3: #36143e;
+  --rich-mahogany-4: #3c1445;
+  --black-cherry: #42144c;
+  --black-cherry-2: #4c1458;
+  --dark-garnet: #521460;
+  --dark-garnet-2: #581466;
+  --brand-light: #6b1a7b;
+  --background: light-dark(#faf7fb, var(--ink-black));
+  --foreground: light-dark(#23122a, #f4ecf6);
+  --card-foreground: light-dark(#23122a, #f4ecf6);
+  --popover-foreground: light-dark(#23122a, #f4ecf6);
+  --secondary-foreground: light-dark(#23122a, #f4ecf6);
+  --accent-foreground: light-dark(#23122a, #f4ecf6);
+  --sidebar-foreground: light-dark(#23122a, #f4ecf6);
+  --sidebar-accent-foreground: light-dark(#23122a, #f4ecf6);
+  --card-elevated: light-dark(#f5eef7, var(--rich-mahogany));
+  --primary: light-dark(#7a2d93, #d9a8ec);
+  --ring: light-dark(#7a2d93, #d9a8ec);
+  --sidebar-primary: light-dark(#7a2d93, #d9a8ec);
+  --sidebar-ring: light-dark(#7a2d93, #d9a8ec);
+  --logo-ring: light-dark(#7a2d93, #d9a8ec);
+  --toast-action: #d9a8ec;
+  --secondary: light-dark(#f0e5f3, var(--rich-mahogany-2));
+  --accent: light-dark(#f0e5f3, var(--rich-mahogany-2));
+  --sidebar-accent: light-dark(#f0e5f3, var(--rich-mahogany-2));
+  --secondary-hover: light-dark(#e5d3ea, var(--rich-mahogany-3));
+  --muted: light-dark(#f3eaf5, var(--rich-mahogany));
+  --muted-foreground: light-dark(#6b5373, #b8a4bf);
+  --border: light-dark(rgb(35 18 42 / 10%), rgb(244 236 246 / 8%));
+  --sidebar-border: light-dark(rgb(35 18 42 / 10%), rgb(244 236 246 / 8%));
+  --input: light-dark(rgb(35 18 42 / 16%), rgb(244 236 246 / 12%));
+  --hairline: light-dark(rgb(35 18 42 / 0.09), rgb(244 236 246 / 0.08));
+  --hairline-strong: light-dark(rgb(35 18 42 / 0.16), rgb(244 236 246 / 0.16));
+  --track: light-dark(rgb(35 18 42 / 0.08), rgb(0 0 0 / 0.3));
+  --field: light-dark(rgb(35 18 42 / 0.03), rgb(0 0 0 / 0.25));
+  --chart-1: #b06fcf;
+  --chart-3: #d58cf0;
+  --chart-4: light-dark(#b8a4bf, #85738c);
+  --chart-5: light-dark(#ebdcf0, var(--rich-mahogany-3));
+  --chart-line: #f0d6fa;
+  --dot-ring: #3c1445;
+  --card-hover: light-dark(#fcf9fd, #1e1520);
+  --toast: light-dark(#23122a, #26192a);
+  --toast-foreground: light-dark(#f8f0fa, #f4ecf6);
+  --logo-dot: light-dark(#b05ad0, #ffffff);
+  --glow-corner: light-dark(rgb(217 168 236 / 0.22), rgb(60 20 69 / 0.4));
+  --glow-float: light-dark(rgb(217 168 236 / 0.38), rgb(88 20 102 / 0.6));
+  --dots: light-dark(rgb(122 45 147 / 0.1), rgb(217 168 236 / 0.18));
+  --nav-surface: light-dark(rgb(255 255 255 / 0.78), rgb(24 16 26 / 0.75));
+  --sidebar-surface: light-dark(rgb(255 255 255 / 0.6), rgb(24 16 26 / 0.6));
+  --shadow-card: 0 1px 2px light-dark(rgb(45 20 50 / 0.06), rgb(0 0 0 / 0.4)), inset 0 0 0 1px light-dark(rgb(35 18 42 / 0.08), rgb(244 236 246 / 0.08)), inset 0 1px 0 light-dark(transparent, rgb(255 255 255 / 0.04));
+  --shadow-card-hover: 0 12px 28px -14px light-dark(rgb(45 20 50 / 0.28), rgb(0 0 0 / 0.8)), inset 0 0 0 1px light-dark(rgb(35 18 42 / 0.14), rgb(244 236 246 / 0.16));
+  --shadow-hero: 0 2px 4px light-dark(rgb(45 20 50 / 0.12), rgb(0 0 0 / 0.5)), 0 24px 60px -20px light-dark(rgb(45 20 50 / 0.45), rgb(0 0 0 / 0.9)), 0 0 0 1px light-dark(transparent, rgb(255 255 255 / 0.1)), inset 0 1px 0 rgb(255 255 255 / 0.12);
+  --shadow-panel: 0 2px 4px light-dark(rgb(45 20 50 / 0.06), rgb(0 0 0 / 0.5)), 0 24px 60px -22px light-dark(rgb(45 20 50 / 0.25), rgb(0 0 0 / 0.9)), inset 0 1px 0 light-dark(transparent, rgb(255 255 255 / 0.1)), inset 0 0 0 1px light-dark(rgb(35 18 42 / 0.06), rgb(244 236 246 / 0.06));
+  --shadow-cta: inset 0 1px 0 rgb(255 255 255 / 0.18), 0 0 0 1px light-dark(rgb(88 20 102 / 0.25), rgb(217 168 236 / 0.3)), 0 14px 34px -12px light-dark(rgb(88 20 102 / 0.45), rgb(0 0 0 / 0.8));
+  --cta-ring-hover: light-dark(rgb(122 45 147 / 0.45), rgb(217 168 236 / 0.55));
+  --hero-fg: light-dark(#23122a, #ffffff);
+  --hero-muted: light-dark(rgb(35 18 42 / 0.68), rgb(255 255 255 / 0.72));
+  --hero-faint: light-dark(rgb(35 18 42 / 0.66), rgb(255 255 255 / 0.66));
+  --hero-chip: light-dark(rgb(255 255 255 / 0.7), rgb(0 0 0 / 0.22));
+  --hero-line: light-dark(rgb(122 45 147 / 0.14), rgb(255 255 255 / 0.12));
+  --hero-dots: light-dark(rgb(122 45 147 / 0.16), rgb(255 255 255 / 0.18));
+  --hero-glow: light-dark(rgb(217 168 236 / 0.55), rgb(110 22 130 / 0.9));
+  --hero-bg: linear-gradient(145deg, light-dark(#ffffff, var(--black-cherry-2)) 0%, light-dark(#f8f0fa, var(--rich-mahogany-3)) 45%, light-dark(#eedcf3, var(--rich-mahogany)) 100%);
+  --hero-chart: light-dark(#7a2d93, #f0d6fa);
+  --hero-dot-ring: light-dark(#ffffff, #3c1445);
+  --hero-ruler-past: light-dark(rgb(122 45 147 / 0.85), rgb(255 255 255 / 0.92));
+  --hero-ruler-today: light-dark(#8a3aa5, #f0d6fa);
+  --hero-ruler-future: light-dark(rgb(122 45 147 / 0.14), rgb(255 255 255 / 0.16));
+}
+
+/*
+ * Dia apertado nas outras paletas: a mesma ideia do vinho (a cor da marca
+ * baixa a voz e desce para um tom queimado), feita com os tokens de cada
+ * paleta em vez dos tons de vinho escritos à mão em globals.css.
+ */
+html:root[data-palette]:not([data-palette="wine"]) .hero-surface[data-tone="tight"] {
+  --hero-chip: light-dark(rgb(255 255 255 / 0.65), rgb(0 0 0 / 0.2));
+  --hero-line: light-dark(color-mix(in srgb, var(--primary) 12%, transparent), rgb(255 255 255 / 0.1));
+  --hero-dots: light-dark(color-mix(in srgb, var(--primary) 8%, transparent), rgb(255 255 255 / 0.09));
+  --hero-glow: light-dark(color-mix(in srgb, var(--primary) 12%, transparent), color-mix(in srgb, var(--brand) 40%, transparent));
+  --hero-bg: linear-gradient(
+    145deg,
+    light-dark(#ffffff, color-mix(in oklab, var(--black-cherry-2) 50%, #262626)) 0%,
+    light-dark(var(--card-elevated), color-mix(in oklab, var(--rich-mahogany-2) 50%, #1d1d1d)) 45%,
+    light-dark(var(--muted), color-mix(in oklab, var(--rich-mahogany) 50%, #151515)) 100%
+  );
+  --hero-chart: light-dark(color-mix(in oklab, var(--primary) 85%, #555555), color-mix(in oklab, var(--chart-line) 75%, #999999));
+  --hero-dot-ring: light-dark(#ffffff, color-mix(in oklab, var(--rich-mahogany-2) 50%, #1d1d1d));
+  --hero-ruler-past: light-dark(color-mix(in srgb, var(--primary) 85%, transparent), rgb(255 255 255 / 0.85));
+  --hero-ruler-today: light-dark(var(--primary), color-mix(in oklab, var(--chart-line) 75%, #999999));
+  --hero-ruler-future: light-dark(color-mix(in srgb, var(--primary) 14%, transparent), rgb(255 255 255 / 0.14));
+}

@@ -15,8 +15,7 @@ import { SectionLabel } from "@/components/page-header";
 import { CountUpCurrency } from "@/components/ui/animated-number";
 import { DayRuler } from "@/components/day-ruler";
 import { Logo } from "@/components/logo";
-import { ThemeCycleButton } from "@/components/theme-toggle";
-import { currentTheme } from "@/lib/theme-server";
+import { UserAvatar } from "@/components/user-avatar";
 import { MovementFormDialog } from "@/components/forms/movement-form-dialog";
 import { toMovementValues } from "@/lib/history-item";
 import { markCardBillPaid, markFixedExpensePaid } from "@/lib/actions/expense-payment";
@@ -92,13 +91,16 @@ export default async function DashboardPage() {
   const userId = await requireUserId();
   const today = new Date();
 
-  const [inputs, categories, theme] = await Promise.all([
+  const [inputs, categories, profile] = await Promise.all([
     loadBudgetInputs(userId),
     prisma.category.findMany({
       where: { userId, active: true },
       orderBy: { name: "asc" },
     }),
-    currentTheme(),
+    prisma.user.findUniqueOrThrow({
+      where: { id: userId },
+      select: { name: true, email: true, avatar: true },
+    }),
   ]);
   const tomorrow = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
   // As compras no cartão de hoje e de amanhã, com o que a lista precisa
@@ -414,9 +416,21 @@ export default async function DashboardPage() {
       {/* Celular: o logo no topo, já que a barra lateral não existe ali. */}
       <header className="rise-in flex items-center justify-between gap-4 lg:hidden" style={rise(0)}>
         <Logo size="sm" />
-        <div className="-mr-2.5 flex items-center gap-1">
+        <div className="-mr-1 flex items-center gap-2">
           <p className="text-[13px] font-medium text-muted-foreground">{shortHeading(today)}</p>
-          <ThemeCycleButton initial={theme} />
+          {/* O Perfil (nome, foto e tema) não tem lugar na barra inferior: entra pela foto. */}
+          <Link
+            href="/perfil"
+            aria-label="Perfil e aparência"
+            className="flex size-11 items-center justify-center rounded-full transition-transform duration-150 active:scale-[0.92]"
+          >
+            <UserAvatar
+              name={profile.name}
+              email={profile.email}
+              src={profile.avatar}
+              className="size-9"
+            />
+          </Link>
         </div>
       </header>
       <header className="rise-in hidden items-end justify-between gap-4 lg:flex" style={rise(0)}>
