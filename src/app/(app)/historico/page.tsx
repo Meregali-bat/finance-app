@@ -235,7 +235,8 @@ export default async function HistoryPage({
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="lancamentos" className="pt-4">
+          {/* Montada mesmo escondida: trocar de aba apagava a busca e os filtros. */}
+          <TabsContent value="lancamentos" keepMounted className="pt-4">
             {items.length === 0 ? (
               <EmptyState text="Nenhum lançamento neste período." />
             ) : (

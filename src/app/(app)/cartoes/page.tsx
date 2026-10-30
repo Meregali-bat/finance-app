@@ -146,7 +146,8 @@ export default async function CardsPage() {
               <Link
                 key={card.id}
                 href={`/cartoes/${card.id}`}
-                className="group/card rise-in flex h-full flex-col gap-3.5 rounded-[22px] p-[18px] text-white shadow-[inset_0_0_0_1px_rgb(255_255_255/0.09),0_1px_2px_rgb(0_0_0/0.4)] transition-transform duration-150 ease-out-quint hover:-translate-y-0.5 active:scale-[0.98]"
+                aria-label={`${card.name}${nextBill ? `, próxima fatura ${formatCurrency(Math.max(0, nextBill.amount - (nextBill.partialPaid ?? 0)))}, ${overdue ? "venceu" : "vence"} ${formatDate(nextBill.dueDate)}` : ", sem fatura em aberto"}`}
+                className="group/card rise-in flex h-full flex-col gap-3.5 rounded-[22px] p-[18px] text-white outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground shadow-[inset_0_0_0_1px_rgb(255_255_255/0.09),0_1px_2px_rgb(0_0_0/0.4)] transition-transform duration-150 ease-out-quint hover:-translate-y-0.5 active:scale-[0.98]"
                 style={{ background: cardSurface(card.id, card.style), ...stagger(index, 80, 60) }}
               >
                 <div className="flex items-start justify-between gap-3">
@@ -190,10 +191,10 @@ export default async function CardsPage() {
                         que ainda recebe compras. */}
                     <p className="text-xs text-white/85 tabular-nums">
                       {overdue
-                        ? `venceu ${formatDate(nextBill.dueDate)}`
+                        ? `Venceu ${formatDate(nextBill.dueDate)}`
                         : billOpen
-                          ? `vence ${formatDate(nextBill.dueDate)} · aberta, fecha ${formatDate(nextBill.cycleEnd)}`
-                          : `vence ${formatDate(nextBill.dueDate)} · fechada`}
+                          ? `Vence ${formatDate(nextBill.dueDate)} · aberta, fecha ${formatDate(nextBill.cycleEnd)}`
+                          : `Vence ${formatDate(nextBill.dueDate)} · fechada`}
                     </p>
                   </div>
                 ) : (

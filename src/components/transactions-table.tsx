@@ -47,9 +47,17 @@ const incoming = (item: HistoryItem) =>
   item.amount < 0 && item.kind !== "jarDeposit" && item.kind !== "cardBillAdjustment";
 /** Guardar e resgatar só trocam o dinheiro de lugar: não são entrada nem saída. */
 const transfer = (item: HistoryItem) => item.kind === "jarDeposit";
+/**
+ * A fatura paga: o dinheiro sai da conta, mas as compras dela já contam uma a
+ * uma. Vista como mais uma saída, ela somava duas vezes na cabeça de quem lê.
+ */
+const billPayment = (item: HistoryItem) => item.kind === "cardBillPayment";
 
 /** Por que a linha não se edita aqui, e de onde ela vem. */
 const ORIGIN: Partial<Record<HistoryItem["kind"], string>> = {
+  cardBillPayment: "fatura paga; as compras dela já contam uma a uma",
+  fixedExpensePayment: "conta fixa paga",
+  incomeReceipt: "renda confirmada",
   cardFixedExpense: "assinatura no cartão, edite em Fixos",
   cardEstimate: "previsão na fatura, edite no cartão",
   cardBillAdjustment: "diferença da fatura paga",
@@ -63,6 +71,8 @@ function rowNote(item: HistoryItem) {
         ? `parcela ${item.installmentNumber}/${item.installments}`
         : `em ${item.installments}x`
       : null,
+    // A data da linha é a da compra; a fatura que cobra a parcela vem aqui.
+    item.kind === "card" && item.installmentNumber ? `fatura ${billDayLabel(item.date)}` : null,
     item.lentTo ? `emprestado a ${item.lentTo}` : null,
     ORIGIN[item.kind] ?? null,
   ]
@@ -78,6 +88,9 @@ const storedInUtc = (item: HistoryItem) =>
 /** "2026-10-21", o dia que a linha mostra: a ordem por data segue ele, e não
  *  o instante, que mistura meia-noite UTC com hora local. */
 function shownDayKey(item: HistoryItem) {
+  // A compra no cartão pelo dia em que foi feita, como no calendário: pelo
+  // vencimento, doze compras de setembro liam todas "25/09".
+  if (item.kind === "card" && item.purchaseDate) return item.purchaseDate.toISOString().slice(0, 10);
   const d = item.date;
   return storedInUtc(item)
     ? d.toISOString().slice(0, 10)
@@ -85,13 +98,17 @@ function shownDayKey(item: HistoryItem) {
 }
 
 function dayLabel(item: HistoryItem) {
-  const utc = storedInUtc(item);
   return new Intl.DateTimeFormat("pt-BR", {
     day: "2-digit",
     month: "2-digit",
     year: "2-digit",
-    timeZone: utc ? "UTC" : undefined,
-  }).format(item.date);
+    timeZone: "UTC",
+  }).format(new Date(`${shownDayKey(item)}T00:00:00.000Z`));
+}
+
+/** "25/10": o vencimento da fatura, um instante local. */
+function billDayLabel(date: Date) {
+  return new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit" }).format(date);
 }
 
 /** "2026-10-21" → "21 de out", lido como dia de calendário. */
@@ -102,6 +119,7 @@ function dayChipLabel(key: string) {
 }
 
 function accountOf(item: HistoryItem) {
+  if (item.kind === "cardBillPayment" && item.cardName) return `Conta → ${item.cardName}`;
   if (item.cardName) return item.cardName;
   // O sentido, que o valor sem sinal não diz: guardar tira da conta, resgatar põe.
   if (item.kind === "jarDeposit") return item.amount < 0 ? "Caixinha → Conta" : "Conta → Caixinha";
@@ -163,7 +181,8 @@ export function TransactionsTable({
       if (day && itemDayKey(item) !== day) return false;
       if (q && !item.description.toLocaleLowerCase("pt-BR").includes(q)) return false;
       if (direction === "in" && (!incoming(item) || transfer(item))) return false;
-      if (direction === "out" && (incoming(item) || transfer(item))) return false;
+      if (direction === "out" && (incoming(item) || transfer(item) || billPayment(item)))
+        return false;
       if (direction === "jar" && !transfer(item)) return false;
       if (category === NONE && item.categoryId) return false;
       if (category !== ALL && category !== NONE && item.categoryId !== category) return false;
@@ -189,7 +208,10 @@ export function TransactionsTable({
   const totals = useMemo(() => {
     const received = filtered.filter(incoming).reduce((sum, i) => sum - i.amount, 0);
     const spent = filtered.filter(countsAsSpending).reduce((sum, i) => sum + i.amount, 0);
-    return { received, spent, result: received - spent };
+    const jars = filtered.filter(transfer);
+    const saved = jars.filter((i) => i.amount > 0).reduce((sum, i) => sum + i.amount, 0);
+    const withdrawn = jars.filter((i) => i.amount < 0).reduce((sum, i) => sum - i.amount, 0);
+    return { received, spent, result: received - spent, saved, withdrawn };
   }, [filtered]);
 
   // Só o que está na lista filtrada conta como selecionado: uma seleção feita
@@ -340,6 +362,7 @@ export function TransactionsTable({
       return (
         <DeleteIconButton
           undo
+          itemLabel={item.description}
           action={unmarkIncomeReceived.bind(null, item.incomeId, item.date)}
           confirmMessage={`Desfazer o recebimento de "${item.description}"? O lembrete volta a aparecer no início.`}
         />
@@ -349,6 +372,7 @@ export function TransactionsTable({
       return (
         <DeleteIconButton
           undo
+          itemLabel={item.description}
           action={unmarkExpensePayment.bind(null, item.id)}
           confirmMessage={`Desfazer o pagamento de "${item.description}"? O lembrete volta a aparecer no início.`}
         />
@@ -358,10 +382,10 @@ export function TransactionsTable({
   }
 
   function amount(item: HistoryItem) {
-    if (transfer(item))
+    if (transfer(item) || billPayment(item))
       return (
         <span className="font-semibold text-muted-foreground tabular-nums">
-          {item.amount < 0 ? "+" : "−"}
+          {item.amount < 0 ? "+" : billPayment(item) ? "" : "−"}
           {formatCurrency(Math.abs(item.amount))}
         </span>
       );
@@ -712,20 +736,39 @@ export function TransactionsTable({
 
           {/* Totais do que está filtrado e páginas. */}
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <p className="flex flex-wrap gap-x-4 gap-y-1 text-[13px] text-muted-foreground tabular-nums">
-              <span>
-                Entradas <b className="text-positive">{formatCurrency(totals.received)}</b>
-              </span>
-              <span>
-                Saídas <b className="text-foreground">{formatCurrency(totals.spent)}</b>
-              </span>
-              <span>
-                Entradas − saídas{" "}
-                <b className={totals.result < 0 ? "text-negative" : "text-foreground"}>
-                  {formatCurrency(totals.result)}
-                </b>
-              </span>
-            </p>
+            {/* Só caixinhas: entrada e saída dariam zero; o que importa é o
+                que foi guardado e resgatado, como na nota do Saldo. */}
+            {direction === "jar" ? (
+              <p className="flex flex-wrap gap-x-4 gap-y-1 text-[13px] text-muted-foreground tabular-nums">
+                <span>
+                  Guardado <b className="text-foreground">{formatCurrency(totals.saved)}</b>
+                </span>
+                <span>
+                  Resgatado <b className="text-foreground">{formatCurrency(totals.withdrawn)}</b>
+                </span>
+                <span>
+                  Ficou nas caixinhas{" "}
+                  <b className="text-foreground">
+                    {formatCurrency(totals.saved - totals.withdrawn)}
+                  </b>
+                </span>
+              </p>
+            ) : (
+              <p className="flex flex-wrap gap-x-4 gap-y-1 text-[13px] text-muted-foreground tabular-nums">
+                <span>
+                  Entradas <b className="text-positive">{formatCurrency(totals.received)}</b>
+                </span>
+                <span>
+                  Saídas <b className="text-foreground">{formatCurrency(totals.spent)}</b>
+                </span>
+                <span>
+                  Entradas − saídas{" "}
+                  <b className={totals.result < 0 ? "text-negative" : "text-foreground"}>
+                    {formatCurrency(totals.result)}
+                  </b>
+                </span>
+              </p>
+            )}
             {pages > 1 && (
               <div className="flex items-center gap-1 self-end">
                 <button

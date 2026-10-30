@@ -11,6 +11,7 @@ export function DeleteIconButton({
   confirmMessage,
   className,
   undo = false,
+  itemLabel,
 }: {
   action: () => Promise<void>;
   confirmMessage: string;
@@ -18,6 +19,9 @@ export function DeleteIconButton({
   /** Desfazer uma marcação (pagamento, recebimento), e não apagar: outra
    *  palavra, outro ícone, e o botão de confirmar sem o tom de perigo. */
   undo?: boolean;
+  /** O que a linha é: entra no nome do botão, para três "Desfazer" seguidos
+   *  não soarem iguais no leitor de tela. */
+  itemLabel?: string;
 }) {
   const verb = undo ? "Desfazer" : "Excluir";
   const [open, setOpen] = useState(false);
@@ -30,8 +34,8 @@ export function DeleteIconButton({
     <>
       <button
         type="button"
-        aria-label={verb}
-        title={verb}
+        aria-label={itemLabel ? `${verb}: ${itemLabel}` : verb}
+        title={undo ? "Desfazer pagamento" : verb}
         disabled={isPending}
         onClick={() => setOpen(true)}
         className={iconButton({ tone: "ghost", size: "sm", className })}

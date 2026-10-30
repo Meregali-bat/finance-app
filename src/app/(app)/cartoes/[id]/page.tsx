@@ -168,17 +168,29 @@ export default async function CardDetailPage({ params }: { params: Promise<{ id:
 
   // O seletor do formulário só oferece vencimentos de verdade: uma data
   // qualquer não casaria com fatura alguma e a previsão sumiria em silêncio.
-  const dueDateOptions = projectedBills.map((bill) => ({
-    value: bill.dueDateIso,
-    label: formatDate(bill.dueDate),
-  }));
+  // As já pagas ficam de fora: prever numa fatura quitada não muda nada.
+  const dueDateOptions = projectedBills
+    .filter((bill) => !bill.paid)
+    .map((bill) => ({ value: bill.dueDateIso, label: formatDate(bill.dueDate) }));
 
-  const listedEstimates = card.billEstimates.map((e) => ({
-    id: e.id,
-    description: e.description,
-    dueDate: e.dueDate,
-    amount: Number(e.amount),
-  }));
+  const listedEstimates = card.billEstimates.map((e) => {
+    // As compras lançadas depois da previsão que caem na fatura dela.
+    const bill = cardBills.find((b) => b.dueDate.getTime() === storedDay(e.dueDate).getTime());
+    const later = bill
+      ? purchaseSlices
+          .filter(({ purchase }) => purchase.createdAt && purchase.createdAt > e.createdAt)
+          .flatMap(({ slices }) => slices)
+          .filter((s) => s.cycleEnd.getTime() === bill.cycleEnd.getTime())
+          .reduce((sum, s) => sum + s.amount, 0)
+      : 0;
+    return {
+      id: e.id,
+      description: e.description,
+      dueDate: e.dueDate,
+      amount: Number(e.amount),
+      ...(later + 0.005 >= Number(e.amount) ? { doubled: later } : {}),
+    };
+  });
 
   // As mais recentes à vista; o resto recolhido. Com mais de cem compras, a
   // lista empurrava as faturas para muito longe no celular.
@@ -305,7 +317,7 @@ export default async function CardDetailPage({ params }: { params: Promise<{ id:
             </>
           ) : (
             <p className="text-[13px] text-muted-foreground">
-              Informe o limite no lápis acima para acompanhar quanto já está comprometido.
+              Informe o limite em Editar cartão (o lápis acima) para acompanhar quanto já está comprometido.
             </p>
           )}
         </div>
@@ -316,7 +328,13 @@ export default async function CardDetailPage({ params }: { params: Promise<{ id:
         style={{ "--rise-delay": "140ms" } as React.CSSProperties}
       >
         <CardPurchaseFormDialog cardId={card.id} categories={categoryOptions} />
-        <CardBillEstimateDialog cardId={card.id} dueDates={dueDateOptions} />
+        <CardBillEstimateDialog
+          cardId={card.id}
+          dueDates={dueDateOptions}
+          // A próxima fatura em aberto, e não a primeira da lista, que pode
+          // ser uma vencida.
+          defaultDueDate={nextBill?.dueDate.toISOString()}
+        />
       </div>
 
       <div className="grid items-start gap-6 xl:grid-cols-2">
