@@ -21,6 +21,7 @@ import { cn } from "@/lib/utils";
 const MODES: { value: RangeMode; label: string }[] = [
   { value: "hoje", label: "Hoje" },
   { value: "semana", label: "Semana" },
+  { value: "ciclo", label: "Ciclo" },
   { value: "mes", label: "Mês" },
   { value: "custom", label: "Personalizado" },
 ];
@@ -42,7 +43,15 @@ const ARROW_CLASS =
  * seletor. O período mora inteiro na URL, então navegar é só trocar de link —
  * o botão voltar e um link compartilhado continuam funcionando.
  */
-export function PeriodPicker({ range }: { range: ResolvedRange }) {
+export function PeriodPicker({
+  range,
+  cycles = false,
+}: {
+  range: ResolvedRange;
+  /** Há renda que marca ciclo: o modo "Ciclo" (de um pagamento ao outro) aparece. */
+  cycles?: boolean;
+}) {
+  const modes = MODES.filter((m) => cycles || m.value !== "ciclo");
   const router = useRouter();
   // O período novo leva um tempo para chegar: o rótulo esmaece até lá, para o
   // toque em "Aplicar" não parecer ignorado.
@@ -73,7 +82,7 @@ export function PeriodPicker({ range }: { range: ResolvedRange }) {
       hrefFor(
         mode === "custom"
           ? { range: "custom", from: String(from), to: String(to) }
-          // Semana e mês sem âncora: escolher o modo leva ao período corrente,
+          // Semana, ciclo e mês sem âncora: escolher o modo leva ao período corrente,
           // e as setas é que andam a partir dali.
           : { range: mode },
       ),
@@ -124,9 +133,17 @@ export function PeriodPicker({ range }: { range: ResolvedRange }) {
             className="flex flex-col gap-4"
           >
             {/* 2×2 no celular: em quatro colunas sobram ~80px por botão e
-                "Personalizado" trunca. */}
-            <div className="grid grid-cols-2 gap-1 rounded-xl bg-muted p-1 sm:grid-cols-4">
-              {MODES.map((option) => (
+                "Personalizado" trunca. Com o ciclo, 3 + 2, e o último ocupa
+                o espaço que sobra na segunda linha. */}
+            <div
+              className={cn(
+                "grid gap-1 rounded-xl bg-muted p-1",
+                modes.length === 5
+                  ? "grid-cols-3 sm:grid-cols-5 [&>:last-child]:col-span-2 sm:[&>:last-child]:col-span-1"
+                  : "grid-cols-2 sm:grid-cols-4",
+              )}
+            >
+              {modes.map((option) => (
                 <button
                   key={option.value}
                   type="button"

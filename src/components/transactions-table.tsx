@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import {
   ArrowDown,
@@ -15,14 +15,19 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ChoiceSelect } from "@/components/ui/choice-select";
-import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { iconButton } from "@/components/ui/icon-button";
 import { homeCard } from "@/components/home-card";
 import { MovementFormDialog } from "@/components/forms/movement-form-dialog";
 import { DeleteIconButton } from "@/components/delete-icon-button";
+import { UndoToast, type UndoToastState } from "@/components/undo-toast";
 import { itemDayKey, toMovementValues, historyItemKey, type HistoryItem } from "@/lib/history-item";
 import { useHistoryDay } from "@/components/history-day";
-import { countsAsSpending } from "@/lib/report-totals";
+import {
+  countsAsReceived,
+  countsAsSpending,
+  movesMoneyOnly,
+  ownSpending,
+} from "@/lib/report-totals";
 import { bulkDelete, bulkSetCategory, setItemCategory, setItemSlice } from "@/lib/actions/slices";
 import { unmarkExpensePayment } from "@/lib/actions/expense-payment";
 import { unmarkIncomeReceived } from "@/lib/actions/income-receipt";
@@ -47,8 +52,11 @@ const sliceInfo = (key: string | null | undefined) => SLICES.find((s) => s.key =
 const editable = (item: HistoryItem) => item.kind === "transaction" || item.kind === "card";
 const incoming = (item: HistoryItem) =>
   item.amount < 0 && item.kind !== "jarDeposit" && item.kind !== "cardBillAdjustment";
-/** Guardar e resgatar só trocam o dinheiro de lugar: não são entrada nem saída. */
-const transfer = (item: HistoryItem) => item.kind === "jarDeposit";
+/**
+ * Guardar e resgatar, mandar para outra conta sua, receber de volta um
+ * empréstimo: só trocam o dinheiro de lugar. Não são renda nem gasto.
+ */
+const transfer = movesMoneyOnly;
 /**
  * A fatura paga: o dinheiro sai da conta, mas as compras dela já contam uma a
  * uma. Vista como mais uma saída, ela somava duas vezes na cabeça de quem lê.
@@ -63,6 +71,7 @@ const ORIGIN: Partial<Record<HistoryItem["kind"], string>> = {
   cardEstimate: "lançado na fatura, sem compra detalhada",
   fixedExpensePayment: "conta fixa paga",
   incomeReceipt: "renda confirmada",
+  jarDeposit: "caixinha",
   cardFixedExpense: "assinatura no cartão",
   cardBillAdjustment: "diferença da fatura paga",
 
@@ -70,6 +79,9 @@ const ORIGIN: Partial<Record<HistoryItem["kind"], string>> = {
 
 /** De onde a linha vem, com o caso que muda a frase: parcial, crédito. */
 function origin(item: HistoryItem) {
+  if (item.transfer)
+    return item.amount < 0 ? "de outra conta sua; não é renda" : "para outra conta sua; não é gasto";
+  if (item.loanRepayment) return "devolução de empréstimo; não é renda";
   if (item.kind === "cardBillPayment" && item.settled === false)
     return "parte da fatura paga; as compras dela já contam uma a uma";
   if (item.kind === "cardBillAdjustment")
@@ -93,7 +105,12 @@ function rowNote(item: HistoryItem) {
       : null,
     // A data da linha é a da compra; a fatura que cobra a parcela vem aqui.
     item.kind === "card" && item.installmentNumber ? `fatura ${billDayLabel(item.date)}` : null,
-    item.lentTo ? `emprestado a ${item.lentTo}` : null,
+    item.lentTo
+      ? // Numa conta dividida, quanto é dos outros: só a sua parte é gasto.
+        item.lent != null && item.lent < Math.abs(item.amount) - 0.005
+        ? `${formatCurrency(item.lent)} emprestados a ${item.lentTo}`
+        : `emprestado a ${item.lentTo}`
+      : null,
     origin(item),
   ]
     .filter(Boolean)
@@ -179,7 +196,24 @@ export function TransactionsTable({
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [error, setError] = useState<string | null>(null);
   const [busy, startTransition] = useTransition();
-  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
+  // Apagar em lote espera o prazo do "Desfazer": as linhas somem na hora, e o
+  // servidor só apaga quando o toast vai embora (ou a tela fecha).
+  const [hidden, setHidden] = useState<Set<string>>(() => new Set());
+  const [deleteToast, setDeleteToast] = useState<
+    (NonNullable<UndoToastState> & { refs: { kind: HistoryItem["kind"]; id: string }[]; keys: string[] }) | null
+  >(null);
+  const pendingDelete = useRef(deleteToast);
+  useEffect(() => {
+    pendingDelete.current = deleteToast;
+  });
+  // Saiu da tela com o toast aberto: apaga como se o prazo tivesse acabado.
+  useEffect(
+    () => () => {
+      const pending = pendingDelete.current;
+      if (pending) void bulkDelete({ items: pending.refs }).catch(() => {});
+    },
+    [],
+  );
   // O dia tocado no calendário de gastos, quando há um.
   const { day, setDay } = useHistoryDay();
   // O dia escolhido no calendário é um filtro como os outros: trocá-lo solta
@@ -198,6 +232,7 @@ export function TransactionsTable({
     const q = query.trim().toLocaleLowerCase("pt-BR");
     const source = day ? [...items.filter((i) => i.kind !== "card"), ...purchases] : items;
     const rows = source.filter((item) => {
+      if (hidden.has(historyItemKey(item))) return false;
       if (day && itemDayKey(item) !== day) return false;
       if (q && !item.description.toLocaleLowerCase("pt-BR").includes(q)) return false;
       if (direction === "in" && (!incoming(item) || transfer(item))) return false;
@@ -219,15 +254,17 @@ export function TransactionsTable({
       if (byDay !== 0) return byDay * factor;
       return ((a.createdAt?.getTime() ?? 0) - (b.createdAt?.getTime() ?? 0)) * factor;
     });
-  }, [items, purchases, query, direction, category, account, sort, day]);
+  }, [items, purchases, query, direction, category, account, sort, day, hidden]);
 
   const pages = Math.max(1, Math.ceil(filtered.length / PAGE));
   const current = Math.min(page, pages - 1);
   const visible = filtered.slice(current * PAGE, current * PAGE + PAGE);
 
   const totals = useMemo(() => {
-    const received = filtered.filter(incoming).reduce((sum, i) => sum - i.amount, 0);
-    const spent = filtered.filter(countsAsSpending).reduce((sum, i) => sum + i.amount, 0);
+    // Os critérios do resumo: renda sem devoluções nem outras contas, gasto
+    // sem a parte emprestada.
+    const received = filtered.filter(countsAsReceived).reduce((sum, i) => sum - i.amount, 0);
+    const spent = filtered.reduce((sum, i) => sum + ownSpending(i), 0);
     const jars = filtered.filter(transfer);
     const saved = jars.filter((i) => i.amount > 0).reduce((sum, i) => sum + i.amount, 0);
     const withdrawn = jars.filter((i) => i.amount < 0).reduce((sum, i) => sum - i.amount, 0);
@@ -308,6 +345,38 @@ export function TransactionsTable({
   }
 
   const ref = (item: HistoryItem) => ({ kind: item.kind, id: item.id });
+
+  /** Apaga de verdade o que o toast segurava; se falhar, as linhas voltam. */
+  function commitDelete(pending: NonNullable<typeof deleteToast>) {
+    run(async () => {
+      try {
+        await bulkDelete({ items: pending.refs });
+      } catch (e) {
+        setHidden((h) => {
+          const next = new Set(h);
+          pending.keys.forEach((k) => next.delete(k));
+          return next;
+        });
+        throw e;
+      }
+    }, "Não deu para apagar. Os lançamentos voltaram para a lista.");
+  }
+
+  function deleteSelected() {
+    // Um lote ainda esperando vai embora agora: um toast só por vez.
+    if (deleteToast) commitDelete(deleteToast);
+    const keys = selectedItems.map(historyItemKey);
+    setHidden((h) => new Set([...h, ...keys]));
+    setSelected(new Set());
+    setDeleteToast({
+      id: Date.now(),
+      text:
+        keys.length === 1 ? "1 lançamento apagado" : `${keys.length} lançamentos apagados`,
+      hasUndo: true,
+      refs: selectedItems.map(ref),
+      keys,
+    });
+  }
   const changeCategory = (item: HistoryItem, categoryId: string) =>
     run(() => setItemCategory({ ...ref(item), categoryId }), "Não deu para trocar a categoria.");
   const changeSlice = (item: HistoryItem, value: string) =>
@@ -519,7 +588,7 @@ export function TransactionsTable({
               { value: "all", label: "Tudo" },
               { value: "out", label: "Saídas" },
               { value: "in", label: "Entradas" },
-              { value: "jar", label: "Caixinhas" },
+              { value: "jar", label: "Transferências" },
             ]}
             className="w-full lg:w-auto"
           />
@@ -596,7 +665,7 @@ export function TransactionsTable({
             variant="destructive"
             size="sm"
             disabled={busy}
-            onClick={() => setConfirmBulkDelete(true)}
+            onClick={deleteSelected}
           >
             <Trash2 aria-hidden="true" />
             Apagar
@@ -787,21 +856,15 @@ export function TransactionsTable({
 
           {/* Totais do que está filtrado e páginas. */}
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            {/* Só caixinhas: entrada e saída dariam zero; o que importa é o
-                que foi guardado e resgatado, como na nota do Saldo. */}
+            {/* Só transferências: recebido e gasto dariam zero; o que importa
+                é quanto saiu da conta e quanto voltou. */}
             {direction === "jar" ? (
               <p className="flex flex-wrap gap-x-4 gap-y-1 text-[13px] text-muted-foreground tabular-nums">
                 <span>
-                  Guardado <b className="text-foreground">{formatCurrency(totals.saved)}</b>
+                  Saiu da conta <b className="text-foreground">{formatCurrency(totals.saved)}</b>
                 </span>
                 <span>
-                  Resgatado <b className="text-foreground">{formatCurrency(totals.withdrawn)}</b>
-                </span>
-                <span>
-                  Ficou nas caixinhas{" "}
-                  <b className="text-foreground">
-                    {formatCurrency(totals.saved - totals.withdrawn)}
-                  </b>
+                  Voltou <b className="text-foreground">{formatCurrency(totals.withdrawn)}</b>
                 </span>
               </p>
             ) : (
@@ -858,19 +921,22 @@ export function TransactionsTable({
         </>
       )}
 
-      <ConfirmDialog
-        open={confirmBulkDelete}
-        onOpenChange={setConfirmBulkDelete}
-        title={`Apagar ${selectedItems.length === 1 ? "1 lançamento" : `${selectedItems.length} lançamentos`}?`}
-        description="Eles saem do Histórico, do orçamento e do saldo. Não dá para desfazer."
-        confirmLabel="Apagar"
-        onConfirm={() =>
-          run(async () => {
-            await bulkDelete({ items: selectedItems.map(ref) });
-            setSelected(new Set());
-            setConfirmBulkDelete(false);
-          }, "Não deu para apagar.")
-        }
+      <UndoToast
+        toast={deleteToast}
+        onUndo={() => {
+          if (!deleteToast) return;
+          const { keys } = deleteToast;
+          setDeleteToast(null);
+          setHidden((h) => {
+            const next = new Set(h);
+            keys.forEach((k) => next.delete(k));
+            return next;
+          });
+        }}
+        onDismiss={() => {
+          if (deleteToast) commitDelete(deleteToast);
+          setDeleteToast(null);
+        }}
       />
     </div>
   );

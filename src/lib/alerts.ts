@@ -1,5 +1,5 @@
 import { addDays, isSameDay, startOfDay } from "date-fns";
-import { fallsOnDay, obligationsInRange, openOccurrenceAmounts } from "@/lib/period";
+import { fallsOnDay, obligationsInRange, openOccurrenceAmounts, ownSpendingOf } from "@/lib/period";
 import { todayBudget } from "@/lib/today-budget";
 import type { BudgetInputs } from "@/lib/budget-inputs";
 import { formatCurrency, formatDate } from "@/lib/format";
@@ -94,12 +94,14 @@ function isClosingDay(closingDay: number, day: Date): boolean {
  * que a fatura venha depois.
  */
 export function todaysSpending(inputs: BudgetInputs, today: Date): number {
+  // O gasto seu: a transferência para outra conta e a parte emprestada não
+  // são o dia passando do limite.
   const cash = inputs.transactions
-    .filter((t) => t.amount > 0 && !t.fromPeriodClose && fallsOnDay(t.date, today))
-    .reduce((sum, t) => sum + t.amount, 0);
+    .filter((t) => fallsOnDay(t.date, today))
+    .reduce((sum, t) => sum + ownSpendingOf(t), 0);
   const card = inputs.cardPurchases
     .filter((p) => fallsOnDay(p.date, today))
-    .reduce((sum, p) => sum + p.amount, 0);
+    .reduce((sum, p) => sum + ownSpendingOf(p), 0);
   return cash + card;
 }
 
@@ -109,7 +111,7 @@ export function todaysSpending(inputs: BudgetInputs, today: Date): number {
  */
 export function withoutTodaysSpending(inputs: BudgetInputs, today: Date): BudgetInputs {
   const removed = inputs.transactions.filter(
-    (t) => t.amount > 0 && !t.fromPeriodClose && fallsOnDay(t.date, today),
+    (t) => ownSpendingOf(t) > 0 && fallsOnDay(t.date, today),
   );
   // Os débitos não dizem de onde vieram: tira um débito de hoje com o mesmo
   // valor para cada lançamento removido, e deixa os pagamentos de conta.

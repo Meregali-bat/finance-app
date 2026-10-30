@@ -28,6 +28,7 @@ import { todayInputValue } from "@/lib/format";
 import type { MovementValues } from "@/lib/history-item";
 import { cn } from "@/lib/utils";
 import { LoanFields } from "@/components/forms/loan-fields";
+import { Switch } from "@/components/ui/switch";
 import { errorMessage } from "@/lib/error-message";
 
 const CASH = "__cash__";
@@ -57,6 +58,7 @@ export function MovementFormDialog({
   const [categoryId, setCategoryId] = useState<string>(movement?.categoryId ?? NONE);
   // O valor digitado, para o "Emprestado" mostrar a parte de cada atalho.
   const [amount, setAmount] = useState(movement?.amount ?? 0);
+  const [transfer, setTransfer] = useState(movement?.transfer ?? false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -84,6 +86,7 @@ export function MovementFormDialog({
       setKind(movement?.type ?? "expense");
       setCardId(CASH);
       setCategoryId(movement?.categoryId ?? NONE);
+      setTransfer(movement?.transfer ?? false);
       setError(null);
     }
   }
@@ -313,7 +316,22 @@ export function MovementFormDialog({
                 </p>
               </div>
             )}
-            {categories.length > 0 && (
+            {/* Só lançamento da conta: a compra no cartão não é transferência. */}
+            {(isEdit ? movement?.kind === "transaction" : kind === "income" || cardId === CASH) && (
+              <div className="flex items-center justify-between gap-3 rounded-2xl bg-muted/60 p-3">
+                <input type="hidden" name="transfer" value={transfer ? "1" : ""} />
+                <div className="min-w-0">
+                  <Label htmlFor="transfer-switch">Entre contas minhas</Label>
+                  <p className="text-xs text-muted-foreground">
+                    {kind === "income"
+                      ? "Veio de outra conta sua: entra no saldo, mas não é renda."
+                      : "Foi para outra conta sua: sai do saldo, mas não é gasto."}
+                  </p>
+                </div>
+                <Switch id="transfer-switch" checked={transfer} onCheckedChange={setTransfer} />
+              </div>
+            )}
+            {categories.length > 0 && !transfer && (
               <div className="flex flex-col gap-2">
                 <Label htmlFor="categoryId">Categoria</Label>
                 <input
@@ -342,7 +360,7 @@ export function MovementFormDialog({
                 </Select>
               </div>
             )}
-            {kind === "expense" && (
+            {kind === "expense" && !transfer && (
               <LoanFields
                 total={amount}
                 link={

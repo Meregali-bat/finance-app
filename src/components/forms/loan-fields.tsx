@@ -115,7 +115,7 @@ export function LoanFields({
         <div className="min-w-0">
           <Label htmlFor="lent-switch">Emprestado para alguém</Label>
           <p className="text-xs text-muted-foreground">
-            Conta como gasto agora; o que a pessoa devolver entra como receita.
+            Sai do saldo, mas não conta no seu gasto. A devolução volta ao saldo sem virar renda.
           </p>
         </div>
         <Switch id="lent-switch" checked={lent} onCheckedChange={setLent} disabled={!loaded} />

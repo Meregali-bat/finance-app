@@ -4,6 +4,17 @@ import { toFixedExpenseInput } from "@/lib/budget-inputs";
 import { lentNames, type HistoryItem } from "@/lib/history-item";
 
 /**
+ * A parte da linha que é de outros: os empréstimos da compra, na proporção da
+ * parcela (a compra de R$ 300 em 3x, metade emprestada, empresta R$ 50 por
+ * parcela). Nunca passa do valor da linha.
+ */
+function lentShare(loans: { amount: unknown }[], line: number, purchase: number) {
+  if (loans.length === 0 || line <= 0 || purchase <= 0) return undefined;
+  const total = loans.reduce((sum, l) => sum + Number(l.amount), 0);
+  return Math.min(line, (total * line) / purchase);
+}
+
+/**
  * Tudo o que mexeu no dinheiro num intervalo, linha a linha: lançamentos,
  * parcelas e assinaturas de cada fatura que vence nele, contas fixas pagas,
  * rendas confirmadas e caixinhas. É o que o Histórico mostra e o que as fatias
@@ -26,7 +37,11 @@ export async function loadHistoryItems(
         where: { userId, fromPeriodClose: false, date: { gte: utcRangeStart, lt: utcRangeEnd } },
         include: {
           category: { select: { id: true, name: true } },
-          loans: { select: { person: { select: { name: true } } }, orderBy: { createdAt: "asc" } },
+          loans: {
+            select: { amount: true, person: { select: { name: true } } },
+            orderBy: { createdAt: "asc" },
+          },
+          loanRepayment: { select: { id: true } },
         },
       }),
       // Agrupado pela data em que foi pago, não pelo vencimento: pagar antes do
@@ -58,7 +73,7 @@ export async function loadHistoryItems(
             include: {
               category: { select: { id: true, name: true } },
               loans: {
-                select: { person: { select: { name: true } } },
+                select: { amount: true, person: { select: { name: true } } },
                 orderBy: { createdAt: "asc" },
               },
             },
@@ -142,6 +157,7 @@ export async function loadHistoryItems(
             purchaseAmount: Number(purchase.amount),
             purchaseDate: purchase.date,
             lentTo: lentNames(purchase.loans),
+            lent: lentShare(purchase.loans, line.amount, Number(purchase.amount)),
           };
         }
         case "subscription": {
@@ -195,6 +211,9 @@ export async function loadHistoryItems(
       categoryId: rememberCategory(t.category),
       slice: t.slice,
       lentTo: lentNames(t.loans),
+      lent: lentShare(t.loans, Number(t.amount), Number(t.amount)),
+      loanRepayment: t.loanRepayment ? true : undefined,
+      transfer: t.transfer || undefined,
     })),
     ...cardItems,
     ...expensePayments.map((p) => ({

@@ -1,36 +1,74 @@
 import { StatLabel } from "@/components/page-header";
-import { formatCurrency } from "@/lib/format";
+import { formatCurrency, formatDate } from "@/lib/format";
 import type { ReportTotals } from "@/lib/report-totals";
 import { cn } from "@/lib/utils";
+
+/** O saldo da conta numa ponta do período, a partir da leitura do extrato. */
+export type PeriodAccount = {
+  balance: number;
+  /** "Saldo em conta" no período em curso; "Saldo em 30/09" num que já passou. */
+  label: string;
+  /** Quando o saldo foi conferido com o banco — o ponto de onde a conta parte. */
+  checkedAt: Date;
+};
 
 /**
  * Os quatro números do período, num card elevado: 2×2 no celular, uma faixa
  * de quatro no `xl`. Os divisores são uma sombra de 1px no canto superior
  * esquerdo de cada célula, e o `overflow-hidden` corta o que cai na borda —
  * assim eles acertam sozinhos tanto na grade 2×2 quanto na faixa.
+ *
+ * Gasto e Recebido são só o que é seu: o emprestado, as devoluções e o
+ * dinheiro entre contas suas ficam numa nota embaixo, para a conta fechar sem
+ * inflar o mês. O saldo é o da conta, partindo do que foi conferido com o
+ * banco — somar meses não diz quanto há lá.
  */
 export function ReportTotalsCard({
   totals,
-  carried = 0,
+  account,
 }: {
   totals: ReportTotals;
-  /**
-   * O que sobrou ou faltou dos períodos anteriores: o saldo o carrega, como o
-   * resto do app — o que faltou num mês não some no outro.
-   */
-  carried?: number;
+  /** Nulo quando o saldo nunca foi conferido: aí só o resultado do período. */
+  account: PeriodAccount | null;
 }) {
-  const hasCarry = Math.abs(carried) >= 0.005;
-  const balance = totals.balance + carried;
-  const figures = [
-    { label: "Gasto", value: totals.spent, tone: "" },
-    { label: "Recebido", value: totals.received, tone: "text-positive" },
+  const result = totals.received - totals.spent;
+  const figures: { label: string; value: number; tone: string; notes: string[] }[] = [
     {
-      label: "Saldo",
-      value: balance,
-      tone: balance < 0 ? "text-negative" : "text-positive",
+      label: "Gasto",
+      value: totals.spent,
+      tone: "",
+      notes: [
+        totals.lent >= 0.005 ? `fora ${formatCurrency(totals.lent)} emprestados` : "",
+        totals.transferred >= 0.005
+          ? `fora ${formatCurrency(totals.transferred)} para outra conta`
+          : "",
+      ],
     },
-    { label: "Média diária", value: totals.dailyAverage, tone: "" },
+    {
+      label: "Recebido",
+      value: totals.received,
+      tone: "text-positive",
+      notes: [
+        totals.repaid >= 0.005 ? `fora ${formatCurrency(totals.repaid)} devolvidos` : "",
+        totals.transferred <= -0.005
+          ? `fora ${formatCurrency(-totals.transferred)} de outra conta`
+          : "",
+      ],
+    },
+    account
+      ? {
+          label: account.label,
+          value: account.balance,
+          tone: account.balance < 0 ? "text-negative" : "text-positive",
+          notes: [`a partir do conferido em ${formatDate(account.checkedAt)}`],
+        }
+      : {
+          label: "Recebido − gasto",
+          value: result,
+          tone: result < 0 ? "text-negative" : "text-positive",
+          notes: ["confira o saldo do banco na Início para ver o da conta"],
+        },
+    { label: "Média diária", value: totals.dailyAverage, tone: "", notes: [] },
   ];
 
   return (
@@ -53,34 +91,11 @@ export function ReportTotalsCard({
             >
               {formatCurrency(figure.value)}
             </p>
-            {/* A caixinha não é gasto nem receita, mas sai do saldo: sem dizer
-                isso, o saldo pareceria não bater com as duas colunas. */}
-            {/* De onde vem o saldo: só o que veio dos anteriores, como parcela.
-                A parte do período sai da conta, e com ela a nota passava de
-                quatro linhas no celular. */}
-            {/* As três partes do saldo, cada uma numa linha curta: o período,
-                o que veio de antes e o que foi para as caixinhas. */}
-            {figure.label === "Saldo" && (hasCarry || Math.abs(totals.saved) >= 0.005) && (
-              <p className="text-xs text-muted-foreground tabular-nums">
-                {formatCurrency(totals.balance + totals.saved)} do período
+            {figure.notes.filter(Boolean).map((note) => (
+              <p key={note} className="text-xs text-muted-foreground tabular-nums">
+                {note}
               </p>
-            )}
-            {figure.label === "Saldo" && hasCarry && (
-              <p className="text-xs text-muted-foreground tabular-nums">
-                {carried < 0 ? "− " : "+ "}
-                <span className={carried < 0 ? "text-negative" : undefined}>
-                  {formatCurrency(Math.abs(carried))}
-                </span>{" "}
-                {carried < 0 ? "que faltou antes" : "que sobrou antes"}
-              </p>
-            )}
-            {figure.label === "Saldo" && Math.abs(totals.saved) >= 0.005 && (
-              <p className="text-xs text-muted-foreground tabular-nums">
-                {totals.saved > 0
-                  ? `− ${formatCurrency(totals.saved)} guardados`
-                  : `+ ${formatCurrency(-totals.saved)} resgatados`}
-              </p>
-            )}
+            ))}
           </div>
         ))}
       </div>

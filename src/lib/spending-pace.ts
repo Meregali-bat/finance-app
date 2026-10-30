@@ -1,4 +1,4 @@
-import { storedDay } from "@/lib/period";
+import { ownSpendingOf, storedDay } from "@/lib/period";
 
 /**
  * "Se continuar gastando assim": o ritmo do dia a dia no ciclo até hoje,
@@ -48,8 +48,14 @@ export function spendingPace(input: {
   freeToSpend: number;
   today: Date;
   /** Saída positiva, receita negativa; datas em meia-noite UTC. */
-  transactions: { amount: number; date: Date; fromPeriodClose?: boolean }[];
-  cardPurchases: { amount: number; date: Date; installments?: number }[];
+  transactions: {
+    amount: number;
+    date: Date;
+    fromPeriodClose?: boolean;
+    transfer?: boolean;
+    lent?: number;
+  }[];
+  cardPurchases: { amount: number; date: Date; installments?: number; lent?: number }[];
 }): SpendingPace | null {
   const start = input.periodStart.getTime();
   const todayStart = new Date(
@@ -65,12 +71,13 @@ export function spendingPace(input: {
     return t >= start && t <= todayStart;
   };
   const spent = cents(
+    // Só o gasto seu: sem transferência e sem a parte emprestada.
     input.transactions
-      .filter((t) => t.amount > 0 && !t.fromPeriodClose && inCycle(t.date))
-      .reduce((sum, t) => sum + t.amount, 0) +
+      .filter((t) => inCycle(t.date))
+      .reduce((sum, t) => sum + ownSpendingOf(t), 0) +
       input.cardPurchases
         .filter((p) => inCycle(p.date))
-        .reduce((sum, p) => sum + p.amount / Math.max(1, p.installments ?? 1), 0),
+        .reduce((sum, p) => sum + ownSpendingOf(p) / Math.max(1, p.installments ?? 1), 0),
   );
   if (spent <= 0) return null;
 

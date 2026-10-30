@@ -114,7 +114,46 @@ describe("calculateReportTotals", () => {
 
   it("zera tudo sem lançamento nenhum", () => {
     const totals = calculateReportTotals({ items: [], ...august, today: afterAugust });
-    expect(totals).toEqual({ spent: 0, received: 0, saved: 0, balance: 0, dailyAverage: 0 });
+    expect(totals).toEqual({
+      spent: 0,
+      received: 0,
+      lent: 0,
+      repaid: 0,
+      transferred: 0,
+      saved: 0,
+      balance: 0,
+      dailyAverage: 0,
+    });
+  });
+
+  it("tira do gasto a parte emprestada e da renda a devolução", () => {
+    const totals = calculateReportTotals({
+      items: [
+        item({ amount: 200, lent: 100, lentTo: "Ana" }),
+        item({ amount: -100, loanRepayment: true }),
+        item({ amount: -3000 }),
+      ],
+      ...august,
+      today: afterAugust,
+    });
+    expect(totals.spent).toBe(100);
+    expect(totals.lent).toBe(100);
+    expect(totals.received).toBe(3000);
+    expect(totals.repaid).toBe(100);
+    // O caixa continua inteiro: 3000 + 100 − 200.
+    expect(totals.balance).toBe(2900);
+  });
+
+  it("deixa a transferência entre contas fora de gasto e de renda, mas no caixa", () => {
+    const totals = calculateReportTotals({
+      items: [item({ amount: 500, transfer: true }), item({ amount: -200, transfer: true })],
+      ...august,
+      today: afterAugust,
+    });
+    expect(totals.spent).toBe(0);
+    expect(totals.received).toBe(0);
+    expect(totals.transferred).toBe(300);
+    expect(totals.balance).toBe(-300);
   });
 });
 

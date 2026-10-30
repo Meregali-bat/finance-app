@@ -1,4 +1,4 @@
-import { storedDay } from "./period";
+import { ownSpendingOf, storedDay } from "./period";
 
 function startOfDay(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
@@ -15,13 +15,14 @@ function daysBetween(from: Date, to: Date): number {
  * compras no cartão, cada um no dia em que aconteceu — a data de calendário
  * gravada, lida por `storedDay`. Entradas, contas fixas e faturas ficam de
  * fora: elas já estão no orçamento como compromisso, e este número responde
- * "quanto eu já gastei por escolha neste período".
+ * "quanto eu já gastei por escolha neste período". Pelo mesmo motivo saem a
+ * transferência para outra conta sua e a parte emprestada.
  */
 export function cumulativeDailySpending(input: {
   start: Date;
   today: Date;
-  transactions: { amount: number; date: Date }[];
-  cardPurchases: { amount: number; date: Date }[];
+  transactions: { amount: number; date: Date; transfer?: boolean; lent?: number }[];
+  cardPurchases: { amount: number; date: Date; lent?: number }[];
 }): { day: Date; total: number }[] {
   const { start, today } = input;
   const days = Math.max(1, daysBetween(start, today) + 1);
@@ -31,8 +32,8 @@ export function cumulativeDailySpending(input: {
     const index = daysBetween(start, storedDay(date));
     if (index >= 0 && index < days) byDay[index] += amount;
   };
-  input.transactions.filter((t) => t.amount > 0).forEach((t) => add(t.date, t.amount));
-  input.cardPurchases.forEach((p) => add(p.date, p.amount));
+  input.transactions.forEach((t) => add(t.date, ownSpendingOf(t)));
+  input.cardPurchases.forEach((p) => add(p.date, ownSpendingOf(p)));
 
   return byDay.reduce<{ day: Date; total: number }[]>((points, amount, index) => {
     const previous = points.at(-1)?.total ?? 0;

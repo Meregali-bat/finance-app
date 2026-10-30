@@ -2,21 +2,28 @@ import Link from "next/link";
 import { FileUp } from "lucide-react";
 import { iconButton } from "@/components/ui/icon-button";
 import { requireUserId } from "@/lib/auth-helpers";
-import { resolveRange, type RangeParams } from "@/lib/date-range";
-import { calculateReportTotals, countsAsSpending, spendingBuckets } from "@/lib/report-totals";
+import { resolveRange, type CycleOf, type RangeParams } from "@/lib/date-range";
+import {
+  calculateReportTotals,
+  countsAsSpending,
+  ownSpending,
+  spendingBuckets,
+} from "@/lib/report-totals";
 import { LineChart } from "@/components/charts/line-chart";
 import { homeCard } from "@/components/home-card";
 import { SectionLabel } from "@/components/page-header";
 import { formatCurrency, formatDate, todayInputValue } from "@/lib/format";
 import { PeriodPicker } from "@/components/period-picker";
-import { ReportTotalsCard } from "@/components/report-totals-card";
+import { ReportTotalsCard, type PeriodAccount } from "@/components/report-totals-card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/page-header";
 import { CategoryBreakdown, type CategoryGroup } from "@/components/category-breakdown";
 import { lentNames, type HistoryItem } from "@/lib/history-item";
 import { loadHistoryItems } from "@/lib/history-items";
-import { carriedBalance } from "@/lib/history-carry";
+import { loadBudgetInputs } from "@/lib/budget-inputs";
+import { getPeriodBoundsDetailed } from "@/lib/period";
+import { balanceAtDay } from "@/lib/account-balance";
 import { prisma } from "@/lib/prisma";
 import { parseSlices, sliceOfCategory } from "@/lib/slices";
 import { TransactionsTable } from "@/components/transactions-table";
@@ -35,39 +42,72 @@ export default async function HistoryPage({
 }) {
   const params = await searchParams;
   const userId = await requireUserId();
-  const range = resolveRange(params);
+  // As rendas marcam o ciclo; as leituras do extrato, o saldo.
+  const inputs = await loadBudgetInputs(userId);
+  // No Histórico, o ciclo é só a régua dos dias de pagamento: vale também
+  // antes de a renda ser cadastrada, que é quando a Início começa a contar.
+  const payRule = inputs.incomes.map((i) => ({ ...i, createdAt: new Date(0) }));
+  const cycleOf: CycleOf = (day) => {
+    const bounds = getPeriodBoundsDetailed(payRule, day, inputs.incomeReceipts);
+    return bounds.fallback ? null : bounds;
+  };
+  const now = new Date();
+  const range = resolveRange(params, now, cycleOf);
   // Duas bordas para duas convenções de gravação: lançamentos guardam um dia
   // do calendário em meia-noite UTC, confirmações guardam instantes locais.
   const { rangeStart, rangeEnd, utcRangeStart, utcRangeEnd } = range;
 
-  const [{ items, categories, creditCards, categoryNameById }, user, carried] = await Promise.all([
+  const [{ items, categories, creditCards, categoryNameById }, user] = await Promise.all([
     loadHistoryItems(userId, range),
     prisma.user.findUnique({ where: { id: userId }, select: { budgetSlices: true } }),
-    // O que sobrou ou faltou dos meses anteriores vai para o saldo deste.
-    carriedBalance(userId, range),
   ]);
   const slicesActive = parseSlices(user?.budgetSlices) !== null;
 
-  const totals = calculateReportTotals({ items, rangeStart, rangeEnd, today: new Date() });
+  const totals = calculateReportTotals({ items, rangeStart, rangeEnd, today: now });
+
+  // O saldo da conta no fim do período — ou hoje, se ele ainda corre —, pelo
+  // que foi conferido com o banco. Somar os meses desde o primeiro registro
+  // não dava isso: o app não sabe o que havia antes dele.
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const lastDay = new Date(rangeEnd.getFullYear(), rangeEnd.getMonth(), rangeEnd.getDate() - 1);
+  const past = lastDay.getTime() < todayStart.getTime();
+  const anchored = balanceAtDay({
+    adjustments: inputs.account.adjustments ?? [],
+    credits: inputs.account.credits,
+    debits: inputs.account.debits,
+    day: past ? lastDay : now,
+  });
+  const account: PeriodAccount | null = anchored
+    ? {
+        balance: anchored.balance,
+        label: past ? `Saldo em ${formatDate(lastDay)}` : "Saldo em conta",
+        checkedAt: anchored.from.createdAt,
+      }
+    : null;
   const buckets = spendingBuckets({ items, rangeStart, rangeEnd });
 
   // Agrupado por id, não por nome: nada impede duas categorias homônimas, e
   // fundi-las num balde só esconderia a diferença.
   const byCategory = new Map<string, { amount: number; items: HistoryItem[] }>();
-  for (const item of items.filter(countsAsSpending)) {
-    // O emprestado vai para um balde próprio: o jantar pago para um amigo não
-    // é gasto seu com "Alimentação", mesmo que tenha saído do seu bolso.
-    // O valor da fatura que não veio detalhado em compras não tem categoria a
-    // dar: no "Sem categoria", ele se misturava ao que dá para categorizar.
-    const key = item.lentTo
-      ? LENT
-      : item.kind === "cardEstimate" || item.kind === "cardBillAdjustment"
-        ? UNDETAILED
-        : (item.categoryId ?? UNCATEGORIZED);
+  const addTo = (key: string, amount: number, item: HistoryItem) => {
+    if (Math.abs(amount) < 0.005) return;
     const group = byCategory.get(key) ?? { amount: 0, items: [] };
-    group.amount += item.amount;
+    group.amount += amount;
     group.items.push(item);
     byCategory.set(key, group);
+  };
+  for (const item of items.filter(countsAsSpending)) {
+    // O emprestado vai para um balde próprio: o jantar pago para um amigo não
+    // é gasto seu com "Alimentação", mesmo que tenha saído do seu bolso. Numa
+    // conta dividida, só a parte dele vai para lá.
+    // O valor da fatura que não veio detalhado em compras não tem categoria a
+    // dar: no "Sem categoria", ele se misturava ao que dá para categorizar.
+    const key =
+      item.kind === "cardEstimate" || item.kind === "cardBillAdjustment"
+        ? UNDETAILED
+        : (item.categoryId ?? UNCATEGORIZED);
+    addTo(key, ownSpending(item), item);
+    addTo(LENT, item.lent ?? 0, item);
   }
 
   const categoryGroups: CategoryGroup[] = Array.from(byCategory.entries())
@@ -86,9 +126,11 @@ export default async function HistoryPage({
       percent: 0,
     }))
     .sort((a, b) => b.amount - a.amount);
-  // Pelo maior resto: arredondar cada uma sozinha fazia a soma dar 101%.
-  if (totals.spent > 0) {
-    const shares = categoryGroups.map((g) => Math.max(0, (g.amount / totals.spent) * 100));
+  // Pelo maior resto: arredondar cada uma sozinha fazia a soma dar 101%. Sobre
+  // a soma dos baldes, que inclui o emprestado — o Gasto do resumo não.
+  const grouped = categoryGroups.reduce((sum, g) => sum + g.amount, 0);
+  if (grouped > 0) {
+    const shares = categoryGroups.map((g) => Math.max(0, (g.amount / grouped) * 100));
     const floors = shares.map(Math.floor);
     let left = Math.round(shares.reduce((a, b) => a + b, 0)) - floors.reduce((a, b) => a + b, 0);
     const byRemainder = shares
@@ -113,11 +155,13 @@ export default async function HistoryPage({
         lastDay: range.lastDay,
         today,
         entries: [
+          // O gasto seu, como o resumo: sem transferências e sem a parte
+          // emprestada.
           ...items
-            .filter((i) => i.kind === "transaction" && i.amount > 0)
+            .filter((i) => i.kind === "transaction" && ownSpending(i) > 0)
             .map((i) => ({
               date: i.date,
-              amount: i.amount,
+              amount: ownSpending(i),
               description: i.description,
             })),
           ...creditCards.flatMap((card) =>
@@ -125,10 +169,14 @@ export default async function HistoryPage({
               .filter((p) => p.date >= utcRangeStart && p.date < utcRangeEnd)
               .map((p) => ({
                 date: p.date,
-                amount: Number(p.amount),
+                amount: Math.max(
+                  0,
+                  Number(p.amount) - p.loans.reduce((sum, l) => sum + Number(l.amount), 0),
+                ),
                 description: p.description,
                 cardName: card.name,
-              })),
+              }))
+              .filter((p) => p.amount > 0),
           ),
         ],
       })
@@ -155,6 +203,10 @@ export default async function HistoryPage({
         purchaseAmount: Number(p.amount),
         purchaseDate: p.date,
         lentTo: lentNames(p.loans),
+        lent:
+          p.loans.length > 0
+            ? p.loans.reduce((sum, l) => sum + Number(l.amount), 0)
+            : undefined,
       })),
   );
 
@@ -182,9 +234,9 @@ export default async function HistoryPage({
 
         {/* O seletor de período é o controle principal desta tela, então ele
           ganha uma superfície própria em vez de flutuar solto sobre o fundo. */}
-        <PeriodPicker range={range} />
+        <PeriodPicker range={range} cycles={inputs.incomes.some((i) => i.active)} />
 
-        <ReportTotalsCard totals={totals} carried={carried} />
+        <ReportTotalsCard totals={totals} account={account} />
 
         {/* O gasto do período no tempo: uma série só, em rosé, sem legenda — o
           título diz o que é. As colunas somam o "Gasto" do resumo. */}
