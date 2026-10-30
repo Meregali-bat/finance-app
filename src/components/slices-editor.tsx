@@ -42,6 +42,7 @@ export function SlicesEditor({
   const [categories, setCategories] = useState(initialCategories);
   const [jars, setJars] = useState(initialJars);
   const [error, setError] = useState<string | null>(null);
+  const [confirmingOff, setConfirmingOff] = useState(false);
   const [pending, startTransition] = useTransition();
   const total = sumPercents(percents);
   const balanced = total === 100;
@@ -113,7 +114,7 @@ export function SlicesEditor({
             onClick={() => setPercents(DEFAULT_SLICES)}
             className="-my-3 py-3 text-[13px] font-medium text-primary underline-offset-4 hover:underline"
           >
-            Voltar ao padrão (30 · 15 · 15 · 10 · 5 · 25)
+            Voltar ao padrão ({SLICES.map((s) => DEFAULT_SLICES[s.key]).join(" · ")})
           </button>
         </div>
 
@@ -241,10 +242,32 @@ export function SlicesEditor({
       )}
 
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        {active ? (
+        {active && confirmingOff ? (
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px]">
+            <span className="text-muted-foreground">
+              O número do dia volta a usar todo o dinheiro livre.
+            </span>
+            <button
+              type="button"
+              onClick={turnOff}
+              disabled={pending}
+              className="-my-3 py-3 font-semibold text-negative underline-offset-4 hover:underline disabled:opacity-50"
+            >
+              Desligar
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfirmingOff(false)}
+              disabled={pending}
+              className="-my-3 py-3 font-medium text-muted-foreground underline-offset-4 hover:underline"
+            >
+              Manter
+            </button>
+          </div>
+        ) : active ? (
           <button
             type="button"
-            onClick={turnOff}
+            onClick={() => setConfirmingOff(true)}
             disabled={pending}
             className="-my-3 self-start py-3 text-[13px] font-medium text-negative underline-offset-4 hover:underline disabled:opacity-50"
           >
