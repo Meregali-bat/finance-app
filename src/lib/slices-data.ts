@@ -24,22 +24,24 @@ export async function loadSlicesOverview(userId: string, today: Date) {
     utcRangeStart: utcMidnight(budget.periodStart),
     utcRangeEnd: utcMidnight(budget.periodEnd),
   };
-  const [{ items, categories, categoryNameById }, deposits, fixedCategories] = await Promise.all([
-    loadHistoryItems(userId, range),
-    prisma.jarDeposit.findMany({
-      // O estacionado com data para voltar não é guardado.
-      where: {
-        userId,
-        plannedWithdrawalAt: null,
-        createdAt: { gte: budget.periodStart, lt: budget.periodEnd },
-      },
-      select: { amount: true, jar: { select: { slice: true } } },
-    }),
-    prisma.fixedExpense.findMany({
-      where: { userId },
-      select: { id: true, label: true, categoryId: true, category: { select: { name: true } } },
-    }),
-  ]);
+  const [{ items, categories, categoryNameById }, deposits, fixedCategories, jars] =
+    await Promise.all([
+      loadHistoryItems(userId, range),
+      prisma.jarDeposit.findMany({
+        // O estacionado com data para voltar não é guardado.
+        where: {
+          userId,
+          plannedWithdrawalAt: null,
+          createdAt: { gte: budget.periodStart, lt: budget.periodEnd },
+        },
+        select: { amount: true, jar: { select: { slice: true } } },
+      }),
+      prisma.fixedExpense.findMany({
+        where: { userId },
+        select: { id: true, label: true, categoryId: true, category: { select: { name: true } } },
+      }),
+      prisma.jar.findMany({ where: { userId, deletedAt: null }, select: { slice: true } }),
+    ]);
 
   const sliceByCategory = new Map<string, SliceKey>(
     categories.map((c) => [c.id, sliceOfCategory(c)]),
@@ -126,5 +128,9 @@ export async function loadSlicesOverview(userId: string, today: Date) {
       : [],
     uncategorized,
     categories,
+    /** As fatias de guardar que têm caixinha: sem nenhuma, a fatia não tem como encher. */
+    jarSlices: new Set<SliceKey>(
+      jars.map((j) => (j.slice === "goals" ? "goals" : "freedom") as SliceKey),
+    ),
   };
 }

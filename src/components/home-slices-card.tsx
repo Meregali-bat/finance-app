@@ -101,7 +101,7 @@ export function HomeSlicesCard({
           );
         })}
       </ul>
-      {savings && (
+      {savings && savings.target > 0.005 && (
         <p className="text-[12.5px] text-muted-foreground tabular-nums">
           Guardado {formatCurrency(savings.saved)} de {formatCurrency(savings.target)}
         </p>

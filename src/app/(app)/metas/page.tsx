@@ -88,6 +88,15 @@ export default async function SlicesPage() {
   // A comparação é com o que a divisão deixa gastar, não com a renda inteira.
   const allowance = overview.income * ((100 - savingPercent(percents)) / 100);
   const pastAllowance = totalSpent - allowance;
+  // As que mais passaram do previsto: o que olhar primeiro.
+  const overSlices = SLICES.filter((s) => !s.saving)
+    .map((s) => {
+      const u = usageByKey.get(s.key)!;
+      return { name: s.name, by: u.used - u.limit };
+    })
+    .filter((o) => o.by > 0.005)
+    .sort((a, b) => b.by - a.by)
+    .slice(0, 2);
 
   return (
     <div className="flex flex-col gap-5 lg:gap-6">
@@ -118,9 +127,37 @@ export default async function SlicesPage() {
 
       <div className="grid grid-cols-[minmax(0,1fr)] gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)] lg:gap-4">
         <div className={homeCard("rise-in flex flex-col gap-4")} style={stagger(0, 60)}>
+          {!noIncome && (
+            <div className="flex flex-col gap-1 border-b border-(--hairline) pb-4 tabular-nums">
+              <p
+                className={cn(
+                  "font-heading text-[17px] leading-snug font-semibold text-balance lg:text-lg",
+                  pastAllowance > 0.005 ? "text-negative" : "text-foreground",
+                )}
+              >
+                {pastAllowance > 0.005
+                  ? `${formatCurrency(pastAllowance)} além dos ${formatCurrency(allowance)} que a divisão deixa gastar`
+                  : `Pela divisão, ainda cabem ${formatCurrency(-pastAllowance)} dos ${formatCurrency(allowance)}`}
+              </p>
+              {overSlices.length > 0 && (
+                <p className="text-[13px] text-muted-foreground">
+                  Mais acima do previsto:{" "}
+                  {overSlices.map((o) => `${o.name} (+${formatCurrency(o.by)})`).join(" e ")}.
+                </p>
+              )}
+              {/* A divisão é o plano; o número do dia é o dinheiro de verdade. */}
+              <p className="text-[13px] text-pretty text-muted-foreground">
+                Pelo seu dinheiro de agora, você pode gastar{" "}
+                <span className="font-semibold text-foreground">
+                  {formatCurrency(overview.dailyAvailable)}
+                </span>{" "}
+                hoje.
+              </p>
+            </div>
+          )}
           <div className="flex items-center gap-5">
             <SliceDonut
-              size={132}
+              size={112}
               label={SLICES.map((s) => `${s.name} ${percents[s.key]}%`).join(", ")}
               segments={SLICES.map((s) => ({
                 key: s.key,
@@ -162,35 +199,10 @@ export default async function SlicesPage() {
               </div>
             </dl>
           </div>
-          {!noIncome && (
-            <div className="flex flex-col gap-0.5 border-t border-(--hairline) pt-3 text-[13px] tabular-nums">
-              <p
-                className={cn(
-                  "font-semibold text-balance",
-                  pastAllowance > 0.005 ? "text-negative" : "text-foreground",
-                )}
-              >
-                {pastAllowance > 0.005
-                  ? `${formatCurrency(pastAllowance)} além dos ${formatCurrency(allowance)} que a divisão deixa gastar`
-                  : `Pela divisão, ainda cabem ${formatCurrency(-pastAllowance)} dos ${formatCurrency(allowance)}`}
-              </p>
-              {/* A divisão é o plano; o número do dia é o dinheiro de verdade. */}
-              <p className="text-muted-foreground text-balance">
-                Pelo seu dinheiro de agora, você pode gastar{" "}
-                <span className="font-semibold text-foreground">
-                  {formatCurrency(overview.dailyAvailable)}
-                </span>{" "}
-                hoje.
-              </p>
-            </div>
-          )}
         </div>
 
-        {savings && (
-          <div
-            className={homeCard("rise-in flex flex-col justify-between gap-4")}
-            style={stagger(1, 60)}
-          >
+        {savings && !noIncome && (
+          <div className={homeCard("rise-in flex flex-col gap-4")} style={stagger(1, 60)}>
             <div className="flex items-start gap-3">
               <span
                 aria-hidden="true"
@@ -272,6 +284,10 @@ export default async function SlicesPage() {
                 slice.saving && savings && left > 0.005 && savings.remaining < left - 0.005
                   ? savings.remaining
                   : null;
+              // Sem caixinha da fatia, nenhum depósito cai nela.
+              const noJar = slice.saving && !overview.jarSlices.has(slice.key);
+              // Inteiro, como na Início.
+              const shownPercent = `${Math.round(percentUsed).toLocaleString("pt-BR")}%`;
               return (
                 <div
                   key={slice.key}
@@ -304,8 +320,10 @@ export default async function SlicesPage() {
                         ? slice.saving
                           ? "Nada guardado"
                           : "Sem gastos"
-                        : `${percentUsed.toLocaleString("pt-BR")}%`}
-                      {used >= 0.005 && (
+                        : usage.limit <= 0
+                          ? "Sem previsão"
+                          : shownPercent}
+                      {used >= 0.005 && usage.limit > 0 && (
                         <span className="sr-only">
                           {slice.saving ? " da meta" : " do previsto"}
                         </span>
@@ -318,7 +336,7 @@ export default async function SlicesPage() {
                     aria-valuemin={0}
                     aria-valuemax={100}
                     aria-valuenow={Math.min(100, Math.round(percentUsed))}
-                    aria-valuetext={`${percentUsed.toLocaleString("pt-BR")}%${over ? ", passou do previsto" : ""}`}
+                    aria-valuetext={`${shownPercent}${over ? ", passou do previsto" : ""}`}
                     className="h-2 overflow-hidden rounded-full bg-(--track)"
                   >
                     <div
@@ -357,15 +375,26 @@ export default async function SlicesPage() {
                             : "text-muted-foreground",
                       )}
                     >
-                      {over
-                        ? `${formatCurrency(-left)} além do previsto`
-                        : ahead
-                          ? `${formatCurrency(-left)} além da meta`
-                          : sharedRemaining !== null
-                            ? sharedRemaining < 0.005
-                              ? "A outra fatia já cobre o que falta"
-                              : `No total faltam ${formatCurrency(sharedRemaining)}`
-                            : `${formatCurrency(left)} ${slice.saving ? "para guardar" : "restante"}`}
+                      {noJar && used < 0.005 ? (
+                        <Link
+                          href="/metas/ajustar"
+                          className="text-primary underline-offset-4 hover:underline"
+                        >
+                          Nenhuma caixinha é desta fatia: escolher
+                        </Link>
+                      ) : over ? (
+                        `${formatCurrency(-left)} além do previsto`
+                      ) : ahead ? (
+                        `${formatCurrency(-left)} além da meta`
+                      ) : sharedRemaining !== null ? (
+                        sharedRemaining < 0.005 ? (
+                          "A outra fatia já cobre o que falta"
+                        ) : (
+                          `No total faltam ${formatCurrency(sharedRemaining)}`
+                        )
+                      ) : (
+                        `${formatCurrency(left)} ${slice.saving ? "para guardar" : "restante"}`
+                      )}
                     </span>
                     <span className="whitespace-nowrap text-muted-foreground">
                       {usage.count === 0
