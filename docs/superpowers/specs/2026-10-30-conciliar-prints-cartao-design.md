@@ -54,6 +54,7 @@ Depois de cada ação a tela se atualiza sem nova leitura das imagens, porque o 
 
 - **Totais do topo:** contam tudo o que é compra dos dois lados no período, incluindo o que foi "Ignorado" ou "Mantido". Assim a diferença mostra a divergência real, e não só o que falta resolver.
 - **Linhas que não são compra** (pagamento de fatura, estorno, crédito): a IA marca o tipo de cada linha, e só compras entram na conciliação. As outras são contadas à parte, como as negadas.
+- **Ligar numa compra parcelada** (o usuário não lembra se o banco mostra o total ou a parcela): o valor do banco é tratado como a **parcela**, e o `amount` do app vira valor × parcelas. À vista, o valor do banco vira o `amount` direto.
 - **Excluir e Ligar** reaproveitam `deleteCardPurchase` / `updateCardPurchase` de `src/lib/actions/card.ts`, com o mesmo comportamento da tela do cartão (cascata do schema). Excluir pede confirmação.
 
 ## Fica para o construtor
