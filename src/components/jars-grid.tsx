@@ -190,6 +190,16 @@ export function JarsGrid({ jars, yieldContext }: { jars: JarView[]; yieldContext
               </dt>
               <dd className="text-[15px] font-semibold">{formatCurrency(committed)}</dd>
             </div>
+            {/* A terceira parcela da soma: sem ela, livre + com data não
+                fechava com o valor de hoje. */}
+            {earned > 0.005 && (
+              <div>
+                <dt>
+                  <StatLabel>Rendimento</StatLabel>
+                </dt>
+                <dd className="text-[15px] font-semibold text-positive">+{formatCurrency(earned)}</dd>
+              </div>
+            )}
           </dl>
         )}
       </div>
@@ -257,11 +267,11 @@ export function JarsGrid({ jars, yieldContext }: { jars: JarView[]; yieldContext
                   <li
                     key={`${r.source.kind}-${r.source.id}`}
                     className={cn(
-                      "flex items-start justify-between gap-1",
+                      "flex items-baseline justify-between gap-1",
                       r.overdue ? "text-negative" : "text-muted-foreground",
                     )}
                   >
-                    <span className="min-w-0 pt-1.5">
+                    <span className="min-w-0">
                       {/* O guardado é o que a Previsão conta; o rendimento até lá
                           é um extra que ela deixa de fora, e fica na dica. */}
                       {r.overdue
@@ -290,7 +300,8 @@ export function JarsGrid({ jars, yieldContext }: { jars: JarView[]; yieldContext
                 ))}
               </ul>
             )}
-            {jar.returns.length > 0 && unscheduledOf(jar) >= 0.005 && (
+            {/* Com uma caixinha só, o livre já está no topo. */}
+            {jars.length > 1 && jar.returns.length > 0 && unscheduledOf(jar) >= 0.005 && (
               <p className="-mt-2 text-[12.5px] text-muted-foreground tabular-nums">
                 {formatCurrency(unscheduledOf(jar))} livre
               </p>
@@ -298,7 +309,8 @@ export function JarsGrid({ jars, yieldContext }: { jars: JarView[]; yieldContext
             {/* Lado a lado quando cabe: no card largo do celular, uma embaixo da
                 outra só alongava a caixinha. */}
             <div className="flex flex-wrap items-center gap-x-5 gap-y-1">
-              {unscheduledOf(jar) >= 0.005 && (
+              {/* Agendar centavos não paga conta nenhuma. */}
+              {unscheduledOf(jar) >= 1 && (
                 <JarScheduleDialog
                   jarId={jar.id}
                   jarName={jar.name}
@@ -320,6 +332,11 @@ export function JarsGrid({ jars, yieldContext }: { jars: JarView[]; yieldContext
                   unscheduledOf(jar) >= jar.balance * 0.05
                     ? jar.returns.filter((r) => !r.overdue)
                     : []
+                }
+                ignoring={
+                  unscheduledOf(jar) >= jar.balance * 0.05
+                    ? []
+                    : jar.returns.filter((r) => !r.overdue)
                 }
                 cdiPercent={jar.cdiPercent}
                 context={yieldContext}
