@@ -164,13 +164,30 @@ export async function addShotPurchase(cardId: string, input: unknown) {
   });
 }
 
-/** "Ignorar" uma linha do banco, ou "Manter" uma compra do app: não volta nas próximas conferências. */
-export async function rememberShotDecision(fingerprint: string) {
+/** "Ignorar" uma linha do banco: não volta nas próximas conferências. */
+export async function ignoreShotLine(fingerprint: string) {
   return refusing(async () => {
     const userId = await requireUserId();
-    const value = z.string().min(1).max(300).parse(fingerprint);
+    const value = z.string().startsWith("shot|").max(300).parse(fingerprint);
     await prisma.statementIgnore.createMany({
       data: [{ userId, fingerprint: value }],
+      skipDuplicates: true,
+    });
+    return { ok: true as const };
+  });
+}
+
+/** "Manter" uma compra do app que não está nas prints: não volta nas próximas conferências. */
+export async function keepAppPurchase(purchaseId: string) {
+  return refusing(async () => {
+    const userId = await requireUserId();
+    const purchase = await prisma.cardPurchase.findFirst({
+      where: { id: purchaseId, userId },
+      select: { id: true },
+    });
+    if (!purchase) throw new Refusal("Compra não encontrada.");
+    await prisma.statementIgnore.createMany({
+      data: [{ userId, fingerprint: keepFingerprint(purchase.id) }],
       skipDuplicates: true,
     });
     return { ok: true as const };
