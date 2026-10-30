@@ -130,6 +130,42 @@ describe("entradas em datas diferentes", () => {
     expect(lots).toEqual([{ from: day(2026, 8, 15), amount: 500 }]);
   });
 
+  it("um resgate no mesmo dia de uma entrada desfaz essa entrada, e não mexe na antiga", () => {
+    const lots = remainingLots([
+      { date: day(2026, 10, 21), amount: 1018.66 },
+      { date: day(2026, 10, 30), amount: 559 },
+      { date: day(2026, 10, 30), amount: -559 },
+    ]);
+    expect(lots).toEqual([{ from: day(2026, 10, 21), amount: 1018.66 }]);
+  });
+
+  it("com o CDI, o resgate é o líquido: o rendimento paga parte dele e sai menos guardado", () => {
+    // Os movimentos reais de uma Caixinha Turbo, conferidos com o app do Nubank
+    // em 30/10/2026: R$ 1.024,01 bruto e R$ 1.020,81 líquido.
+    const rate = { cdiAnnualPercent: 13.65, cdiPercent: 115 };
+    const lots = remainingLots(
+      [
+        { date: day(2026, 10, 21), amount: 1368.66 },
+        { date: day(2026, 10, 28), amount: -50 },
+        { date: day(2026, 10, 29), amount: -300 },
+        { date: day(2026, 10, 30), amount: 0.93 },
+      ],
+      rate,
+    );
+    const r = simulateLotsYield({ lots, ...rate, to: day(2026, 10, 30) });
+    expect(r.principal + r.gross).toBeCloseTo(1024.01, 2);
+    expect(r.total).toBeCloseTo(1020.81, 2);
+  });
+
+  it("o que o resgate do dia passa das entradas do dia sai das mais antigas", () => {
+    const lots = remainingLots([
+      { date: day(2026, 10, 1), amount: 1000 },
+      { date: day(2026, 10, 20), amount: 100 },
+      { date: day(2026, 10, 20), amount: -300 },
+    ]);
+    expect(lots).toEqual([{ from: day(2026, 10, 1), amount: 800 }]);
+  });
+
   it("cada entrada paga o IOF da própria data: a antiga não paga, a nova sim", () => {
     const r = simulateLotsYield({
       lots: [
