@@ -55,6 +55,8 @@ export type HistoryItem = {
   incomeId?: string;
   /** A despesa foi emprestada: quem vai devolver ("Ana e Bruno"). */
   lentTo?: string;
+  /** Pagamento de fatura ou conta: falso quando foi só uma parte. */
+  settled?: boolean;
   /** A fatia escolhida para este lançamento; ausente = a da categoria. */
   slice?: string | null;
 };

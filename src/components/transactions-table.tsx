@@ -56,12 +56,30 @@ const billPayment = (item: HistoryItem) => item.kind === "cardBillPayment";
 /** Por que a linha não se edita aqui, e de onde ela vem. */
 const ORIGIN: Partial<Record<HistoryItem["kind"], string>> = {
   cardBillPayment: "fatura paga; as compras dela já contam uma a uma",
+  // O valor lançado à mão numa fatura: palpite antes de ela fechar, e o que
+  // as compras não detalharam depois de paga.
+  cardEstimate: "valor lançado na fatura, sem compra detalhada; edite no cartão",
   fixedExpensePayment: "conta fixa paga",
   incomeReceipt: "renda confirmada",
   cardFixedExpense: "assinatura no cartão, edite em Fixos",
-  cardEstimate: "previsão na fatura, edite no cartão",
   cardBillAdjustment: "diferença da fatura paga",
+
 };
+
+/** De onde a linha vem, com o caso que muda a frase: parcial, crédito. */
+function origin(item: HistoryItem) {
+  if (item.kind === "cardBillPayment" && item.settled === false)
+    return "parte da fatura paga; as compras dela já contam uma a uma";
+  if (item.kind === "cardBillAdjustment")
+    return item.amount < 0
+      ? "a fatura veio menor que as compras (estorno ou desconto)"
+      : "a fatura veio maior que as compras (juros, tarifa)";
+  // A compra inteira, vista pelo dia: ela entra no Gasto do período em que a
+  // fatura dela é cobrada, não necessariamente neste.
+  if (item.kind === "card" && !item.installmentNumber && item.purchaseDate)
+    return "no Gasto do período em que a fatura for cobrada";
+  return ORIGIN[item.kind] ?? null;
+}
 
 /** A segunda linha da descrição: parcela, empréstimo e origem. */
 function rowNote(item: HistoryItem) {
@@ -74,7 +92,7 @@ function rowNote(item: HistoryItem) {
     // A data da linha é a da compra; a fatura que cobra a parcela vem aqui.
     item.kind === "card" && item.installmentNumber ? `fatura ${billDayLabel(item.date)}` : null,
     item.lentTo ? `emprestado a ${item.lentTo}` : null,
-    ORIGIN[item.kind] ?? null,
+    origin(item),
   ]
     .filter(Boolean)
     .join(" · ");
@@ -382,11 +400,20 @@ export function TransactionsTable({
   }
 
   function amount(item: HistoryItem) {
+    // Uma regra só na coluna: o que volta leva "+", o que sai vai sem sinal.
+    // Tons apagados para o que só troca o dinheiro de lugar.
     if (transfer(item) || billPayment(item))
       return (
         <span className="font-semibold text-muted-foreground tabular-nums">
-          {item.amount < 0 ? "+" : billPayment(item) ? "" : "−"}
+          {item.amount < 0 ? "+" : ""}
           {formatCurrency(Math.abs(item.amount))}
+        </span>
+      );
+    // A fatura que veio menor que as compras: um abatimento, não um gasto.
+    if (item.kind === "cardBillAdjustment" && item.amount < 0)
+      return (
+        <span className="font-semibold text-positive tabular-nums">
+          +{formatCurrency(-item.amount)}
         </span>
       );
     const positive = incoming(item);
@@ -511,7 +538,7 @@ export function TransactionsTable({
                 setPage(0);
                 setSelected(new Set());
               }}
-              aria-label="Mostrar todos os dias"
+              aria-label={`Só ${dayChipLabel(day)}, remover filtro`}
               className="flex h-8 items-center gap-1.5 rounded-full bg-foreground pr-2 pl-3 text-[12.5px] font-semibold text-background"
             >
               Só {dayChipLabel(day)}
@@ -759,7 +786,10 @@ export function TransactionsTable({
                   Entradas <b className="text-positive">{formatCurrency(totals.received)}</b>
                 </span>
                 <span>
-                  Saídas <b className="text-foreground">{formatCurrency(totals.spent)}</b>
+                  {/* Num dia, a lista é a das compras feitas nele, que nem
+                      sempre caem no Gasto deste período. */}
+                  {day ? "Gasto no dia" : "Saídas"}{" "}
+                  <b className="text-foreground">{formatCurrency(totals.spent)}</b>
                 </span>
                 <span>
                   Entradas − saídas{" "}

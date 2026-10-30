@@ -41,7 +41,10 @@ export function CardBillEstimateDialog({
   const initialDueDate =
     dueDates.find((d) => d.value === defaultDueDate)?.value ?? dueDates[0]?.value ?? "";
   const [open, setOpen] = useState(false);
-  const [dueDate, setDueDate] = useState<string>(initialDueDate);
+  const [chosenDueDate, setDueDate] = useState<string>(initialDueDate);
+  // Paga a fatura escolhida (na mesma tela), a escolha cai para a próxima em
+  // aberto: senão o campo ficava em branco e a previsão ia para a paga.
+  const dueDate = dueDates.some((d) => d.value === chosenDueDate) ? chosenDueDate : initialDueDate;
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
@@ -71,7 +74,13 @@ export function CardBillEstimateDialog({
               size: "xl",
               className: "w-auto gap-2 px-4 text-sm font-semibold",
             })}
-            title="Prever valor na fatura"
+            // Sem fatura em aberto, não há onde prever: o campo iria vazio.
+            disabled={dueDates.length === 0}
+            title={
+              dueDates.length === 0
+                ? "Nenhuma fatura em aberto para prever"
+                : "Prever valor na fatura"
+            }
           />
         }
       >

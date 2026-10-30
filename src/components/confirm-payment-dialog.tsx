@@ -35,6 +35,7 @@ export function ConfirmPaymentDialog({
   allowPartial = false,
   paidSoFar = 0,
   trigger,
+  triggerText,
   onDone,
 }: {
   /** A server action já ligada ao id da despesa ou do cartão pelo `.bind`. */
@@ -52,6 +53,8 @@ export function ConfirmPaymentDialog({
   /** O que os parciais anteriores já pagaram; `amount` é só o que falta. */
   paidSoFar?: number;
   trigger?: IconTrigger;
+  /** O texto do botão padrão, quando "Marcar como paga" não diz qual. */
+  triggerText?: string;
   /**
    * Depois de salvar, com o id do pagamento — o "Desfazer" da Início usa — e
    * se ele quitou a ocorrência ou foi parcial.
@@ -68,7 +71,10 @@ export function ConfirmPaymentDialog({
 
   function handleSubmit(formData: FormData) {
     setError(null);
-    const settled = !allowPartial || settleRef.current;
+    // Um "parcial" que cobre tudo o que falta quita: senão a fatura ficava
+    // "falta R$ 0,00" e continuava sendo a próxima a pagar.
+    const covers = Number(formData.get("amount")) + 0.005 >= amount;
+    const settled = !allowPartial || settleRef.current || covers;
     formData.set("settle", settled ? "1" : "0");
     startTransition(async () => {
       try {
@@ -98,7 +104,7 @@ export function ConfirmPaymentDialog({
         </DialogTrigger>
       ) : (
         <DialogTrigger render={<Button size="sm" variant="secondary" />}>
-          Marcar como paga
+          {triggerText ?? "Marcar como paga"}
         </DialogTrigger>
       )}
       <DialogContent>

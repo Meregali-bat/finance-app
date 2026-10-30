@@ -17,7 +17,14 @@ export function CardBillPayButton({
   bill,
 }: {
   action: (formData: FormData) => Promise<{ paymentId: string }>;
-  bill: { label: string; dueDate: Date; amount: number; paidSoFar: number } | null;
+  bill: {
+    label: string;
+    /** O que o botão diz: qual fatura ele paga. */
+    triggerText: string;
+    dueDate: Date;
+    amount: number;
+    paidSoFar: number;
+  } | null;
 }) {
   const [toast, setToast] = useState<(UndoToastState & { paymentId: string }) | null>(null);
   const [undoing, startUndo] = useTransition();
@@ -29,6 +36,7 @@ export function CardBillPayButton({
         <ConfirmPaymentDialog
           action={action}
           label={bill.label}
+          triggerText={bill.triggerText}
           dueDate={bill.dueDate}
           amount={bill.amount}
           allowPartial
@@ -51,7 +59,19 @@ export function CardBillPayButton({
           if (!toast) return;
           const { paymentId } = toast;
           setToast(null);
-          startUndo(() => unmarkExpensePayment(paymentId));
+          startUndo(async () => {
+            try {
+              await unmarkExpensePayment(paymentId);
+            } catch {
+              // Um "Desfazer" que falha calado parece um que deu certo.
+              setToast({
+                id: ++seq.current,
+                paymentId,
+                hasUndo: true,
+                text: "Não deu para desfazer. Tente de novo",
+              });
+            }
+          });
         }}
       />
     </>

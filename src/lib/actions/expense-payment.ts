@@ -166,4 +166,8 @@ export async function unmarkExpensePayment(paymentId: string) {
   await prisma.expensePayment.deleteMany({ where: { id: paymentId, userId } });
   revalidatePath("/");
   revalidatePath("/historico");
+  // O "Desfazer" também existe na tela do cartão: sem isto, a fatura podia
+  // continuar como "Paga" ali até a pessoa sair e voltar.
+  revalidatePath("/cartoes");
+  revalidatePath("/cartoes/[id]", "page");
 }

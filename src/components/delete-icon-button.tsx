@@ -35,7 +35,7 @@ export function DeleteIconButton({
       <button
         type="button"
         aria-label={itemLabel ? `${verb}: ${itemLabel}` : verb}
-        title={undo ? "Desfazer pagamento" : verb}
+        title={undo ? "Desfazer pagamento" : itemLabel ? `${verb}: ${itemLabel}` : verb}
         disabled={isPending}
         onClick={() => setOpen(true)}
         className={iconButton({ tone: "ghost", size: "sm", className })}
