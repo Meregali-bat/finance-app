@@ -45,6 +45,30 @@ const sliceInfo = (key: string | null | undefined) => SLICES.find((s) => s.key =
 const editable = (item: HistoryItem) => item.kind === "transaction" || item.kind === "card";
 const incoming = (item: HistoryItem) =>
   item.amount < 0 && item.kind !== "jarDeposit" && item.kind !== "cardBillAdjustment";
+/** Guardar e resgatar só trocam o dinheiro de lugar: não são entrada nem saída. */
+const transfer = (item: HistoryItem) => item.kind === "jarDeposit";
+
+/** Por que a linha não se edita aqui, e de onde ela vem. */
+const ORIGIN: Partial<Record<HistoryItem["kind"], string>> = {
+  cardFixedExpense: "assinatura no cartão, edite em Fixos",
+  cardEstimate: "previsão na fatura, edite no cartão",
+  cardBillAdjustment: "diferença da fatura paga",
+};
+
+/** A segunda linha da descrição: parcela, empréstimo e origem. */
+function rowNote(item: HistoryItem) {
+  return [
+    item.kind === "card" && item.installments && item.installments > 1
+      ? item.installmentNumber
+        ? `parcela ${item.installmentNumber}/${item.installments}`
+        : `em ${item.installments}x`
+      : null,
+    item.lentTo ? `emprestado a ${item.lentTo}` : null,
+    ORIGIN[item.kind] ?? null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
 
 /** Lançamentos e compras inteiras guardam o dia em UTC; confirmações e
  *  parcelas (pelo vencimento da fatura), instantes locais. */
@@ -109,7 +133,7 @@ export function TransactionsTable({
   slicesActive: boolean;
 }) {
   const [query, setQuery] = useState("");
-  const [direction, setDirection] = useState<"all" | "in" | "out">("all");
+  const [direction, setDirection] = useState<"all" | "in" | "out" | "jar">("all");
   const [category, setCategory] = useState<string>(ALL);
   const [account, setAccount] = useState<string>(ALL);
   const [sort, setSort] = useState<{ key: SortKey; desc: boolean }>({ key: "date", desc: true });
@@ -120,6 +144,14 @@ export function TransactionsTable({
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
   // O dia tocado no calendário de gastos, quando há um.
   const { day, setDay } = useHistoryDay();
+  // O dia escolhido no calendário é um filtro como os outros: trocá-lo solta
+  // a seleção e volta à primeira página. Ajustado no render, sem efeito.
+  const [seenDay, setSeenDay] = useState(day);
+  if (seenDay !== day) {
+    setSeenDay(day);
+    setSelected(new Set());
+    setPage(0);
+  }
 
   const categoryById = useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories]);
   const categoryOptions = categories.map((c) => ({ value: c.id, label: c.name }));
@@ -130,8 +162,9 @@ export function TransactionsTable({
     const rows = source.filter((item) => {
       if (day && itemDayKey(item) !== day) return false;
       if (q && !item.description.toLocaleLowerCase("pt-BR").includes(q)) return false;
-      if (direction === "in" && !incoming(item)) return false;
-      if (direction === "out" && incoming(item)) return false;
+      if (direction === "in" && (!incoming(item) || transfer(item))) return false;
+      if (direction === "out" && (incoming(item) || transfer(item))) return false;
+      if (direction === "jar" && !transfer(item)) return false;
       if (category === NONE && item.categoryId) return false;
       if (category !== ALL && category !== NONE && item.categoryId !== category) return false;
       if (account === ACCOUNT && item.cardId) return false;
@@ -167,12 +200,29 @@ export function TransactionsTable({
   const tableGrid = cn(
     "grid items-center gap-3 border-b border-(--hairline) px-4",
     slicesActive
-      ? "grid-cols-[1.5rem_5rem_minmax(0,1fr)_7.5rem_10.5rem_10.5rem_6.5rem_2.5rem]"
-      : "grid-cols-[1.5rem_5rem_minmax(0,1fr)_7.5rem_10.5rem_6.5rem_2.5rem]",
+      ? "grid-cols-[1.5rem_5rem_minmax(0,1fr)_7.5rem_10.5rem_10.5rem_9rem_2.5rem]"
+      : "grid-cols-[1.5rem_5rem_minmax(0,1fr)_7.5rem_10.5rem_9rem_2.5rem]",
   );
   const selectable = visible.filter(editable);
   const allVisibleSelected =
     selectable.length > 0 && selectable.every((i) => selected.has(historyItemKey(i)));
+
+  // Trocar de página também solta a seleção: a ação em lote não pode pegar
+  // linhas que não estão na tela.
+  function turnPage(next: number) {
+    setPage(next);
+    setSelected(new Set());
+  }
+
+  function clearFilters() {
+    setQuery("");
+    setDirection("all");
+    setCategory(ALL);
+    setAccount(ALL);
+    setDay(null);
+    setPage(0);
+    setSelected(new Set());
+  }
 
   function resetPage<T>(set: (value: T) => void) {
     return (value: T) => {
@@ -308,6 +358,13 @@ export function TransactionsTable({
   }
 
   function amount(item: HistoryItem) {
+    if (transfer(item))
+      return (
+        <span className="font-semibold text-muted-foreground tabular-nums">
+          {item.amount < 0 ? "+" : "−"}
+          {formatCurrency(Math.abs(item.amount))}
+        </span>
+      );
     const positive = incoming(item);
     return (
       <span className={cn("font-semibold tabular-nums", positive && "text-positive")}>
@@ -380,7 +437,8 @@ export function TransactionsTable({
             className="h-11 w-full rounded-xl bg-(--field) pr-3 pl-10 text-base ring-1 ring-(--hairline) outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
           />
         </label>
-        <div className="grid grid-cols-3 gap-2 lg:flex">
+        {/* A do meio leva a sobra: com três colunas iguais, "Categoria" cortava. */}
+        <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] gap-2 lg:flex">
           <ChoiceSelect
             label="Entradas ou saídas"
             value={direction}
@@ -389,6 +447,7 @@ export function TransactionsTable({
               { value: "all", label: "Tudo" },
               { value: "out", label: "Saídas" },
               { value: "in", label: "Entradas" },
+              { value: "jar", label: "Caixinhas" },
             ]}
             className="w-full lg:w-auto"
           />
@@ -426,6 +485,7 @@ export function TransactionsTable({
               onClick={() => {
                 setDay(null);
                 setPage(0);
+                setSelected(new Set());
               }}
               aria-label="Mostrar todos os dias"
               className="flex h-8 items-center gap-1.5 rounded-full bg-foreground pr-2 pl-3 text-[12.5px] font-semibold text-background"
@@ -487,9 +547,16 @@ export function TransactionsTable({
       )}
 
       {filtered.length === 0 ? (
-        <p className="rounded-2xl border border-dashed border-border/70 px-6 py-10 text-center text-sm text-muted-foreground">
-          Nenhum lançamento com esses filtros.
-        </p>
+        <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-border/70 px-6 py-10 text-center text-sm text-muted-foreground">
+          <p>Nenhum lançamento com esses filtros.</p>
+          <button
+            type="button"
+            onClick={clearFilters}
+            className="rounded-full px-3 py-2 font-semibold text-foreground underline decoration-border underline-offset-4 hover:decoration-current focus-visible:outline-2 focus-visible:outline-ring"
+          >
+            Limpar filtros
+          </button>
+        </div>
       ) : (
         <>
           {/* Computador: a tabela. */}
@@ -563,11 +630,9 @@ export function TransactionsTable({
                   </span>
                   <span role="cell" className="min-w-0">
                     <span className="block truncate text-sm font-semibold">{item.description}</span>
-                    {item.kind === "card" && item.installments && item.installments > 1 && (
-                      <span className="block text-xs text-muted-foreground tabular-nums">
-                        {item.installmentNumber
-                          ? `parcela ${item.installmentNumber}/${item.installments}`
-                          : `em ${item.installments}x`}
+                    {rowNote(item) && (
+                      <span className="block truncate text-xs text-muted-foreground tabular-nums">
+                        {rowNote(item)}
                       </span>
                     )}
                   </span>
@@ -624,12 +689,7 @@ export function TransactionsTable({
                     <p className="truncate text-[15px] font-semibold">{item.description}</p>
                     <p className="text-[12.5px] text-muted-foreground tabular-nums">
                       {dayLabel(item)} · {accountOf(item)}
-                      {item.kind === "card" && item.installments && item.installments > 1
-                        ? item.installmentNumber
-                          ? ` · ${item.installmentNumber}/${item.installments}`
-                          : ` · ${item.installments}x`
-                        : ""}
-                      {item.lentTo ? ` · emprestado a ${item.lentTo}` : ""}
+                      {rowNote(item) ? ` · ${rowNote(item)}` : ""}
                     </p>
                   </div>
                   <span className="shrink-0 pt-0.5 text-[15px]">{amount(item)}</span>
@@ -670,7 +730,7 @@ export function TransactionsTable({
               <div className="flex items-center gap-1 self-end">
                 <button
                   type="button"
-                  onClick={() => setPage(current - 1)}
+                  onClick={() => turnPage(current - 1)}
                   disabled={current === 0}
                   className={iconButton({ tone: "ghost", size: "sm" })}
                   aria-label="Página anterior"
@@ -682,7 +742,7 @@ export function TransactionsTable({
                 </span>
                 <button
                   type="button"
-                  onClick={() => setPage(current + 1)}
+                  onClick={() => turnPage(current + 1)}
                   disabled={current >= pages - 1}
                   className={iconButton({ tone: "ghost", size: "sm" })}
                   aria-label="Próxima página"
