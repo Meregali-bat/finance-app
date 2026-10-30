@@ -39,9 +39,7 @@ export default async function SlicesPage() {
     return (
       <div className="flex flex-col gap-5 lg:gap-6">
         <PageHeader title="Metas" subtitle="As fatias da sua renda" />
-        <div
-          className={homeCard("flex flex-col items-start gap-4 lg:max-w-2xl")}
-        >
+        <div className={homeCard("flex flex-col items-start gap-4 lg:max-w-2xl")}>
           <span
             aria-hidden="true"
             className="flex size-11 items-center justify-center rounded-2xl bg-primary/12 text-primary"
@@ -49,14 +47,12 @@ export default async function SlicesPage() {
             <Target className="size-5" />
           </span>
           <div className="flex flex-col gap-1.5">
-            <p className="font-heading text-lg font-semibold">
-              Divida a renda em fatias
-            </p>
+            <p className="font-heading text-lg font-semibold">Divida a renda em fatias</p>
             <p className="text-sm text-muted-foreground">
-              Uma parte para os custos fixos, outra para o conforto, para os
-              prazeres, para aprender — e duas para guardar: Metas e Liberdade
-              financeira. O que ainda falta guardar no período sai do seu número
-              do dia, e o que você guarda nas caixinhas vai cumprindo a fatia.
+              Uma parte para os custos fixos, outra para o conforto, para os prazeres, para aprender
+              — e duas para guardar: Metas e Liberdade financeira. O que ainda falta guardar no
+              período sai do seu número do dia, e o que você guarda nas caixinhas vai cumprindo a
+              fatia.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -64,10 +60,7 @@ export default async function SlicesPage() {
               <Sparkles aria-hidden="true" />
               Montar com a IA
             </Link>
-            <Link
-              href="/metas/ajustar"
-              className={buttonVariants({ variant: "outline" })}
-            >
+            <Link href="/metas/ajustar" className={buttonVariants({ variant: "outline" })}>
               Configurar à mão
             </Link>
           </div>
@@ -83,12 +76,17 @@ export default async function SlicesPage() {
   const spent = overview.usage
     .filter((u) => !SLICES.find((s) => s.key === u.key)!.saving)
     .reduce((sum, u) => sum + u.used, 0);
-  const aboveIncome = spent - overview.income;
   const choosable = overview.uncategorized.filter(
     (i) => i.kind === "transaction" || i.kind === "card",
   );
   const outside = overview.uncategorized.filter((i) => !choosable.includes(i));
   const outsideTotal = outside.reduce((sum, i) => sum + i.amount, 0);
+  // O sem fatia também é dinheiro que saiu: o total do período o inclui.
+  const unsliced = overview.uncategorized.reduce((sum, i) => sum + i.amount, 0);
+  const totalSpent = spent + unsliced;
+  // A comparação é com o que a divisão deixa gastar, não com a renda inteira.
+  const allowance = overview.income * ((100 - savingPercent(percents)) / 100);
+  const pastAllowance = totalSpent - allowance;
 
   return (
     <div className="flex flex-col gap-5 lg:gap-6">
@@ -118,54 +116,63 @@ export default async function SlicesPage() {
       />
 
       <div className="grid grid-cols-[minmax(0,1fr)] gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)] lg:gap-4">
-        <div
-          className={homeCard("rise-in flex items-center gap-5")}
-          style={stagger(0, 60)}
-        >
-          <SliceDonut
-            size={132}
-            label={SLICES.map((s) => `${s.name} ${percents[s.key]}%`).join(
-              ", ",
-            )}
-            segments={SLICES.map((s) => ({
-              key: s.key,
-              value: percents[s.key],
-              color: s.color,
-            }))}
-          >
-            <span className="font-heading text-lg font-bold tabular-nums">
-              {savingPercent(percents)}%
-            </span>
-            <span className="text-xs text-muted-foreground">para guardar</span>
-          </SliceDonut>
-          <dl className="flex min-w-0 flex-1 flex-col gap-3">
-            <div>
-              <dt className="text-[12.5px] font-medium text-muted-foreground">
-                Renda do período
-              </dt>
-              <dd className="font-heading text-xl font-bold tabular-nums">
-                {formatCurrency(overview.income)}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-[12.5px] font-medium text-muted-foreground">
-                Gasto nas fatias
-              </dt>
-              <dd className="font-heading text-xl font-bold tabular-nums">
-                {formatCurrency(spent)}
-              </dd>
-              {overview.toPay > 0.005 && (
-                <dd className="mt-0.5 text-[12.5px] text-muted-foreground tabular-nums">
-                  {formatCurrency(overview.toPay)} em contas ainda a pagar
+        <div className={homeCard("rise-in flex flex-col gap-4")} style={stagger(0, 60)}>
+          <div className="flex items-center gap-5">
+            <SliceDonut
+              size={132}
+              label={SLICES.map((s) => `${s.name} ${percents[s.key]}%`).join(", ")}
+              segments={SLICES.map((s) => ({
+                key: s.key,
+                value: percents[s.key],
+                color: s.color,
+              }))}
+            >
+              <span className="font-heading text-lg font-bold tabular-nums">
+                {savingPercent(percents)}%
+              </span>
+              <span className="text-xs text-muted-foreground">para guardar</span>
+            </SliceDonut>
+            <dl className="flex min-w-0 flex-1 flex-col gap-3">
+              <div>
+                <dt className="text-[12.5px] font-medium text-muted-foreground">
+                  Renda do período
+                </dt>
+                <dd className="font-heading text-xl font-bold tabular-nums">
+                  {formatCurrency(overview.income)}
                 </dd>
-              )}
-              {aboveIncome > 0.005 && (
-                <dd className="text-[12.5px] text-negative tabular-nums">
-                  {formatCurrency(aboveIncome)} acima da renda
+              </div>
+              <div>
+                <dt className="text-[12.5px] font-medium text-muted-foreground">
+                  Gasto no período
+                </dt>
+                <dd className="font-heading text-xl font-bold tabular-nums">
+                  {formatCurrency(totalSpent)}
                 </dd>
+                {overview.toPay > 0.005 && (
+                  <dd className="mt-0.5 text-[12.5px] text-muted-foreground tabular-nums">
+                    {formatCurrency(overview.toPay)} em contas ainda a pagar
+                  </dd>
+                )}
+                {Math.abs(unsliced) > 0.005 && (
+                  <dd className="text-[12.5px] text-muted-foreground tabular-nums">
+                    {formatCurrency(unsliced)} fora das fatias
+                  </dd>
+                )}
+              </div>
+            </dl>
+          </div>
+          {!noIncome && (
+            <p
+              className={cn(
+                "border-t border-(--hairline) pt-3 text-[13px] font-semibold text-balance tabular-nums",
+                pastAllowance > 0.005 ? "text-negative" : "text-foreground",
               )}
-            </div>
-          </dl>
+            >
+              {pastAllowance > 0.005
+                ? `${formatCurrency(pastAllowance)} além dos ${formatCurrency(allowance)} que a divisão deixa gastar`
+                : `Ainda cabem ${formatCurrency(-pastAllowance)} dos ${formatCurrency(allowance)} que a divisão deixa gastar`}
+            </p>
+          )}
         </div>
 
         {savings && (
@@ -187,13 +194,11 @@ export default async function SlicesPage() {
                 <p className="text-[13px] text-muted-foreground">
                   {savings.remaining < 0.005
                     ? "Meta do período cumprida. Nada mais sai do seu número do dia."
-                    : [
-                        `Faltam ${formatCurrency(savings.remaining)}.`,
-                        savings.applied > 0.005 &&
-                          `${formatCurrency(savings.applied)} já estão separados do seu número do dia.`,
-                      ]
-                        .filter(Boolean)
-                        .join(" ")}
+                    : savings.applied >= savings.remaining - 0.005
+                      ? `Faltam ${formatCurrency(savings.remaining)}, e esse valor já está fora do seu número do dia.`
+                      : savings.applied > 0.005
+                        ? `Faltam ${formatCurrency(savings.remaining)}; ${formatCurrency(savings.applied)} disso já estão fora do seu número do dia.`
+                        : `Faltam ${formatCurrency(savings.remaining)}.`}
                 </p>
               </div>
             </div>
@@ -216,8 +221,8 @@ export default async function SlicesPage() {
                   className="mt-0.5 size-4 shrink-0 text-negative"
                   aria-hidden="true"
                 />
-                Este período não fecha com tudo guardado: faltam{" "}
-                {formatCurrency(savings.shortfall)} depois das contas e faturas.
+                Este período não fecha com tudo guardado: faltam {formatCurrency(savings.shortfall)}{" "}
+                depois das contas e faturas.
               </p>
             )}
           </div>
@@ -233,9 +238,8 @@ export default async function SlicesPage() {
               aria-hidden="true"
             />
             <p className="text-sm text-muted-foreground">
-              Nenhuma renda confirmada neste período ainda. Cada fatia é uma
-              parte da renda: assim que o salário for confirmado, aparece quanto
-              cabe em cada uma.
+              Nenhuma renda confirmada neste período ainda. Cada fatia é uma parte da renda: assim
+              que o salário for confirmado, aparece quanto cabe em cada uma.
             </p>
           </div>
         ) : (
@@ -250,18 +254,11 @@ export default async function SlicesPage() {
               const over = beyond && !slice.saving;
               const ahead = beyond && slice.saving;
               const percentUsed =
-                usage.limit > 0
-                  ? Math.round((used / usage.limit) * 1000) / 10
-                  : used > 0
-                    ? 100
-                    : 0;
+                usage.limit > 0 ? Math.round((used / usage.limit) * 1000) / 10 : used > 0 ? 100 : 0;
               // A reserva do período é uma só: o que uma fatia de guardar tem a
               // mais cobre o que falta na outra.
               const sharedRemaining =
-                slice.saving &&
-                savings &&
-                left > 0.005 &&
-                savings.remaining < left - 0.005
+                slice.saving && savings && left > 0.005 && savings.remaining < left - 0.005
                   ? savings.remaining
                   : null;
               return (
@@ -298,11 +295,21 @@ export default async function SlicesPage() {
                           : "Sem gastos"
                         : `${percentUsed.toLocaleString("pt-BR")}%`}
                       {used >= 0.005 && (
-                        <span className="sr-only"> do previsto</span>
+                        <span className="sr-only">
+                          {slice.saving ? " da meta" : " do previsto"}
+                        </span>
                       )}
                     </span>
                   </div>
-                  <div className="h-2 overflow-hidden rounded-full bg-(--track)">
+                  <div
+                    role="progressbar"
+                    aria-label={`${slice.name}: ${slice.saving ? "guardado da meta" : "gasto do previsto"}`}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={Math.min(100, Math.round(percentUsed))}
+                    aria-valuetext={`${percentUsed.toLocaleString("pt-BR")}%${over ? ", passou do previsto" : ""}`}
+                    className="h-2 overflow-hidden rounded-full bg-(--track)"
+                  >
                     <div
                       className="h-full rounded-full transition-[width] duration-500 ease-out-quint"
                       style={{
@@ -316,9 +323,7 @@ export default async function SlicesPage() {
                       <dt className="text-xs text-muted-foreground">
                         {slice.saving ? "Guardado" : "Gasto"}
                       </dt>
-                      <dd className="text-sm font-semibold tabular-nums">
-                        {formatCurrency(used)}
-                      </dd>
+                      <dd className="text-sm font-semibold tabular-nums">{formatCurrency(used)}</dd>
                     </div>
                     <div className="rounded-xl bg-muted px-3 py-2">
                       <dt className="text-xs text-muted-foreground">
@@ -333,11 +338,12 @@ export default async function SlicesPage() {
                     <span
                       className={cn(
                         "tabular-nums",
+                        // Verde só para o que está bem: guardou a mais ou já coberto.
                         over
                           ? "text-negative"
-                          : ahead || !sharedRemaining
+                          : ahead || sharedRemaining === 0
                             ? "text-positive"
-                            : "",
+                            : "text-muted-foreground",
                       )}
                     >
                       {over
@@ -351,13 +357,15 @@ export default async function SlicesPage() {
                             : `${formatCurrency(left)} ${slice.saving ? "para guardar" : "restante"}`}
                     </span>
                     <span className="whitespace-nowrap text-muted-foreground">
-                      {slice.saving
-                        ? usage.count === 1
-                          ? "1 depósito"
-                          : `${usage.count} depósitos`
-                        : usage.count === 1
-                          ? "1 lançamento"
-                          : `${usage.count} lançamentos`}
+                      {usage.count === 0
+                        ? null
+                        : slice.saving
+                          ? usage.count === 1
+                            ? "1 depósito"
+                            : `${usage.count} depósitos`
+                          : usage.count === 1
+                            ? "1 lançamento"
+                            : `${usage.count} lançamentos`}
                     </span>
                   </p>
                 </div>
@@ -375,8 +383,7 @@ export default async function SlicesPage() {
               : `${choosable.length} gastos sem categoria`}
           </SectionLabel>
           <p className="-mt-1 text-[13px] text-muted-foreground">
-            Sem categoria, o gasto não entra em nenhuma fatia. Escolha uma e ele
-            passa a contar.
+            Sem categoria, o gasto não entra em nenhuma fatia. Escolha uma e ele passa a contar.
           </p>
           <CategorizeList
             items={choosable.map((i) => ({
@@ -412,8 +419,8 @@ export default async function SlicesPage() {
             </span>
           </summary>
           <p className="mt-2 text-[12.5px] text-muted-foreground">
-            Previsões e diferenças da fatura não têm categoria, então não contam
-            em nenhuma fatia. Uma conta fixa ganha categoria em Fixos.
+            Previsões e diferenças da fatura não têm categoria, então não contam em nenhuma fatia.
+            Uma conta fixa ganha categoria em Fixos.
           </p>
           <ul className="mt-2 flex flex-col divide-y divide-(--hairline)">
             {outside.map((i) => (
@@ -425,13 +432,11 @@ export default async function SlicesPage() {
                   {i.description}
                   <span className="text-muted-foreground">
                     {" "}
-                    · {formatDate(i.date)} ·{" "}
-                    {OUTSIDE[i.kind] ?? "sem categoria"}
+                    · {formatDate(i.date)} · {OUTSIDE[i.kind] ?? "sem categoria"}
+                    {i.cardName ? ` · ${i.cardName}` : ""}
                   </span>
                 </span>
-                <span className="shrink-0 tabular-nums">
-                  {formatCurrency(i.amount)}
-                </span>
+                <span className="shrink-0 tabular-nums">{formatCurrency(i.amount)}</span>
               </li>
             ))}
           </ul>

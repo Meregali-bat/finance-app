@@ -2,6 +2,8 @@ import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/auth-helpers";
 import { PageHeader } from "@/components/page-header";
 import { SlicesEditor } from "@/components/slices-editor";
+import { loadBudgetInputs } from "@/lib/budget-inputs";
+import { todayBudget } from "@/lib/today-budget";
 import { DEFAULT_SLICES, SLICE_KEYS, parseSlices, sliceOfCategory } from "@/lib/slices";
 
 export default async function AdjustSlicesPage({
@@ -15,10 +17,11 @@ export default async function AdjustSlicesPage({
   const proposal = parseSlices(
     Object.fromEntries(SLICE_KEYS.map((k, i) => [k, Number(proposta?.split(",")[i])])),
   );
-  const [user, categories, jars] = await Promise.all([
+  const [user, categories, jars, inputs] = await Promise.all([
     prisma.user.findUnique({ where: { id: userId }, select: { budgetSlices: true } }),
     prisma.category.findMany({ where: { userId, active: true }, orderBy: { name: "asc" } }),
     prisma.jar.findMany({ where: { userId, deletedAt: null }, orderBy: { createdAt: "asc" } }),
+    loadBudgetInputs(userId),
   ]);
   const saved = parseSlices(user?.budgetSlices);
 
@@ -33,6 +36,7 @@ export default async function AdjustSlicesPage({
       <SlicesEditor
         active={saved !== null}
         initialPercents={proposal ?? saved ?? DEFAULT_SLICES}
+        income={todayBudget(inputs, new Date()).budget.incomeTotal}
         categories={categories.map((c) => ({ id: c.id, name: c.name, slice: sliceOfCategory(c) }))}
         jars={jars.map((j) => ({
           id: j.id,
