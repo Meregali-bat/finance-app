@@ -112,10 +112,8 @@ function DebtCard({
     <div
       className={homeCard("flex h-full flex-col justify-center gap-2.5 py-3.5 pr-3.5 pl-4 lg:py-3.5 lg:pr-3.5 lg:pl-4")}
     >
-      {/* No celular o "Recebi" desce para uma linha só dele, na ponta direita,
-          como o "Pagar" dos lembretes: deixa livre a coluna do "+" fixo (58px
-          a 16px da borda) e devolve ao texto a largura toda. Ao lado do texto,
-          com o recuo do "+", o "te deve…" ficaria com menos de 90px em 360. */}
+      {/* No celular o "Recebi" vira o rodapé do card, como o "Pagar" dos
+          lembretes, e o texto fica com a largura toda. */}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2 sm:flex-nowrap">
         <button
           type="button"
@@ -150,9 +148,9 @@ function DebtCard({
             </span>
           </span>
         </button>
-        {/* No celular, o "Recebi" desce alinhado ao nome, como o "Adiar" dos
-            lembretes: longe do "+" fixo, sem precisar de uma margem para ele. */}
-        <div className="flex max-sm:w-full max-sm:pl-[50px]">
+        {/* Solto embaixo do nome, o botão parecia boiar no card: no celular
+            ele ocupa a largura, com uma linha fina em cima. */}
+        <div className="flex max-sm:w-full max-sm:border-t max-sm:border-(--hairline) max-sm:pt-3 max-sm:[&>button]:w-full">
           <ReceiveDialog debt={debt} onReceived={onReceived} />
         </div>
       </div>
