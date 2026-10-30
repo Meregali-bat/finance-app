@@ -45,6 +45,7 @@ export function JarYieldDialog({
   cdiPercent,
   context,
   leaving = [],
+  ignoring = [],
   onSaved,
 }: {
   jarId: string;
@@ -55,6 +56,8 @@ export function JarYieldDialog({
   context: YieldContext;
   /** O que já tem data de volta: sai antes, e a simulação diz isso. */
   leaving?: { amount: number; date: string }[];
+  /** Voltas que a simulação ignora para simular o saldo inteiro: dizer isso. */
+  ignoring?: { amount: number; date: string }[];
   /** Salvo: o aviso é de quem chama. */
   onSaved?: (percent: number | null) => void;
 }) {
@@ -182,6 +185,15 @@ export function JarYieldDialog({
             </p>
           )}
 
+          {ignoring.length > 0 && (
+            <p className="-mt-1 text-[12.5px] text-muted-foreground tabular-nums">
+              Conta o saldo inteiro, como se{" "}
+              {ignoring.length === 1
+                ? `a volta de ${shortDay(dayFromKey(ignoring[0].date))} não acontecesse`
+                : "as voltas marcadas não acontecessem"}
+              .
+            </p>
+          )}
           {lots.length > 0 ? (
             <JarYieldPreview
               lots={lots}

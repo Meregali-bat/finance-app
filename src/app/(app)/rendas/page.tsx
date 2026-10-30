@@ -154,7 +154,7 @@ export default async function FixedPage({
     if (row.ended) return null;
     if (expense.cardId) {
       const due = cardDueById.get(expense.cardId);
-      return { text: due ? `na fatura que vence dia ${due}` : "na fatura do cartão" };
+      return { text: due ? `fatura do dia ${due}` : "na fatura do cartão" };
     }
     if (expense.dueDay == null) return null;
     const { dates, next } = dueDatesInCycle(expense.dueDay);
@@ -289,9 +289,15 @@ export default async function FixedPage({
       left &&
       (row.ended
         ? "parcelas encerradas"
-        : // A adiada para depois da última já está no aviso de baixo e na
-          // data da última: repetir "+ 1 adiada" aqui só alongava a linha.
-          `${left.remaining === 1 ? "falta 1 parcela" : `faltam ${left.remaining} parcelas`} · última em ${formatShortDate(lastDeferred ?? left.last)}`);
+        : // A adiada conta: sem ela, "faltam 2 · última em 15/01" não fechava
+          // com duas parcelas a partir de agora.
+          [
+            left.remaining === 1 ? "falta 1 parcela" : `faltam ${left.remaining} parcelas`,
+            afterLast.length > 0 &&
+              `+ ${afterLast.length === 1 ? "1 adiada" : `${afterLast.length} adiadas`}`,
+          ]
+            .filter(Boolean)
+            .join(" ") + ` · última em ${formatShortDate(lastDeferred ?? left.last)}`);
     return (
       <li key={expense.id} className="rise-in" style={stagger(index, 80, 45)}>
         <ListRow
@@ -303,11 +309,15 @@ export default async function FixedPage({
           subtitle={
             <>
               <SubtitleParts
-                text={[cardName ?? (state && expense.active ? null : `todo dia ${expense.dueDay}`), installments]
+                text={[
+                  cardName ?? (state && expense.active ? null : `todo dia ${expense.dueDay}`),
+                  installments,
+                ]
                   .filter(Boolean)
                   .join(" · ")}
               />
-              {state && stateLine(state)}
+              {/* No cartão, o dia da fatura cabe ao lado do nome dele. */}
+              {state && (cardName && expense.active ? <> · <SubtitleParts text={state.text} /></> : stateLine(state))}
             </>
           }
           trailing={
@@ -510,7 +520,7 @@ export default async function FixedPage({
                           dim={!category.active}
                           title={category.name}
                           subtitle={[
-                            uses === 0 ? "sem uso" : uses === 1 ? "1 lançamento" : `${uses} lançamentos`,
+                            uses === 0 ? "sem uso" : uses === 1 ? "1 uso" : `${uses} usos`,
                             !category.active && "desativada: some dos formulários",
                           ]
                             .filter(Boolean)

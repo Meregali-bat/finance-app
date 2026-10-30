@@ -88,7 +88,7 @@ export function CategoryFormDialog({
           </div>
           {isEdit && uses > 0 && (
             <p className="text-xs text-muted-foreground">
-              Está em {uses === 1 ? "1 lançamento" : `${uses} lançamentos`}, por isso não dá para
+              Está em {uses === 1 ? "1 uso" : `${uses} usos`} (lançamentos e fixas), por isso não dá para
               excluir: o histórico ficaria sem categoria. Para tirá-la dos formulários, desative
               no interruptor da lista.
             </p>

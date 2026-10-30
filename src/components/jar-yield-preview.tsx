@@ -12,7 +12,7 @@ export function dayFromKey(key: string): Date {
 }
 
 export function shortDay(date: Date) {
-  return new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "short", timeZone: "UTC" })
+  return new Intl.DateTimeFormat("pt-BR", { day: "numeric", month: "short", timeZone: "UTC" })
     .format(date)
     .replace(".", "");
 }
