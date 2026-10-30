@@ -3,11 +3,7 @@ import { headers } from "next/headers";
 import { ChevronRight, CreditCard as CardIcon } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/auth-helpers";
-import { formatCurrency } from "@/lib/format";
-
-/** "25/11": o vencimento e o fechamento da fatura, curtos. */
-const dayMonth = (date: Date) =>
-  new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit" }).format(date);
+import { formatCurrency, formatDate } from "@/lib/format";
 import { toFixedExpenseInput } from "@/lib/budget-inputs";
 import { buildCardBillSeries, findNextOpenBill, getCardLimitUsage } from "@/lib/period";
 import { stagger } from "@/components/list-row";
@@ -194,10 +190,10 @@ export default async function CardsPage() {
                         que ainda recebe compras. */}
                     <p className="text-xs text-white/85 tabular-nums">
                       {overdue
-                        ? `venceu ${dayMonth(nextBill.dueDate)}`
+                        ? `venceu ${formatDate(nextBill.dueDate)}`
                         : billOpen
-                          ? `vence ${dayMonth(nextBill.dueDate)} · aberta, fecha ${dayMonth(nextBill.cycleEnd)}`
-                          : `vence ${dayMonth(nextBill.dueDate)} · fechada`}
+                          ? `vence ${formatDate(nextBill.dueDate)} · aberta, fecha ${formatDate(nextBill.cycleEnd)}`
+                          : `vence ${formatDate(nextBill.dueDate)} · fechada`}
                     </p>
                   </div>
                 ) : (

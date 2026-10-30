@@ -4,7 +4,15 @@ import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/auth-helpers";
 import { formatCurrency, formatDate, formatDateTime, installmentLabel } from "@/lib/format";
 import { toFixedExpenseInput } from "@/lib/budget-inputs";
-import { buildCardBillSeries, findNextOpenBill, getCardLimitUsage } from "@/lib/period";
+import {
+  buildCardBillSeries,
+  cardBillFixedExpenses,
+  findNextOpenBill,
+  getCardLimitUsage,
+  installmentSlices,
+  storedDay,
+} from "@/lib/period";
+import { markCardBillPaid } from "@/lib/actions/expense-payment";
 import { stagger } from "@/components/list-row";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader, SectionLabel, StatLabel } from "@/components/page-header";
@@ -95,8 +103,55 @@ export default async function CardDetailPage({ params }: { params: Promise<{ id:
   });
   const nextBill = findNextOpenBill(cardBills);
   const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  // O que cada fatura cobra, linha a linha: a parcela de cada compra que cai
+  // no ciclo dela, as assinaturas e as previsões. Sem isso, saber por que a
+  // fatura dá o que dá era somar de cabeça uma lista por data de compra.
+  const purchaseSlices = card.purchases.map((p) => ({
+    purchase: p,
+    slices: installmentSlices(
+      { cardId: card.id, amount: Number(p.amount), date: p.date, installments: p.installments },
+      card.closingDay,
+    ),
+  }));
+  const billItems = (bill: (typeof cardBills)[number]) => {
+    const fromPurchases = purchaseSlices.flatMap(({ purchase, slices }) => {
+      const index = slices.findIndex((s) => s.cycleEnd.getTime() === bill.cycleEnd.getTime());
+      if (index < 0) return [];
+      return [
+        {
+          label: purchase.description,
+          detail:
+            slices.length > 1
+              ? `parcela ${index + 1}/${slices.length}`
+              : formatDate(storedDay(purchase.date)),
+          amount: slices[index].amount,
+        },
+      ];
+    });
+    const fromSubscriptions = cardBillFixedExpenses({
+      card: { id: card.id, closingDay: card.closingDay, dueDay: card.dueDay },
+      cardFixedExpenses,
+      dueDate: bill.dueDate,
+    }).map((exp) => ({
+      label: card.fixedExpenses.find((f) => f.id === exp.id)?.label ?? "Assinatura",
+      detail: "assinatura",
+      amount: exp.amount,
+    }));
+    const fromEstimates = card.billEstimates
+      .filter((e) => storedDay(e.dueDate).getTime() === bill.dueDate.getTime())
+      .map((e) => ({ label: e.description, detail: "previsão", amount: Number(e.amount) }));
+    return [
+      ...fromPurchases.sort((a, b) => b.amount - a.amount),
+      ...fromSubscriptions,
+      ...fromEstimates,
+    ];
+  };
   const projectedBills = cardBills.map((bill) => ({
     dueDateIso: bill.dueDate.toISOString(),
+    cycleEnd: bill.cycleEnd,
+    items: billItems(bill),
+    // Aberta: o ciclo ainda recebe compras, e a fatura ainda pode crescer.
+    open: today.getTime() <= bill.cycleEnd.getTime(),
     dueDate: bill.dueDate,
     amount: bill.amount,
     purchaseAmount: bill.purchaseAmount,
@@ -198,9 +253,13 @@ export default async function CardDetailPage({ params }: { params: Promise<{ id:
                 {/* Neutro, como na lista: uma fatura é conta a pagar, não prejuízo. */}
                 {formatCurrency(Math.max(0, nextBill.amount - (nextBill.partialPaid ?? 0)))}
               </p>
+              {/* O mesmo estado do cartão na lista: vencida, aberta ou fechada. */}
               <p className="text-[12.5px] text-muted-foreground">
-                {nextBill.dueDate.getTime() < todayStart.getTime() ? "Venceu" : "Vence"}{" "}
-                {formatDate(nextBill.dueDate)}
+                {nextBill.dueDate.getTime() < todayStart.getTime()
+                  ? `Venceu ${formatDate(nextBill.dueDate)}`
+                  : today.getTime() <= nextBill.cycleEnd.getTime()
+                    ? `Vence ${formatDate(nextBill.dueDate)} · aberta, fecha ${formatDate(nextBill.cycleEnd)}`
+                    : `Vence ${formatDate(nextBill.dueDate)} · fechada`}
                 {nextBill.partialPaid ? ` · já pago ${formatCurrency(nextBill.partialPaid)}` : ""}
               </p>
             </>
@@ -230,7 +289,7 @@ export default async function CardDetailPage({ params }: { params: Promise<{ id:
                 />
               </span>
               <p className="text-[12px] text-muted-foreground tabular-nums">
-                {formatCurrency(limitUsage.available)} de {formatCurrency(limitUsage.limit)} livres
+                de {formatCurrency(limitUsage.limit)} · {formatCurrency(limitUsage.available)} livres
               </p>
               {/* À vista, e não num `title`: no toque, o `title` não existe. */}
               <p className="text-[11px] text-muted-foreground">
@@ -261,7 +320,13 @@ export default async function CardDetailPage({ params }: { params: Promise<{ id:
       </div>
 
       <div className="grid items-start gap-6 xl:grid-cols-2">
-        <CardBillProjection cardId={card.id} bills={projectedBills} estimates={listedEstimates} />
+        <CardBillProjection
+          cardId={card.id}
+          bills={projectedBills}
+          estimates={listedEstimates}
+          payAction={markCardBillPaid.bind(null, card.id)}
+          cardName={card.name}
+        />
 
         <div className="flex flex-col gap-2 xl:pt-0">
           <SectionLabel>Compras</SectionLabel>
