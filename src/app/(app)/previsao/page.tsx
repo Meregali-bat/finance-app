@@ -564,12 +564,21 @@ export default async function ForecastPage({
   const heroExits = offset === 0 && isNegative ? current : null;
   // A saída do aviso: o adiar de verdade mora nos lembretes da Início, e só
   // vale para o ciclo atual; à frente, o que dá para mexer são as despesas
-  // fixas (pausar, encerrar, mudar o valor). E, havendo dinheiro guardado, um
-  // resgate.
-  const hasJarBalance =
+  // fixas (pausar, encerrar, mudar o valor). E, havendo dinheiro guardado sem
+  // data de volta, um resgate: o que já tem data já está nesta conta, e
+  // mandar resgatá-lo prometia um dinheiro que não cobre nada.
+  const freeInJars =
     shortfall || heroExits
-      ? (await prisma.jar.count({ where: { userId, deletedAt: null, balance: { gt: 0 } } })) > 0
-      : false;
+      ? Number(
+          (
+            await prisma.jar.aggregate({
+              where: { userId, deletedAt: null },
+              _sum: { balance: true },
+            })
+          )._sum.balance ?? 0,
+        ) - (inputs.jarReturns ?? []).reduce((sum, r) => sum + r.amount, 0)
+      : 0;
+  const hasJarBalance = freeInJars >= 0.005;
   const exitLinks = (target: PeriodForecast) => (
     <div className="flex flex-wrap gap-x-4 gap-y-1 text-[13px] font-medium">
       {target.offset === 0 ? (
@@ -583,7 +592,7 @@ export default async function ForecastPage({
       )}
       {hasJarBalance && (
         <Link href="/caixinhas" className={cn(shortfallLink, "-my-3 inline-block py-3")}>
-          Resgatar de uma caixinha
+          Resgatar até {formatCurrency(freeInJars)} de uma caixinha
         </Link>
       )}
     </div>

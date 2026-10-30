@@ -73,12 +73,27 @@ export function ListRow({
   /** Um bloco extra embaixo da linha (o adiamento de uma despesa, por exemplo). */
   children?: React.ReactNode;
 }) {
+  // Valor e três ações não cabem lado a lado com o texto num celular: lá o
+  // valor sobe para a linha do título.
+  const stacked = value !== undefined && !!trailing;
   return (
     <div className={listRowSurface(cn("flex flex-col gap-2.5", className))} style={style}>
       <div className="flex items-center gap-3">
         {icon && <IconSquare tone={tone}>{icon}</IconSquare>}
         <div className={cn("min-w-0 flex-1 transition-opacity", dim && "opacity-50")}>
-          <p className="truncate text-[14.5px] font-semibold">{title}</p>
+          <div className="flex items-baseline justify-between gap-2">
+            <p className="truncate text-[14.5px] font-semibold">{title}</p>
+            {stacked && (
+              <span
+                className={cn(
+                  "shrink-0 text-[14.5px] font-semibold tabular-nums sm:hidden",
+                  valueClassName,
+                )}
+              >
+                {value}
+              </span>
+            )}
+          </div>
           {subtitle && (
             <p className="text-[12.5px] text-muted-foreground">
               {typeof subtitle === "string" ? <SubtitleParts text={subtitle} /> : subtitle}
@@ -86,7 +101,13 @@ export function ListRow({
           )}
         </div>
         {value !== undefined && (
-          <span className={cn("shrink-0 text-[14.5px] font-semibold tabular-nums", valueClassName)}>
+          <span
+            className={cn(
+              "shrink-0 text-[14.5px] font-semibold tabular-nums",
+              stacked && "max-sm:hidden",
+              valueClassName,
+            )}
+          >
             {value}
           </span>
         )}

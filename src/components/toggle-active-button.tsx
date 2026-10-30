@@ -1,40 +1,60 @@
 "use client";
 
-import { useOptimistic, useTransition } from "react";
+import { useOptimistic, useState, useTransition } from "react";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { errorMessage } from "@/lib/error-message";
 import { cn } from "@/lib/utils";
 
 /**
  * Liga e desliga uma renda ou despesa. Um interruptor, e não mais o selo
  * "Ativa/Inativa": o estado e a ação são a mesma coisa, e o selo não parecia
- * clicável. Muda na hora (otimista) e volta se a action falhar.
+ * clicável. Muda na hora (otimista) e volta se a action falhar, dizendo por quê.
  */
 export function ToggleActiveButton({
   active,
   onToggle,
   label,
+  titles,
+  confirmOff,
 }: {
   active: boolean;
   onToggle: (next: boolean) => Promise<void>;
   /** O que o interruptor liga, para o leitor de tela: "Ativar Internet". */
   label?: string;
+  /** A dica de cada lado: "Pausar…" quando ligado, "Retomar" quando desligado. */
+  titles?: { on: string; off: string };
+  /** Desligar pede confirmação, com o que muda — a última renda, por exemplo. */
+  confirmOff?: { title: string; description: string };
 }) {
   const [isPending, startTransition] = useTransition();
   const [on, setOn] = useOptimistic(active);
+  const [asking, setAsking] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  function flip() {
+    setError(null);
+    startTransition(async () => {
+      setOn(!on);
+      try {
+        await onToggle(!on);
+      } catch (e) {
+        // O otimista volta sozinho quando a transição acaba; o motivo fica na dica.
+        setError(errorMessage(e, "Não deu para mudar. Tente de novo."));
+      }
+    });
+  }
 
   return (
+    <>
     <button
       type="button"
       role="switch"
       aria-checked={on}
       aria-label={label ?? (on ? "Desativar" : "Ativar")}
-      title={on ? "Ativa" : "Inativa"}
+      aria-invalid={error ? true : undefined}
+      title={error ?? (titles ? (on ? titles.on : titles.off) : on ? "Ativa" : "Inativa")}
       disabled={isPending}
-      onClick={() =>
-        startTransition(async () => {
-          setOn(!on);
-          await onToggle(!on);
-        })
-      }
+      onClick={() => (on && confirmOff ? setAsking(true) : flip())}
       // A área de toque é de 44px; o trilho desenhado, de 34×20.
       className="group/switch flex size-11 shrink-0 items-center justify-center rounded-full outline-none focus-visible:ring-3 focus-visible:ring-ring/50 lg:size-[38px]"
     >
@@ -53,5 +73,24 @@ export function ToggleActiveButton({
         />
       </span>
     </button>
+    {error && (
+      <span role="alert" className="sr-only">
+        {error}
+      </span>
+    )}
+    {confirmOff && (
+      <ConfirmDialog
+        open={asking}
+        onOpenChange={setAsking}
+        title={confirmOff.title}
+        description={confirmOff.description}
+        confirmLabel="Pausar"
+        onConfirm={() => {
+          setAsking(false);
+          flip();
+        }}
+      />
+    )}
+    </>
   );
 }

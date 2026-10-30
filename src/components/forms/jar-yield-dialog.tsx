@@ -114,7 +114,7 @@ export function JarYieldDialog({
               </div>
             </div>
             <div className="flex flex-col gap-2">
-              <Label htmlFor="cdiAnnual">CDI ao ano</Label>
+              <Label htmlFor="cdiAnnual">CDI ao ano (só na simulação)</Label>
               <div className="relative">
                 <Input
                   id="cdiAnnual"

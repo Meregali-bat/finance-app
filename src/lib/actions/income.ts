@@ -22,6 +22,8 @@ export async function createIncome(formData: FormData) {
   await prisma.income.create({ data: { ...data, userId } });
   revalidatePath("/rendas");
   revalidatePath("/");
+  revalidatePath("/previsao");
+  revalidatePath("/historico");
 }
 
 export async function updateIncome(id: string, formData: FormData) {
@@ -38,6 +40,8 @@ export async function updateIncome(id: string, formData: FormData) {
   });
   revalidatePath("/rendas");
   revalidatePath("/");
+  revalidatePath("/previsao");
+  revalidatePath("/historico");
 }
 
 /**
@@ -63,4 +67,6 @@ export async function toggleIncomeActive(id: string, active: boolean) {
   await prisma.income.update({ where: { id, userId }, data: { active } });
   revalidatePath("/rendas");
   revalidatePath("/");
+  revalidatePath("/previsao");
+  revalidatePath("/historico");
 }

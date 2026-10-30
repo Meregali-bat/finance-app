@@ -58,8 +58,8 @@ export function IncomeFormDialog({ income }: { income?: IncomeValues }) {
                 ? iconButton({ tone: "ghost", size: "sm" })
                 : iconButton({ tone: "cta", size: "lg" })
             }
-            aria-label={isEdit ? "Editar renda" : "Nova renda"}
-            title={isEdit ? "Editar renda" : "Nova renda"}
+            aria-label={isEdit ? `Editar ${income.label}` : "Nova renda"}
+            title={isEdit ? `Editar ${income.label}` : "Nova renda"}
           />
         }
       >

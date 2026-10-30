@@ -241,15 +241,75 @@ export async function scheduleJarWithdrawal(jarId: string, formData: FormData) {
   revalidatePath("/previsao");
 }
 
-/** Tira a data de volta: o dinheiro fica na caixinha sem previsão de sair. */
-export async function cancelJarReturn(source: { kind: "deposit" | "schedule"; id: string }) {
+/** O que o "Desfazer" precisa para pôr uma data de volta como estava. */
+export type CancelledJarReturn =
+  | { kind: "schedule"; id: string; jarId: string; amount: number; date: string; createdAt: string }
+  | { kind: "deposit"; id: string; plannedWithdrawalAt: string };
+
+/**
+ * Tira a data de volta: o dinheiro fica na caixinha sem previsão de sair.
+ * Devolve o que havia, para o "Desfazer" repor — tirar a data muda o número
+ * do dia, e um toque errado não pode ficar sem volta.
+ */
+export async function cancelJarReturn(source: {
+  kind: "deposit" | "schedule";
+  id: string;
+}): Promise<CancelledJarReturn | null> {
   const userId = await requireUserId();
+  let cancelled: CancelledJarReturn | null = null;
   if (source.kind === "schedule") {
-    await prisma.jarWithdrawalPlan.deleteMany({ where: { id: source.id, userId } });
+    const plan = await prisma.jarWithdrawalPlan.findFirst({ where: { id: source.id, userId } });
+    if (plan) {
+      await prisma.jarWithdrawalPlan.delete({ where: { id: plan.id } });
+      cancelled = {
+        kind: "schedule",
+        id: plan.id,
+        jarId: plan.jarId,
+        amount: Number(plan.amount),
+        date: plan.date.toISOString(),
+        createdAt: plan.createdAt.toISOString(),
+      };
+    }
+  } else {
+    const deposit = await prisma.jarDeposit.findFirst({ where: { id: source.id, userId } });
+    if (deposit?.plannedWithdrawalAt) {
+      await prisma.jarDeposit.update({
+        where: { id: deposit.id },
+        data: { plannedWithdrawalAt: null },
+      });
+      cancelled = {
+        kind: "deposit",
+        id: deposit.id,
+        plannedWithdrawalAt: deposit.plannedWithdrawalAt.toISOString(),
+      };
+    }
+  }
+  revalidatePath("/caixinhas");
+  revalidatePath("/");
+  revalidatePath("/previsao");
+  return cancelled;
+}
+
+/** O "Desfazer" de `cancelJarReturn`: a data volta, com o mesmo id e a mesma ordem. */
+export async function restoreJarReturn(cancelled: CancelledJarReturn) {
+  const userId = await requireUserId();
+  if (cancelled.kind === "schedule") {
+    const jar = await prisma.jar.findFirst({ where: { id: cancelled.jarId, userId } });
+    if (!jar) throw new Error("Caixinha não encontrada");
+    await prisma.jarWithdrawalPlan.create({
+      data: {
+        id: cancelled.id,
+        userId,
+        jarId: jar.id,
+        amount: cancelled.amount,
+        date: new Date(cancelled.date),
+        createdAt: new Date(cancelled.createdAt),
+      },
+    });
   } else {
     await prisma.jarDeposit.updateMany({
-      where: { id: source.id, userId },
-      data: { plannedWithdrawalAt: null },
+      where: { id: cancelled.id, userId },
+      data: { plannedWithdrawalAt: new Date(cancelled.plannedWithdrawalAt) },
     });
   }
   revalidatePath("/caixinhas");

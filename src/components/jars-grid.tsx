@@ -16,7 +16,12 @@ import {
 } from "@/components/jar-yield-preview";
 import { DeleteIconButton } from "@/components/delete-icon-button";
 import { UndoToast, type UndoToastState } from "@/components/undo-toast";
-import { cancelJarReturn, deleteJar, undoJarDeposit } from "@/lib/actions/jar";
+import {
+  cancelJarReturn,
+  deleteJar,
+  restoreJarReturn,
+  undoJarDeposit,
+} from "@/lib/actions/jar";
 import { formatCurrency } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { errorMessage } from "@/lib/error-message";
@@ -44,13 +49,37 @@ export type JarView = {
   }[];
 };
 
+/** O que tem data de volta e ainda não venceu: a Início e a Previsão já contam com ele. */
+const committedOf = (jar: JarView) =>
+  jar.returns.filter((r) => !r.overdue).reduce((sum, r) => sum + r.amount, 0);
+
+/**
+ * As entradas que ainda não têm data de volta: as datas pegam primeiro as
+ * mais antigas, e o que sobra é o que entrou por último. É delas que um novo
+ * agendamento conta o rendimento e o IOF.
+ */
+function freeLots(jar: JarView): LotView[] {
+  let scheduled = jar.returns.reduce((sum, r) => sum + r.amount, 0);
+  const free: LotView[] = [];
+  for (const lot of [...jar.lots].sort((a, b) => a.from.localeCompare(b.from))) {
+    const take = Math.min(scheduled, lot.amount);
+    scheduled -= take;
+    if (lot.amount - take >= 0.005) free.push({ from: lot.from, amount: lot.amount - take });
+  }
+  return free;
+}
+
 /**
  * As caixinhas em grade, com o total guardado em cima. Guardar e resgatar
  * fazem o saldo e o total contarem até o valor novo (eles vêm revalidados do
  * servidor) e abrem um toast com "Desfazer".
  */
 export function JarsGrid({ jars, yieldContext }: { jars: JarView[]; yieldContext: YieldContext }) {
-  const [toast, setToast] = useState<(UndoToastState & { depositId: string }) | null>(null);
+  // Um toast só, para guardar, resgatar e tirar uma data: cada um leva o
+  // próprio "Desfazer".
+  const [toast, setToast] = useState<
+    (NonNullable<UndoToastState> & { undo: () => Promise<unknown> }) | null
+  >(null);
   const [undoing, startUndo] = useTransition();
   const [error, setError] = useState<string | null>(null);
   // Uma chave nova por toast, para um segundo aviso substituir o primeiro com
@@ -59,23 +88,34 @@ export function JarsGrid({ jars, yieldContext }: { jars: JarView[]; yieldContext
   // Como o banco mostra: com rendimento, o que a caixinha vale hoje.
   const total = jars.reduce((sum, jar) => sum + (jar.now?.total ?? jar.balance), 0);
   const earned = jars.reduce((sum, jar) => sum + (jar.now ? jar.now.total - jar.balance : 0), 0);
+  // O que já tem data de volta está no número do dia; só o resto é folga.
+  const committed = jars.reduce((sum, jar) => sum + committedOf(jar), 0);
+  const free = Math.max(0, jars.reduce((sum, jar) => sum + jar.balance, 0) - committed);
   const estimated = yieldContext.cdiSource === "estimate";
 
   function done(jar: JarView, withdraw: boolean, depositId: string, amount: number) {
     setError(null);
     setToast({
       id: ++seq.current,
-      depositId,
       hasUndo: true,
       text: `${formatCurrency(amount)} ${withdraw ? "resgatados de" : "guardados em"} ${jar.name}`,
+      undo: () => undoJarDeposit(depositId),
     });
   }
 
-  function cancel(source: { kind: "deposit" | "schedule"; id: string }) {
+  function cancel(jar: JarView, r: JarView["returns"][number]) {
     setError(null);
     startUndo(async () => {
       try {
-        await cancelJarReturn(source);
+        const cancelled = await cancelJarReturn(r.source);
+        if (!cancelled) return;
+        setToast({
+          id: ++seq.current,
+          hasUndo: true,
+          // O efeito, e não só o fato: sem a data, esse dinheiro sai do número do dia.
+          text: `Sem data: ${formatCurrency(r.amount)} de ${jar.name} saiu da Previsão`,
+          undo: () => restoreJarReturn(cancelled),
+        });
       } catch (e) {
         setError(errorMessage(e, "Não deu para cancelar"));
       }
@@ -84,11 +124,11 @@ export function JarsGrid({ jars, yieldContext }: { jars: JarView[]; yieldContext
 
   function undo() {
     if (!toast) return;
-    const { depositId } = toast;
+    const { undo: revert } = toast;
     setToast(null);
     startUndo(async () => {
       try {
-        await undoJarDeposit(depositId);
+        await revert();
       } catch (e) {
         setError(errorMessage(e, "Não deu para desfazer"));
       }
@@ -110,6 +150,14 @@ export function JarsGrid({ jars, yieldContext }: { jars: JarView[]; yieldContext
           <p className="text-[13px] text-muted-foreground tabular-nums">
             <span className="font-medium text-positive">+{formatCurrency(earned)}</span> de
             rendimento até hoje{estimated ? " (CDI estimado)" : ""}
+          </p>
+        )}
+        {/* O que é folga e o que já está prometido: a Previsão manda resgatar
+            quando falta, e o dinheiro com data de volta já está nessa conta. */}
+        {committed >= 0.005 && (
+          <p className="text-[13px] text-muted-foreground tabular-nums">
+            <b className="font-semibold text-foreground">{formatCurrency(free)}</b> livres ·{" "}
+            {formatCurrency(committed)} com data de volta, já contados na Previsão
           </p>
         )}
       </div>
@@ -136,6 +184,12 @@ export function JarsGrid({ jars, yieldContext }: { jars: JarView[]; yieldContext
               </span>
               <DeleteIconButton
                 action={deleteJar.bind(null, jar.id)}
+                itemLabel={jar.name}
+                // Com saldo, a exclusão é recusada: dizer antes, e não depois
+                // de confirmar.
+                disabledReason={
+                  jar.balance >= 0.005 ? "Resgate o saldo para excluir a caixinha" : undefined
+                }
                 confirmMessage={`Excluir a caixinha "${jar.name}"? Os depósitos continuam no Histórico.`}
                 className="-mt-1 -mr-1 size-9 lg:size-9"
               />
@@ -149,20 +203,27 @@ export function JarsGrid({ jars, yieldContext }: { jars: JarView[]; yieldContext
                 )}
               />
               {jar.now && (
-                // Como o banco mostra: o que rendeu até hoje e o que sairia num
-                // resgate agora, já sem IOF e IR. O número grande é o valor de hoje.
-                <dl className="mt-1.5 grid grid-cols-2 gap-x-2 text-[12px] tabular-nums">
-                  <div className="min-w-0">
-                    <dt className="text-muted-foreground">Rendeu</dt>
-                    <dd className="truncate font-semibold text-positive">
-                      +{formatCurrency(jar.now.total - jar.balance)}
-                    </dd>
-                  </div>
-                  <div className="min-w-0">
-                    <dt className="text-muted-foreground">Saque líquido</dt>
-                    <dd className="truncate font-semibold">{formatCurrency(jar.now.net)}</dd>
-                  </div>
-                </dl>
+                // Como o banco mostra: o número grande é o bruto de hoje, com o
+                // que rendeu; ao lado, o que sairia num resgate agora, já sem
+                // IOF e IR. Cada um diz qual é.
+                <>
+                  <p className="text-[12px] text-muted-foreground">bruto hoje, com rendimento</p>
+                  <dl className="mt-1.5 grid grid-cols-2 gap-x-2 text-[12px] tabular-nums">
+                    <div className="min-w-0">
+                      <dt className="text-muted-foreground">Rendeu</dt>
+                      <dd className="truncate font-semibold text-positive">
+                        +{formatCurrency(jar.now.total - jar.balance)}
+                      </dd>
+                    </div>
+                    <div className="min-w-0">
+                      <dt className="text-muted-foreground">Se resgatar hoje</dt>
+                      <dd className="truncate font-semibold">
+                        {formatCurrency(jar.now.net)}{" "}
+                        <span className="font-normal text-muted-foreground">líquido</span>
+                      </dd>
+                    </div>
+                  </dl>
+                </>
               )}
             </div>
             {jar.returns.length > 0 && (
@@ -176,12 +237,14 @@ export function JarsGrid({ jars, yieldContext }: { jars: JarView[]; yieldContext
                     )}
                   >
                     <span className="min-w-0 pt-1.5">
+                      {/* O guardado é o que a Previsão conta; o rendimento até lá
+                          é um extra, líquido, que ela deixa de fora. */}
                       {r.overdue
                         ? `${formatCurrency(r.amount)} era para voltar em ${shortDay(dayFromKey(r.date))}: resgate para contar`
-                        : `${formatCurrency(r.amount)} volta em ${shortDay(dayFromKey(r.date))}`}
+                        : `${formatCurrency(r.amount)} volta em ${shortDay(dayFromKey(r.date))}, já na Previsão`}
                       {r.withYield != null && r.withYield - r.amount >= 0.005 && (
-                        <span className="block text-foreground">
-                          {formatCurrency(r.withYield)} com o rendimento até lá
+                        <span className="block">
+                          líquido no dia {formatCurrency(r.withYield)}
                           <span className="text-positive">
                             {" "}
                             (+{formatCurrency(r.withYield - r.amount)})
@@ -191,17 +254,25 @@ export function JarsGrid({ jars, yieldContext }: { jars: JarView[]; yieldContext
                     </span>
                     <button
                       type="button"
-                      onClick={() => cancel(r.source)}
-                      aria-label={`Cancelar a volta de ${formatCurrency(r.amount)}`}
-                      title="Cancelar a data"
-                      className="-mr-2 flex size-8 shrink-0 items-center justify-center rounded-full transition-colors duration-150 hover:bg-muted hover:text-foreground"
+                      onClick={() => cancel(jar, r)}
+                      disabled={undoing}
+                      aria-label={`Tirar a data de volta de ${formatCurrency(r.amount)}`}
+                      title="Tirar a data de volta"
+                      className="-mr-2 flex size-9 shrink-0 items-center justify-center rounded-full transition-colors duration-150 hover:bg-muted hover:text-foreground"
                     >
-                      <X className="size-3.5" aria-hidden="true" />
+                      <X className="size-4" aria-hidden="true" />
                     </button>
                   </li>
                 ))}
               </ul>
             )}
+            {jar.returns.length > 0 &&
+              jar.balance - jar.returns.reduce((sum, r) => sum + r.amount, 0) >= 0.005 && (
+                <p className="-mt-2 text-[12.5px] text-muted-foreground tabular-nums">
+                  {formatCurrency(jar.balance - jar.returns.reduce((sum, r) => sum + r.amount, 0))}{" "}
+                  sem data de volta
+                </p>
+              )}
             {/* Lado a lado quando cabe: no card largo do celular, uma embaixo da
                 outra só alongava a caixinha. */}
             <div className="flex flex-wrap items-center gap-x-5 gap-y-1">
@@ -214,7 +285,7 @@ export function JarsGrid({ jars, yieldContext }: { jars: JarView[]; yieldContext
                       (jar.balance - jar.returns.reduce((sum, r) => sum + r.amount, 0)) * 100,
                     ) / 100
                   }
-                  lots={jar.lots}
+                  lots={freeLots(jar)}
                   cdiPercent={jar.cdiPercent}
                   context={yieldContext}
                 />
@@ -242,6 +313,11 @@ export function JarsGrid({ jars, yieldContext }: { jars: JarView[]; yieldContext
                 jarName={jar.name}
                 mode="withdraw"
                 yieldContext={yieldContext}
+                holding={{
+                  balance: jar.balance,
+                  net: jar.now?.net ?? null,
+                  returns: jar.returns.filter((r) => !r.overdue),
+                }}
                 disabled={jar.balance <= 0}
                 onDone={({ depositId, amount }) => done(jar, true, depositId, amount)}
               />
