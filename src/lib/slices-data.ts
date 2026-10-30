@@ -63,6 +63,7 @@ export async function loadSlicesOverview(userId: string, today: Date) {
   // o dinheiro está comprometido, e o orçamento já o desconta. O que um
   // parcial pagou já veio como pagamento; aqui entra só o que falta.
   const fixedCategoryOf = new Map(fixedCategories.map((f) => [f.id, f]));
+  let toPay = 0;
   const { fixedExpenseOccurrences } = obligationsInRange(
     { ...inputs, today },
     budget.periodStart,
@@ -73,6 +74,7 @@ export async function loadSlicesOverview(userId: string, today: Date) {
     const { remaining } = openOccurrenceAmounts(occ.estimate, occ.partial);
     const fixed = fixedCategoryOf.get(occ.expenseId);
     if (remaining < 0.005 || !fixed?.categoryId) continue;
+    toPay += remaining;
     spending.push({
       slice:
         sliceByCategory.get(fixed.categoryId) ??
@@ -96,6 +98,8 @@ export async function loadSlicesOverview(userId: string, today: Date) {
     income: budget.incomeTotal,
     dailyAvailable,
     savings,
+    /** Do gasto das fatias, o que ainda são contas fixas a pagar no período. */
+    toPay: Math.round(toPay * 100) / 100,
     usage: inputs.slices
       ? sliceUsage({ income: budget.incomeTotal, percents: inputs.slices, spending, saved })
       : [],
