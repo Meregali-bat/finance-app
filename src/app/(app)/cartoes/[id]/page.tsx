@@ -20,6 +20,7 @@ import { CardFormDialog } from "@/components/forms/card-form-dialog";
 import { CardPurchaseFormDialog } from "@/components/forms/card-purchase-form-dialog";
 import { CardBillEstimateDialog } from "@/components/forms/card-bill-estimate-dialog";
 import { CardBillProjection } from "@/components/card-bill-projection";
+import { CardScreenshotCheck } from "@/components/card-screenshot-check";
 import { MovementRow } from "@/components/movement-row";
 import { toMovementValues } from "@/lib/history-item";
 import { DeleteIconButton } from "@/components/delete-icon-button";
@@ -391,6 +392,11 @@ export default async function CardDetailPage({ params }: { params: Promise<{ id:
             </>
           )}
         </div>
+      </div>
+
+      {/* Fatura aberta não tem PDF: a conferência é pelas prints da tela do banco. */}
+      <div className="lg:max-w-2xl">
+        <CardScreenshotCheck cardId={card.id} />
       </div>
     </div>
   );
