@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { loadBudgetInputs } from "@/lib/budget-inputs";
 import { todayBudget } from "@/lib/today-budget";
 import { loadHistoryItems } from "@/lib/history-items";
-import { countsAsSpending } from "@/lib/report-totals";
+import { countsAsSpending, ownSpending } from "@/lib/report-totals";
 import { isSliceKey, sliceOfCategory, sliceUsage, type SliceKey } from "@/lib/slices";
 import { obligationsInRange, openOccurrenceAmounts } from "@/lib/period";
 
@@ -37,7 +37,7 @@ export async function loadSlicesOverview(userId: string, today: Date) {
     }),
     prisma.fixedExpense.findMany({
       where: { userId },
-      select: { id: true, categoryId: true, category: { select: { name: true } } },
+      select: { id: true, label: true, categoryId: true, category: { select: { name: true } } },
     }),
   ]);
 
@@ -56,8 +56,18 @@ export async function loadSlicesOverview(userId: string, today: Date) {
   const chosen = (i: { slice?: string | null }) => (isSliceKey(i.slice) ? i.slice : null);
   const spending = spendingItems
     .filter((i) => chosen(i) || i.categoryId)
-    .map((i) => ({ slice: chosen(i) ?? sliceOf(i.categoryId!), amount: i.amount }));
-  const uncategorized = spendingItems.filter((i) => !i.categoryId && !chosen(i));
+    // Só a parte sua: o emprestado de uma compra dividida volta.
+    .map((i) => ({ slice: chosen(i) ?? sliceOf(i.categoryId!), amount: ownSpending(i) }));
+  const uncategorized: {
+    id: string;
+    kind: string;
+    description: string;
+    amount: number;
+    date: Date;
+    cardName?: string | null;
+  }[] = spendingItems
+    .filter((i) => !i.categoryId && !chosen(i))
+    .map((i) => ({ ...i, amount: ownSpending(i) }));
 
   // A conta fixa do período que ainda não foi paga também já é da fatia dela:
   // o dinheiro está comprometido, e o orçamento já o desconta. O que um
@@ -73,8 +83,19 @@ export async function loadSlicesOverview(userId: string, today: Date) {
     if (occ.payment) continue;
     const { remaining } = openOccurrenceAmounts(occ.estimate, occ.partial);
     const fixed = fixedCategoryOf.get(occ.expenseId);
-    if (remaining < 0.005 || !fixed?.categoryId) continue;
+    if (remaining < 0.005) continue;
     toPay += remaining;
+    // Sem categoria, a conta não entra em fatia, mas continua à vista.
+    if (!fixed?.categoryId) {
+      uncategorized.push({
+        id: `${occ.expenseId}-${occ.dueDate.toISOString()}`,
+        kind: "fixedExpenseOpen",
+        description: fixed?.label ?? "Conta fixa",
+        amount: remaining,
+        date: occ.dueDate,
+      });
+      continue;
+    }
     spending.push({
       slice:
         sliceByCategory.get(fixed.categoryId) ??

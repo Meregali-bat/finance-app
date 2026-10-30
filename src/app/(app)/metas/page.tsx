@@ -26,14 +26,15 @@ const OUTSIDE: Record<string, string> = {
   cardBillAdjustment: "Diferença da fatura",
   cardFixedExpense: "Categoria em Fixos",
   fixedExpensePayment: "Categoria em Fixos",
+  fixedExpenseOpen: "A pagar · categoria em Fixos",
 };
 
 export default async function SlicesPage() {
   const userId = await requireUserId();
   const today = new Date();
   const overview = await loadSlicesOverview(userId, today);
-  const until = new Date(overview.periodEnd.getTime() - 86_400_000);
-  const subtitle = `De ${formatDate(overview.periodStart)} a ${formatDate(until)}`;
+  // O período vai de um pagamento ao outro: nomear os dois bate com a Início ("até 15 de nov.").
+  const subtitle = `Do pagamento de ${formatDate(overview.periodStart)} ao de ${formatDate(overview.periodEnd)}`;
 
   if (!overview.configured || !overview.percents) {
     return (
@@ -143,35 +144,45 @@ export default async function SlicesPage() {
               </div>
               <div>
                 <dt className="text-[12.5px] font-medium text-muted-foreground">
-                  Gasto no período
+                  Comprometido no período
                 </dt>
                 <dd className="font-heading text-xl font-bold tabular-nums">
                   {formatCurrency(totalSpent)}
                 </dd>
                 {overview.toPay > 0.005 && (
                   <dd className="mt-0.5 text-[12.5px] text-muted-foreground tabular-nums">
-                    {formatCurrency(overview.toPay)} em contas ainda a pagar
+                    {formatCurrency(overview.toPay)} ainda a pagar
                   </dd>
                 )}
                 {Math.abs(unsliced) > 0.005 && (
                   <dd className="text-[12.5px] text-muted-foreground tabular-nums">
-                    {formatCurrency(unsliced)} fora das fatias
+                    {formatCurrency(unsliced)} sem fatia
                   </dd>
                 )}
               </div>
             </dl>
           </div>
           {!noIncome && (
-            <p
-              className={cn(
-                "border-t border-(--hairline) pt-3 text-[13px] font-semibold text-balance tabular-nums",
-                pastAllowance > 0.005 ? "text-negative" : "text-foreground",
-              )}
-            >
-              {pastAllowance > 0.005
-                ? `${formatCurrency(pastAllowance)} além dos ${formatCurrency(allowance)} que a divisão deixa gastar`
-                : `Ainda cabem ${formatCurrency(-pastAllowance)} dos ${formatCurrency(allowance)} que a divisão deixa gastar`}
-            </p>
+            <div className="flex flex-col gap-0.5 border-t border-(--hairline) pt-3 text-[13px] tabular-nums">
+              <p
+                className={cn(
+                  "font-semibold text-balance",
+                  pastAllowance > 0.005 ? "text-negative" : "text-foreground",
+                )}
+              >
+                {pastAllowance > 0.005
+                  ? `${formatCurrency(pastAllowance)} além dos ${formatCurrency(allowance)} que a divisão deixa gastar`
+                  : `Pela divisão, ainda cabem ${formatCurrency(-pastAllowance)} dos ${formatCurrency(allowance)}`}
+              </p>
+              {/* A divisão é o plano; o número do dia é o dinheiro de verdade. */}
+              <p className="text-muted-foreground text-balance">
+                Pelo seu dinheiro de agora, você pode gastar{" "}
+                <span className="font-semibold text-foreground">
+                  {formatCurrency(overview.dailyAvailable)}
+                </span>{" "}
+                hoje.
+              </p>
+            </div>
           )}
         </div>
 
@@ -405,10 +416,8 @@ export default async function SlicesPage() {
         <details className={homeCard("group py-3 lg:py-3")}>
           <summary className="flex cursor-pointer list-none items-baseline justify-between gap-3 text-[13px] [&::-webkit-details-marker]:hidden">
             <span className="text-muted-foreground">
-              Fora das fatias:{" "}
-              {outside.length === 1
-                ? "1 valor sem categoria"
-                : `${outside.length} valores sem categoria`}
+              Não dá para categorizar aqui:{" "}
+              {outside.length === 1 ? "1 valor" : `${outside.length} valores`}
             </span>
             <span className="flex shrink-0 items-center gap-2 font-semibold tabular-nums">
               {formatCurrency(outsideTotal)}
