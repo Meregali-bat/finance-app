@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { AlertTriangle, PiggyBank, SlidersHorizontal, Target } from "lucide-react";
+import { AlertTriangle, PiggyBank, SlidersHorizontal, Sparkles, Target } from "lucide-react";
 import { requireUserId } from "@/lib/auth-helpers";
 import { loadSlicesOverview } from "@/lib/slices-data";
 import { SLICES, savingPercent } from "@/lib/slices";
@@ -40,9 +40,15 @@ export default async function SlicesPage() {
               fatia.
             </p>
           </div>
-          <Link href="/metas/ajustar" className={buttonVariants()}>
-            Configurar as fatias
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <Link href="/metas/ia" className={buttonVariants()}>
+              <Sparkles aria-hidden="true" />
+              Montar com a IA
+            </Link>
+            <Link href="/metas/ajustar" className={buttonVariants({ variant: "outline" })}>
+              Configurar à mão
+            </Link>
+          </div>
         </div>
       </div>
     );
@@ -61,14 +67,24 @@ export default async function SlicesPage() {
         title="Metas"
         subtitle={subtitle}
         action={
-          <Link
-            href="/metas/ajustar"
-            aria-label="Ajustar as fatias"
-            title="Ajustar as fatias"
-            className={iconButton({ tone: "outline", size: "lg" })}
-          >
-            <SlidersHorizontal aria-hidden="true" />
-          </Link>
+          <>
+            <Link
+              href="/metas/ia"
+              aria-label="Montar com a IA"
+              title="Montar com a IA"
+              className={iconButton({ tone: "outline", size: "lg" })}
+            >
+              <Sparkles aria-hidden="true" />
+            </Link>
+            <Link
+              href="/metas/ajustar"
+              aria-label="Ajustar as fatias"
+              title="Ajustar as fatias"
+              className={iconButton({ tone: "outline", size: "lg" })}
+            >
+              <SlidersHorizontal aria-hidden="true" />
+            </Link>
+          </>
         }
       />
 
