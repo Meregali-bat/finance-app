@@ -6,7 +6,7 @@ import { DeleteIconButton } from "@/components/delete-icon-button";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { deleteCardBillEstimate } from "@/lib/actions/card-bill-estimate";
 import { LineChart } from "@/components/charts/line-chart";
-import { ConfirmPaymentDialog } from "@/components/confirm-payment-dialog";
+import { CardBillPayButton } from "@/components/card-bill-pay-button";
 
 /**
  * Uma fatura projetada, já reduzida a valores que atravessam para o cliente —
@@ -40,6 +40,13 @@ export type ListedEstimate = {
   description: string;
   dueDate: Date;
   amount: number;
+  /**
+   * O que as compras lançadas DEPOIS da previsão somam na fatura dela, quando
+   * já chegam ao valor previsto: é a compra que a previsão antecipava, e as
+   * duas agora contam juntas. Ausente quando não há esse risco — uma anuidade
+   * numa fatura cheia de compras antigas não é dobra nenhuma.
+   */
+  doubled?: number;
 };
 
 /** "compras R$ 1.750,59 · assinaturas R$ 209,00 · previsto R$ 100,00". */
@@ -60,10 +67,8 @@ function billParts(bill: ProjectedBill): string | null {
  */
 function estimateSubtitle(estimate: ListedEstimate, bill: ProjectedBill | undefined) {
   const where = `Na fatura de ${formatDate(estimate.dueDate)}`;
-  if (!bill || bill.paid) return where;
-  const real = bill.purchaseAmount + bill.fixedExpenseAmount;
-  if (real + 0.005 < estimate.amount) return where;
-  return `${where} · as compras dela já somam ${formatCurrency(real)}: se a previsão era delas, exclua para não contar em dobro`;
+  if (!bill || bill.paid || estimate.doubled == null) return where;
+  return `${where} · depois dela entraram ${formatCurrency(estimate.doubled)} em compras: se eram o que ela previa, exclua`;
 }
 
 export function CardBillProjection({
@@ -138,7 +143,24 @@ export function CardBillProjection({
       )}
 
       <div className="flex flex-col gap-2">
-        <SectionLabel>Faturas</SectionLabel>
+        {/* Pagar fica no título, e não dentro da linha da fatura: pagar tira a
+            fatura da vez, e o "Desfazer" precisa continuar na tela. */}
+        <div className="flex min-h-11 items-center justify-between gap-3">
+          <SectionLabel>Faturas</SectionLabel>
+          <CardBillPayButton
+            action={payAction}
+            bill={
+              nextOpen
+                ? {
+                    label: `Fatura do ${cardName} que ${nextOpen.overdue ? "venceu" : "vence"} ${formatDate(nextOpen.dueDate)}`,
+                    dueDate: nextOpen.dueDate,
+                    amount: Math.max(0, nextOpen.amount - (nextOpen.partialPaid ?? 0)),
+                    paidSoFar: nextOpen.partialPaid ?? 0,
+                  }
+                : null
+            }
+          />
+        </div>
         {bills.map((bill, index) => (
           <div key={bill.dueDateIso} className="rise-in" style={stagger(index, 220)}>
             <ListRow
@@ -152,6 +174,10 @@ export function CardBillProjection({
                   // R$ 100 previstos" escondia as assinaturas, e a soma das
                   // compras não chegava no total.
                   billParts(bill),
+                  // O aviso também na linha cujo total ele infla.
+                  !bill.paid && estimates.some((e) => e.doubled != null && billOf(e) === bill)
+                    ? "a previsão pode estar contando em dobro"
+                    : null,
                 ]
                   .filter(Boolean)
                   .join(" · ") || undefined
@@ -176,7 +202,7 @@ export function CardBillProjection({
               // Fatura futura ainda vazia: contexto, não algo a pagar.
               dim={bill.amount === 0 && !bill.paid}
             >
-              {(bill.items.length > 0 || bill === nextOpen) && (
+              {bill.items.length > 0 && (
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                   {bill.items.length > 0 && (
                     <details className="group/bill min-w-0 basis-full">
@@ -203,16 +229,6 @@ export function CardBillProjection({
                         ))}
                       </ul>
                     </details>
-                  )}
-                  {bill === nextOpen && (
-                    <ConfirmPaymentDialog
-                      action={payAction}
-                      label={`Fatura do ${cardName} que vence ${formatDate(bill.dueDate)}`}
-                      dueDate={bill.dueDate}
-                      amount={Math.max(0, bill.amount - (bill.partialPaid ?? 0))}
-                      allowPartial
-                      paidSoFar={bill.partialPaid ?? 0}
-                    />
                   )}
                 </div>
               )}

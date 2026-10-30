@@ -31,12 +31,17 @@ export type DueDateOption = { value: string; label: string };
 export function CardBillEstimateDialog({
   cardId,
   dueDates,
+  defaultDueDate,
 }: {
   cardId: string;
   dueDates: DueDateOption[];
+  /** A fatura que o formulário abre escolhida; sem ela, a primeira. */
+  defaultDueDate?: string;
 }) {
+  const initialDueDate =
+    dueDates.find((d) => d.value === defaultDueDate)?.value ?? dueDates[0]?.value ?? "";
   const [open, setOpen] = useState(false);
-  const [dueDate, setDueDate] = useState<string>(dueDates[0]?.value ?? "");
+  const [dueDate, setDueDate] = useState<string>(initialDueDate);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
@@ -46,7 +51,7 @@ export function CardBillEstimateDialog({
       try {
         await createCardBillEstimate(cardId, formData);
         setOpen(false);
-        setDueDate(dueDates[0]?.value ?? "");
+        setDueDate(initialDueDate);
       } catch (e) {
         setError(errorMessage(e, "Erro ao salvar"));
       }
