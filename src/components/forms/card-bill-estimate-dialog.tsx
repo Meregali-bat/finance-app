@@ -59,13 +59,19 @@ export function CardBillEstimateDialog({
         render={
           <button
             type="button"
-            className={iconButton({ tone: "outline", size: "xl" })}
-            aria-label="Prever valor na fatura"
+            // Com rótulo, como o "Nova compra" ao lado: só o ícone de
+            // calendário não dizia o que fazia.
+            className={iconButton({
+              tone: "outline",
+              size: "xl",
+              className: "w-auto gap-2 px-4 text-sm font-semibold",
+            })}
             title="Prever valor na fatura"
           />
         }
       >
         <CalendarPlus aria-hidden="true" />
+        Prever valor
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>

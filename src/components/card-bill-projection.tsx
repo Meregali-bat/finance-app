@@ -6,6 +6,7 @@ import { DeleteIconButton } from "@/components/delete-icon-button";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { deleteCardBillEstimate } from "@/lib/actions/card-bill-estimate";
 import { LineChart } from "@/components/charts/line-chart";
+import { ConfirmPaymentDialog } from "@/components/confirm-payment-dialog";
 
 /**
  * Uma fatura projetada, já reduzida a valores que atravessam para o cliente —
@@ -15,6 +16,12 @@ export type ProjectedBill = {
   /** ISO, só para a key da lista. */
   dueDateIso: string;
   dueDate: Date;
+  /** O fechamento do ciclo que gera a fatura. */
+  cycleEnd: Date;
+  /** Ainda recebe compras: o ciclo não fechou. */
+  open: boolean;
+  /** O que a fatura cobra, linha a linha: parcelas, assinaturas, previsões. */
+  items: { label: string; detail: string; amount: number }[];
   amount: number;
   /** As três partes do total, para a linha dizer de onde ele vem. */
   purchaseAmount: number;
@@ -46,15 +53,36 @@ function billParts(bill: ProjectedBill): string | null {
   return parts.map(([label, amount]) => `${label} ${formatCurrency(amount)}`).join(" · ");
 }
 
+/**
+ * Onde a previsão cai e, quando as compras da fatura já chegam ao valor dela,
+ * o aviso: a previsão soma às compras e nunca sai sozinha, então a que era
+ * delas passa a contar em dobro.
+ */
+function estimateSubtitle(estimate: ListedEstimate, bill: ProjectedBill | undefined) {
+  const where = `Na fatura de ${formatDate(estimate.dueDate)}`;
+  if (!bill || bill.paid) return where;
+  const real = bill.purchaseAmount + bill.fixedExpenseAmount;
+  if (real + 0.005 < estimate.amount) return where;
+  return `${where} · as compras dela já somam ${formatCurrency(real)}: se a previsão era delas, exclua para não contar em dobro`;
+}
+
 export function CardBillProjection({
   cardId,
+  cardName,
   bills,
   estimates,
+  payAction,
 }: {
   cardId: string;
+  cardName: string;
   bills: ProjectedBill[];
   estimates: ListedEstimate[];
+  /** `markCardBillPaid` já ligada ao cartão: pagar daqui, e não só da Início. */
+  payAction: (formData: FormData) => Promise<{ paymentId: string }>;
 }) {
+  const nextOpen = bills.find((b) => !b.paid && b.amount > 0);
+  const billOf = (e: ListedEstimate) =>
+    bills.find((b) => b.dueDate.getTime() === new Date(e.dueDate).setHours(0, 0, 0, 0));
   const paidDue = new Set(bills.filter((b) => b.paid).map((b) => b.dueDate.getTime()));
   const firstDue = bills[0]?.dueDate.getTime() ?? 0;
   const isPast = (e: ListedEstimate) =>
@@ -65,7 +93,7 @@ export function CardBillProjection({
     <ListRow
       key={estimate.id}
       title={estimate.description}
-      subtitle={`Na fatura de ${formatDate(estimate.dueDate)}`}
+      subtitle={estimateSubtitle(estimate, billOf(estimate))}
       value={formatCurrency(estimate.amount)}
       trailing={
         <DeleteIconButton
@@ -85,7 +113,7 @@ export function CardBillProjection({
           className={homeCard("rise-in flex flex-col gap-4")}
           style={{ "--rise-delay": "180ms" } as React.CSSProperties}
         >
-          <SectionLabel>Próximas faturas</SectionLabel>
+          <SectionLabel>Faturas por vencimento</SectionLabel>
           <LineChart
             title="Valor das faturas por vencimento"
             height={150}
@@ -147,7 +175,48 @@ export function CardBillProjection({
               valueClassName={bill.amount === 0 ? "text-muted-foreground" : undefined}
               // Fatura futura ainda vazia: contexto, não algo a pagar.
               dim={bill.amount === 0 && !bill.paid}
-            />
+            >
+              {(bill.items.length > 0 || bill === nextOpen) && (
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                  {bill.items.length > 0 && (
+                    <details className="group/bill min-w-0 basis-full">
+                      <summary className="flex min-h-11 w-fit cursor-pointer list-none items-center gap-1 rounded-sm text-[13px] font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring [&::-webkit-details-marker]:hidden">
+                        O que tem nesta fatura ({bill.items.length})
+                        <ChevronDown
+                          aria-hidden="true"
+                          className="size-3.5 transition-transform duration-150 group-open/bill:rotate-180"
+                        />
+                      </summary>
+                      <ul className="flex flex-col gap-1.5 border-t border-(--hairline) pt-2 text-[13px]">
+                        {bill.items.map((item, i) => (
+                          <li key={i} className="flex items-baseline justify-between gap-3">
+                            <span className="min-w-0">
+                              <span className="block truncate">{item.label}</span>
+                              <span className="block text-xs text-muted-foreground tabular-nums">
+                                {item.detail}
+                              </span>
+                            </span>
+                            <span className="shrink-0 tabular-nums">
+                              {formatCurrency(item.amount)}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </details>
+                  )}
+                  {bill === nextOpen && (
+                    <ConfirmPaymentDialog
+                      action={payAction}
+                      label={`Fatura do ${cardName} que vence ${formatDate(bill.dueDate)}`}
+                      dueDate={bill.dueDate}
+                      amount={Math.max(0, bill.amount - (bill.partialPaid ?? 0))}
+                      allowPartial
+                      paidSoFar={bill.partialPaid ?? 0}
+                    />
+                  )}
+                </div>
+              )}
+            </ListRow>
           </div>
         ))}
       </div>
