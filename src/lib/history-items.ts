@@ -208,6 +208,7 @@ export async function loadHistoryItems(
       categoryId: rememberCategory(p.fixedExpense?.category),
       cardId: p.cardId ?? undefined,
       cardName: p.card?.name,
+      settled: p.settled,
     })),
     // Negativo porque é receita, que é como o HistoryItem marca dinheiro que
     // entra — é assim que o total de recebido enxerga a receita fixa.

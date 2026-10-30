@@ -258,7 +258,11 @@ export default async function CardDetailPage({ params }: { params: Promise<{ id:
         style={{ "--rise-delay": "80ms" } as React.CSSProperties}
       >
         <div className="flex min-w-0 flex-col gap-1 rounded-[20px] bg-muted p-4 shadow-(--shadow-card) lg:p-5">
-          <StatLabel>Próxima fatura</StatLabel>
+          <StatLabel>
+            {nextBill && nextBill.dueDate.getTime() < todayStart.getTime()
+              ? "Fatura vencida"
+              : "Próxima fatura"}
+          </StatLabel>
           {nextBill ? (
             <>
               <p className="truncate font-heading text-[23px] leading-tight font-bold tracking-[-0.03em] tabular-nums lg:text-[28px]">

@@ -26,6 +26,7 @@ import { spendingCalendar } from "@/lib/spending-calendar";
 
 const UNCATEGORIZED = "__none__";
 const LENT = "__lent__";
+const UNDETAILED = "__undetailed__";
 
 export default async function HistoryPage({
   searchParams,
@@ -56,7 +57,13 @@ export default async function HistoryPage({
   for (const item of items.filter(countsAsSpending)) {
     // O emprestado vai para um balde próprio: o jantar pago para um amigo não
     // é gasto seu com "Alimentação", mesmo que tenha saído do seu bolso.
-    const key = item.lentTo ? LENT : (item.categoryId ?? UNCATEGORIZED);
+    // O valor da fatura que não veio detalhado em compras não tem categoria a
+    // dar: no "Sem categoria", ele se misturava ao que dá para categorizar.
+    const key = item.lentTo
+      ? LENT
+      : item.kind === "cardEstimate" || item.kind === "cardBillAdjustment"
+        ? UNDETAILED
+        : (item.categoryId ?? UNCATEGORIZED);
     const group = byCategory.get(key) ?? { amount: 0, items: [] };
     group.amount += item.amount;
     group.items.push(item);
@@ -69,6 +76,8 @@ export default async function HistoryPage({
       name:
         key === LENT
           ? "Emprestado"
+          : key === UNDETAILED
+            ? "Não detalhado no cartão"
           : key === UNCATEGORIZED
             ? "Sem categoria"
             : (categoryNameById.get(key) ?? "Sem categoria"),

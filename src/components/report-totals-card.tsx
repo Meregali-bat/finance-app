@@ -58,6 +58,13 @@ export function ReportTotalsCard({
             {/* De onde vem o saldo: só o que veio dos anteriores, como parcela.
                 A parte do período sai da conta, e com ela a nota passava de
                 quatro linhas no celular. */}
+            {/* As três partes do saldo, cada uma numa linha curta: o período,
+                o que veio de antes e o que foi para as caixinhas. */}
+            {figure.label === "Saldo" && (hasCarry || Math.abs(totals.saved) >= 0.005) && (
+              <p className="text-xs text-muted-foreground tabular-nums">
+                {formatCurrency(totals.balance + totals.saved)} do período
+              </p>
+            )}
             {figure.label === "Saldo" && hasCarry && (
               <p className="text-xs text-muted-foreground tabular-nums">
                 {carried < 0 ? "− " : "+ "}

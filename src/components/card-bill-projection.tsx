@@ -4,6 +4,7 @@ import { ListRow, stagger } from "@/components/list-row";
 import { SectionLabel } from "@/components/page-header";
 import { DeleteIconButton } from "@/components/delete-icon-button";
 import { formatCurrency, formatDate } from "@/lib/format";
+import { storedDay } from "@/lib/period";
 import { deleteCardBillEstimate } from "@/lib/actions/card-bill-estimate";
 import { LineChart } from "@/components/charts/line-chart";
 import { CardBillPayButton } from "@/components/card-bill-pay-button";
@@ -86,12 +87,14 @@ export function CardBillProjection({
   payAction: (formData: FormData) => Promise<{ paymentId: string }>;
 }) {
   const nextOpen = bills.find((b) => !b.paid && b.amount > 0);
+  // Pelo mesmo `storedDay` da página e de buildCardBills: zerar a hora no
+  // fuso do servidor errava o dia quando quem gravou estava em outro fuso.
   const billOf = (e: ListedEstimate) =>
-    bills.find((b) => b.dueDate.getTime() === new Date(e.dueDate).setHours(0, 0, 0, 0));
+    bills.find((b) => b.dueDate.getTime() === storedDay(e.dueDate).getTime());
   const paidDue = new Set(bills.filter((b) => b.paid).map((b) => b.dueDate.getTime()));
   const firstDue = bills[0]?.dueDate.getTime() ?? 0;
   const isPast = (e: ListedEstimate) =>
-    paidDue.has(e.dueDate.getTime()) || e.dueDate.getTime() < firstDue;
+    paidDue.has(storedDay(e.dueDate).getTime()) || storedDay(e.dueDate).getTime() < firstDue;
   const upcoming = estimates.filter((e) => !isPast(e));
   const past = estimates.filter(isPast);
   const estimateRow = (estimate: ListedEstimate) => (
@@ -102,6 +105,7 @@ export function CardBillProjection({
       value={formatCurrency(estimate.amount)}
       trailing={
         <DeleteIconButton
+          itemLabel={estimate.description}
           action={deleteCardBillEstimate.bind(null, estimate.id, cardId)}
           confirmMessage={`Excluir a previsão "${estimate.description}"? A fatura volta a mostrar só o que as compras somam.`}
         />
@@ -153,6 +157,7 @@ export function CardBillProjection({
               nextOpen
                 ? {
                     label: `Fatura do ${cardName} que ${nextOpen.overdue ? "venceu" : "vence"} ${formatDate(nextOpen.dueDate)}`,
+                    triggerText: `Pagar fatura de ${formatDate(nextOpen.dueDate)}`,
                     dueDate: nextOpen.dueDate,
                     amount: Math.max(0, nextOpen.amount - (nextOpen.partialPaid ?? 0)),
                     paidSoFar: nextOpen.partialPaid ?? 0,
