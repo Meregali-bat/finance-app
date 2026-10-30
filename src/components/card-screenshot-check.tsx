@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { CircleCheck, ImageUp, Link2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { homeCard } from "@/components/home-card";
@@ -12,6 +12,7 @@ import {
   ignoreShotLine,
   keepAppPurchase,
   linkShot,
+  reconcileSavedShots,
   type ShotAnalysis,
 } from "@/lib/actions/card-screenshots";
 import { deleteCardPurchase } from "@/lib/actions/card";
@@ -40,6 +41,31 @@ async function shrink(file: File): Promise<Blob> {
   );
 }
 
+/**
+ * A última leitura de cada cartão fica no aparelho: sair e voltar à tela
+ * concilia de novo sem mandar as prints (nem pagar a IA) outra vez.
+ */
+type Saved = { readAt: string; skipped: number; lines: ShotAnalysis["lines"] };
+const storageKey = (cardId: string) => `card-shots:${cardId}`;
+
+function loadSaved(cardId: string): Saved | null {
+  try {
+    const raw = localStorage.getItem(storageKey(cardId));
+    return raw ? (JSON.parse(raw) as Saved) : null;
+  } catch {
+    return null;
+  }
+}
+
+function storeSaved(cardId: string, saved: Saved | null) {
+  try {
+    if (saved) localStorage.setItem(storageKey(cardId), JSON.stringify(saved));
+    else localStorage.removeItem(storageKey(cardId));
+  } catch {
+    // Sem armazenamento (aba anônima): a conferência vale só enquanto a tela está aberta.
+  }
+}
+
 /** "2026-10-07" → "07 out" — lido como dia de calendário, sem fuso. */
 function shortDay(iso: string) {
   return new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "short", timeZone: "UTC" })
@@ -54,11 +80,33 @@ function shortDay(iso: string) {
  */
 export function CardScreenshotCheck({ cardId }: { cardId: string }) {
   const [analysis, setAnalysis] = useState<ShotAnalysis | null>(null);
+  const [readAt, setReadAt] = useState<string | null>(null);
   const [linking, setLinking] = useState<AppLine | null>(null);
   const [deleting, setDeleting] = useState<AppLine | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reading, startReading] = useTransition();
   const [saving, startSaving] = useTransition();
+
+  // Voltando à tela: a leitura guardada, conciliada com o app de agora.
+  useEffect(() => {
+    const saved = loadSaved(cardId);
+    if (!saved) return;
+    startReading(async () => {
+      try {
+        setAnalysis(unwrap(await reconcileSavedShots(cardId, saved)));
+        setReadAt(saved.readAt);
+      } catch {
+        storeSaved(cardId, null);
+      }
+    });
+  }, [cardId]);
+
+  function discard() {
+    storeSaved(cardId, null);
+    setAnalysis(null);
+    setReadAt(null);
+    setLinking(null);
+  }
 
   function read(files: File[]) {
     setError(null);
@@ -67,7 +115,11 @@ export function CardScreenshotCheck({ cardId }: { cardId: string }) {
       try {
         const data = new FormData();
         for (const file of files) data.append("images", await shrink(file), "print.jpg");
-        setAnalysis(unwrap(await analyzeCardScreenshots(cardId, data)));
+        const result = unwrap(await analyzeCardScreenshots(cardId, data));
+        const now = new Date().toISOString();
+        storeSaved(cardId, { readAt: now, skipped: result.skipped, lines: result.lines });
+        setAnalysis(result);
+        setReadAt(now);
       } catch (e) {
         setError(errorMessage(e, "Não deu para ler as prints. Tente de novo."));
       }
@@ -152,7 +204,7 @@ export function CardScreenshotCheck({ cardId }: { cardId: string }) {
       >
         <ImageUp className="size-6 text-primary" aria-hidden="true" />
         <span className="font-heading text-[15px] font-semibold">
-          {reading ? "Lendo as prints..." : analysis ? "Conferir outras prints" : "Escolher prints"}
+          {reading ? "Conferindo..." : analysis ? "Conferir outras prints" : "Escolher prints"}
         </span>
         <span className="text-[13px] text-muted-foreground">
           Prints da tela de lançamentos do app do banco. Pode mandar várias, mesmo repetindo
@@ -181,9 +233,27 @@ export function CardScreenshotCheck({ cardId }: { cardId: string }) {
       {analysis && (
         <>
           <div className={homeCard("flex flex-col gap-3")}>
-            <p className="font-heading text-[15px] font-semibold">
-              De {shortDay(analysis.period.start)} a {shortDay(analysis.period.end)}
-            </p>
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div>
+                <p className="font-heading text-[15px] font-semibold">
+                  De {shortDay(analysis.period.start)} a {shortDay(analysis.period.end)}
+                </p>
+                {readAt && (
+                  <p className="text-[12.5px] text-muted-foreground">
+                    Prints lidas em{" "}
+                    {new Intl.DateTimeFormat("pt-BR", {
+                      day: "2-digit",
+                      month: "2-digit",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    }).format(new Date(readAt))}
+                  </p>
+                )}
+              </div>
+              <Button type="button" variant="ghost" size="sm" onClick={discard}>
+                Encerrar conferência
+              </Button>
+            </div>
             <dl className="grid grid-cols-2 gap-3 text-sm">
               <div>
                 <dt className="text-[12.5px] text-muted-foreground">Nas prints</dt>
