@@ -17,6 +17,8 @@ import {
 import { readCardScreenshots, type ShotImage } from "@/lib/statement/read-screenshots";
 
 export interface ShotAnalysis {
+  /** Todas as compras lidas: o aparelho guarda para conciliar de novo sem a IA. */
+  lines: ShotLine[];
   period: { start: string; end: string };
   bankTotal: number;
   appTotal: number;
@@ -76,49 +78,91 @@ export async function analyzeCardScreenshots(cardId: string, formData: FormData)
 
     const { lines, skipped } = prepareShotLines(await readCardScreenshots(images), cardId, new Date());
     if (lines.length === 0) throw new Refusal("Não achei compras nessas prints.");
-
-    // Um pouco além do período: a conferência aceita até 3 dias de diferença.
-    const dates = lines.map((l) => l.date).sort();
-    const from = new Date(Date.parse(`${dates[0]}T00:00:00.000Z`) - 3 * DAY);
-    const to = new Date(Date.parse(`${dates[dates.length - 1]}T00:00:00.000Z`) + 4 * DAY);
-    const [purchases, ignores] = await Promise.all([
-      prisma.cardPurchase.findMany({
-        where: { userId, cardId, date: { gte: from, lt: to } },
-        select: { id: true, description: true, date: true, amount: true, installments: true },
-      }),
-      prisma.statementIgnore.findMany({ where: { userId }, select: { fingerprint: true } }),
-    ]);
-    const result = reconcileShots(
-      lines,
-      purchases.map((p) => ({
-        id: p.id,
-        description: p.description,
-        date: iso(p.date),
-        amount: Number(p.amount),
-        installments: p.installments,
-      })),
-    );
-
-    const resolved = new Set(ignores.map((i) => i.fingerprint));
-    const onlyBank = result.onlyBank.filter((l) => !resolved.has(l.fingerprint));
-    const onlyApp = result.onlyApp.filter((p) => !resolved.has(keepFingerprint(p.id)));
-    return {
-      period: result.period,
-      bankTotal: result.bankTotal,
-      appTotal: result.appTotal,
-      matched: result.matched.length,
-      skipped,
-      resolvedBefore:
-        result.onlyBank.length - onlyBank.length + result.onlyApp.length - onlyApp.length,
-      onlyBank: await Promise.all(
-        onlyBank.map(async (l) => ({
-          ...l,
-          categoryId: await categoryFromHistory(userId, titleCase(l.description)),
-        })),
-      ),
-      onlyApp,
-    };
+    return conciliate(userId, cardId, lines, skipped);
   });
+}
+
+const savedSchema = z.object({
+  skipped: z.number().int().min(0),
+  lines: z
+    .array(
+      z.object({
+        fingerprint: z.string().startsWith("shot|").max(300),
+        date: z.iso.date(),
+        time: z.string().max(5),
+        description: z.string().trim().min(1).max(200),
+        amount: z.number().positive(),
+      }),
+    )
+    .min(1)
+    .max(1000),
+});
+
+/**
+ * Concilia de novo as compras de uma leitura anterior, guardada no aparelho,
+ * contra o que o app tem agora. Não chama a IA: voltar à tela não custa nada
+ * e já mostra o que foi resolvido em outro lugar.
+ */
+export async function reconcileSavedShots(cardId: string, input: unknown) {
+  return refusing(async (): Promise<ShotAnalysis> => {
+    const userId = await requireUserId();
+    await ownCard(userId, cardId);
+    const { lines, skipped } = savedSchema.parse(input);
+    // Só as linhas lidas para este cartão.
+    const own = lines.filter((l) => l.fingerprint.startsWith(`shot|${cardId}|`));
+    if (own.length === 0) throw new Refusal("Essa conferência é de outro cartão.");
+    return conciliate(userId, cardId, own, skipped);
+  });
+}
+
+async function conciliate(
+  userId: string,
+  cardId: string,
+  lines: ShotLine[],
+  skipped: number,
+): Promise<ShotAnalysis> {
+  // Um pouco além do período: a conferência aceita até 3 dias de diferença.
+  const dates = lines.map((l) => l.date).sort();
+  const from = new Date(Date.parse(`${dates[0]}T00:00:00.000Z`) - 3 * DAY);
+  const to = new Date(Date.parse(`${dates[dates.length - 1]}T00:00:00.000Z`) + 4 * DAY);
+  const [purchases, ignores] = await Promise.all([
+    prisma.cardPurchase.findMany({
+      where: { userId, cardId, date: { gte: from, lt: to } },
+      select: { id: true, description: true, date: true, amount: true, installments: true },
+    }),
+    prisma.statementIgnore.findMany({ where: { userId }, select: { fingerprint: true } }),
+  ]);
+  const result = reconcileShots(
+    lines,
+    purchases.map((p) => ({
+      id: p.id,
+      description: p.description,
+      date: iso(p.date),
+      amount: Number(p.amount),
+      installments: p.installments,
+    })),
+  );
+
+  const resolved = new Set(ignores.map((i) => i.fingerprint));
+  const onlyBank = result.onlyBank.filter((l) => !resolved.has(l.fingerprint));
+  const onlyApp = result.onlyApp.filter((p) => !resolved.has(keepFingerprint(p.id)));
+  return {
+    lines,
+    period: result.period,
+    bankTotal: result.bankTotal,
+    appTotal: result.appTotal,
+    matched: result.matched.length,
+    skipped,
+    resolvedBefore:
+      result.onlyBank.length - onlyBank.length + result.onlyApp.length - onlyApp.length,
+    onlyBank: await Promise.all(
+      onlyBank.map(async (l) => ({
+        ...l,
+        categoryId: await categoryFromHistory(userId, titleCase(l.description)),
+      })),
+    ),
+    onlyApp,
+  };
 }
 
 const LOWER = new Set(["de", "da", "do", "das", "dos", "e"]);
