@@ -326,7 +326,7 @@ function ReminderCard({
     className: iconButton({
       size: "pill",
       className: cn(
-        "ml-auto",
+        "@max-[29rem]:w-full",
         confirmed && "bg-positive text-positive-foreground hover:bg-positive",
       ),
     }),
@@ -377,15 +377,13 @@ function ReminderCard({
           ))}
         </p>
       </div>
-      {/* Num card estreito (o celular), os botões descem para uma linha só
-          deles, alinhada ao texto: o "Adiar" à esquerda e o "Pagar" na outra
-          ponta, longe um do outro — um toque errado entre os dois paga uma
-          conta que era para adiar. Com espaço, voltam para a linha do texto.
-          Abaixo de `sm` a linha deixa livre a coluna do "+" fixo (58px a 16px
-          da borda): o "Pagar" termina 12px antes dele, em qualquer altura da
-          rolagem e com o hero de qualquer tamanho. De `sm` para cima a coluna
-          da página (max-w-lg, centrada) já não passa embaixo do botão. */}
-      <div className="flex w-full items-center gap-2 pl-[34px] max-sm:pr-14 @[29rem]:w-auto @[29rem]:shrink-0 @[29rem]:pl-0">
+      {/* Num card estreito (o celular), os botões viram o rodapé do card:
+          uma linha fina em cima e os dois dividindo a largura, cada um com
+          contorno. Antes eles ficavam numa linha sem borda, recuados para
+          fugir do "+" fixo, e pareciam soltos no meio do card. O espaço entre
+          os dois segura o toque errado que pagaria uma conta a adiar. Com
+          espaço, voltam para a linha do texto. */}
+      <div className="grid w-full auto-cols-fr grid-flow-col gap-2.5 border-t border-(--hairline) pt-3 @[29rem]:flex @[29rem]:w-auto @[29rem]:shrink-0 @[29rem]:items-center @[29rem]:gap-2 @[29rem]:border-t-0 @[29rem]:pt-0">
         {reminder.kind === "due" && reminder.defer && (
           <DeferExpenseDialog
             action={reminder.defer.action}
@@ -402,7 +400,11 @@ function ReminderCard({
                   Adiar
                 </>
               ),
-              className: iconButton({ tone: "ghost", size: "pill" }),
+              className: iconButton({
+                tone: "ghost",
+                size: "pill",
+                className: "ring-1 ring-(--hairline) @max-[29rem]:w-full",
+              }),
             }}
             onDone={onDeferred}
           />
