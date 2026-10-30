@@ -1,9 +1,11 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import Link from "next/link";
 import {
   ArrowDown,
   ArrowUp,
+  ArrowUpRight,
   ChevronLeft,
   ChevronRight,
   Pencil,
@@ -58,10 +60,10 @@ const ORIGIN: Partial<Record<HistoryItem["kind"], string>> = {
   cardBillPayment: "fatura paga; as compras dela já contam uma a uma",
   // O valor lançado à mão numa fatura: palpite antes de ela fechar, e o que
   // as compras não detalharam depois de paga.
-  cardEstimate: "valor lançado na fatura, sem compra detalhada; edite no cartão",
+  cardEstimate: "lançado na fatura, sem compra detalhada",
   fixedExpensePayment: "conta fixa paga",
   incomeReceipt: "renda confirmada",
-  cardFixedExpense: "assinatura no cartão, edite em Fixos",
+  cardFixedExpense: "assinatura no cartão",
   cardBillAdjustment: "diferença da fatura paga",
 
 };
@@ -359,6 +361,25 @@ export function TransactionsTable({
   }
 
   function actions(item: HistoryItem) {
+    // O que vem do cartão ou dos fixos se edita lá: a linha leva até lá, em
+    // vez de só dizer o nome da tela.
+    const elsewhere =
+      item.kind === "cardFixedExpense"
+        ? { href: "/rendas", label: "Abrir em Fixos" }
+        : (item.kind === "cardEstimate" || item.kind === "cardBillAdjustment") && item.cardId
+          ? { href: `/cartoes/${item.cardId}`, label: `Abrir no cartão ${item.cardName ?? ""}`.trim() }
+          : null;
+    if (elsewhere)
+      return (
+        <Link
+          href={elsewhere.href}
+          aria-label={`${elsewhere.label}: ${item.description}`}
+          title={elsewhere.label}
+          className={iconButton({ tone: "ghost", size: "sm" })}
+        >
+          <ArrowUpRight aria-hidden="true" />
+        </Link>
+      );
     if (editable(item)) {
       return (
         <MovementFormDialog
@@ -682,7 +703,10 @@ export function TransactionsTable({
                   <span role="cell" className="min-w-0">
                     <span className="block truncate text-sm font-semibold">{item.description}</span>
                     {rowNote(item) && (
-                      <span className="block truncate text-xs text-muted-foreground tabular-nums">
+                      <span
+                        className="block truncate text-xs text-muted-foreground tabular-nums"
+                        title={rowNote(item)}
+                      >
                         {rowNote(item)}
                       </span>
                     )}
@@ -782,21 +806,27 @@ export function TransactionsTable({
               </p>
             ) : (
               <p className="flex flex-wrap gap-x-4 gap-y-1 text-[13px] text-muted-foreground tabular-nums">
-                <span>
-                  Entradas <b className="text-positive">{formatCurrency(totals.received)}</b>
-                </span>
+                {/* As palavras do resumo lá em cima. Num dia sem entrada, só o
+                  gasto: "Recebido R$ 0,00" era ruído. */}
+                {(!day || totals.received > 0.005) && (
+                  <span>
+                    Recebido <b className="text-positive">{formatCurrency(totals.received)}</b>
+                  </span>
+                )}
                 <span>
                   {/* Num dia, a lista é a das compras feitas nele, que nem
                       sempre caem no Gasto deste período. */}
-                  {day ? "Gasto no dia" : "Saídas"}{" "}
+                  {day ? "Gasto no dia" : "Gasto"}{" "}
                   <b className="text-foreground">{formatCurrency(totals.spent)}</b>
                 </span>
-                <span>
-                  Entradas − saídas{" "}
-                  <b className={totals.result < 0 ? "text-negative" : "text-foreground"}>
-                    {formatCurrency(totals.result)}
-                  </b>
-                </span>
+                {(!day || totals.received > 0.005) && (
+                  <span>
+                    Recebido − gasto{" "}
+                    <b className={totals.result < 0 ? "text-negative" : "text-foreground"}>
+                      {formatCurrency(totals.result)}
+                    </b>
+                  </span>
+                )}
               </p>
             )}
             {pages > 1 && (

@@ -68,14 +68,26 @@ export function ConfirmPaymentDialog({
   // Qual dos dois botões enviou o form. Um ref, e não estado: o clique roda
   // antes do envio, mas o estado só mudaria no próximo render.
   const settleRef = useRef(true);
+  // Mais que o devido pede um segundo clique: um zero a mais (R$ 4.283,30 no
+  // lugar de R$ 428,33) tiraria do saldo o que nunca saiu.
+  // Qual botão está salvando, para o "Salvando..." aparecer no certo.
+  const [savingKind, setSavingKind] = useState<"partial" | "full">("full");
+  const [overConfirmed, setOverConfirmed] = useState<string | null>(null);
 
   function handleSubmit(formData: FormData) {
     setError(null);
+    const typed = String(formData.get("amount") ?? "");
+    if (Number(typed) > amount + 0.005 && overConfirmed !== typed) {
+      setOverConfirmed(typed);
+      setError(`Isso é mais que o que falta (${formatCurrency(amount)}). Se pagou mesmo esse valor, confirme de novo.`);
+      return;
+    }
     // Um "parcial" que cobre tudo o que falta quita: senão a fatura ficava
     // "falta R$ 0,00" e continuava sendo a próxima a pagar.
     const covers = Number(formData.get("amount")) + 0.005 >= amount;
     const settled = !allowPartial || settleRef.current || covers;
     formData.set("settle", settled ? "1" : "0");
+    setSavingKind(settled ? "full" : "partial");
     startTransition(async () => {
       try {
         const result = await action(formData);
@@ -180,14 +192,14 @@ export function ConfirmPaymentDialog({
                   disabled={isPending}
                   onClick={() => (settleRef.current = false)}
                 >
-                  Pagar parcial
+                  {isPending && savingKind === "partial" ? "Salvando..." : "Pagar parcial"}
                 </Button>
                 <Button
                   type="submit"
                   disabled={isPending}
                   onClick={() => (settleRef.current = true)}
                 >
-                  {isPending ? "Salvando..." : "Pagar e finalizar"}
+                  {isPending && savingKind === "full" ? "Salvando..." : "Pagar e finalizar"}
                 </Button>
               </>
             ) : (

@@ -6,6 +6,7 @@ import { DeleteIconButton } from "@/components/delete-icon-button";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { storedDay } from "@/lib/period";
 import { deleteCardBillEstimate } from "@/lib/actions/card-bill-estimate";
+import { unmarkExpensePayment } from "@/lib/actions/expense-payment";
 import { LineChart } from "@/components/charts/line-chart";
 import { CardBillPayButton } from "@/components/card-bill-pay-button";
 
@@ -30,6 +31,9 @@ export type ProjectedBill = {
   estimateAmount: number;
   paid: boolean;
   paidAmount?: number;
+  /** O pagamento que quitou a fatura, quando quitada. */
+  paymentId?: string;
+  paidAt?: Date;
   /** Em aberto, com pagamentos parciais: quanto eles já pagaram. */
   partialPaid?: number;
   /** Já venceu e ainda não foi paga — resolvido no servidor, junto do resto. */
@@ -69,7 +73,7 @@ function billParts(bill: ProjectedBill): string | null {
 function estimateSubtitle(estimate: ListedEstimate, bill: ProjectedBill | undefined) {
   const where = `Na fatura de ${formatDate(estimate.dueDate)}`;
   if (!bill || bill.paid || estimate.doubled == null) return where;
-  return `${where} · depois dela entraram ${formatCurrency(estimate.doubled)} em compras: se eram o que ela previa, exclua`;
+  return `${where} · pode estar em dobro: ${formatCurrency(estimate.doubled)} em compras entraram depois dela`;
 }
 
 export function CardBillProjection({
@@ -172,8 +176,11 @@ export function CardBillProjection({
               title={`${bill.overdue ? "Venceu" : "Vence"} ${formatDate(bill.dueDate)}`}
               subtitle={
                 [
+                  bill.paid && bill.paidAt ? `paga em ${formatDate(bill.paidAt)}` : null,
+                  // Com parcial, o valor da linha é o que falta (como no
+                  // topo e na lista); o total vem aqui.
                   bill.partialPaid
-                    ? `pago ${formatCurrency(bill.partialPaid)} · falta ${formatCurrency(Math.max(0, bill.amount - bill.partialPaid))}`
+                    ? `de ${formatCurrency(bill.amount)} · já pago ${formatCurrency(bill.partialPaid)}`
                     : null,
                   // A composição, quando há mais de uma parte: só "inclui
                   // R$ 100 previstos" escondia as assinaturas, e a soma das
@@ -200,12 +207,28 @@ export function CardBillProjection({
                       </span>
                     )
                   )}
-                  {formatCurrency(bill.paid ? (bill.paidAmount ?? bill.amount) : bill.amount)}
+                  {formatCurrency(
+                    bill.paid
+                      ? (bill.paidAmount ?? bill.amount)
+                      : Math.max(0, bill.amount - (bill.partialPaid ?? 0)),
+                  )}
                 </span>
               }
               valueClassName={bill.amount === 0 ? "text-muted-foreground" : undefined}
               // Fatura futura ainda vazia: contexto, não algo a pagar.
               dim={bill.amount === 0 && !bill.paid}
+              // Paga por engano e o toast já foi: desfazer aqui mesmo, sem
+              // ir caçar o pagamento no Histórico.
+              trailing={
+                bill.paid && bill.paymentId ? (
+                  <DeleteIconButton
+                    undo
+                    itemLabel={`pagamento da fatura de ${formatDate(bill.dueDate)}`}
+                    action={unmarkExpensePayment.bind(null, bill.paymentId)}
+                    confirmMessage={`Desfazer o pagamento da fatura de ${formatDate(bill.dueDate)}? Ela volta a ficar em aberto.`}
+                  />
+                ) : undefined
+              }
             >
               {bill.items.length > 0 && (
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1">

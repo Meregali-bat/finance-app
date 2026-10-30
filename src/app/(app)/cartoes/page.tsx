@@ -146,7 +146,7 @@ export default async function CardsPage() {
               <Link
                 key={card.id}
                 href={`/cartoes/${card.id}`}
-                aria-label={`${card.name}${nextBill ? `, próxima fatura ${formatCurrency(Math.max(0, nextBill.amount - (nextBill.partialPaid ?? 0)))}, ${overdue ? "venceu" : "vence"} ${formatDate(nextBill.dueDate)}` : ", sem fatura em aberto"}`}
+                aria-label={`${card.name}${nextBill ? `, próxima fatura ${formatCurrency(Math.max(0, nextBill.amount - (nextBill.partialPaid ?? 0)))}, ${overdue ? "venceu" : "vence"} ${formatDate(nextBill.dueDate)}` : ", sem fatura em aberto"}${limitUsage ? `, ${formatCurrency(limitUsage.available)} livres de ${formatCurrency(limitUsage.limit)}` : ""}`}
                 className="group/card rise-in flex h-full flex-col gap-3.5 rounded-[22px] p-[18px] text-white outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground shadow-[inset_0_0_0_1px_rgb(255_255_255/0.09),0_1px_2px_rgb(0_0_0/0.4)] transition-transform duration-150 ease-out-quint hover:-translate-y-0.5 active:scale-[0.98]"
                 style={{ background: cardSurface(card.id, card.style), ...stagger(index, 80, 60) }}
               >
@@ -175,9 +175,7 @@ export default async function CardsPage() {
                       {overdue ? "Fatura vencida" : "Próxima fatura"}
                     </span>
                     <p
-                      className={`font-heading text-[26px] leading-tight font-bold tracking-[-0.035em] tabular-nums ${
-                        overdue ? "text-[#ffb0a6]" : ""
-                      }`}
+                      className="font-heading text-[26px] leading-tight font-bold tracking-[-0.035em] tabular-nums"
                     >
                       {/* Com parcial pago, o que importa é o que falta. */}
                       {formatCurrency(Math.max(0, nextBill.amount - (nextBill.partialPaid ?? 0)))}
