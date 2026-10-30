@@ -146,6 +146,12 @@ export default async function CardDetailPage({ params }: { params: Promise<{ id:
       ...fromEstimates,
     ];
   };
+  const settlingPayment = (dueDate: Date) => {
+    const payment = card.payments.find(
+      (p) => p.settled && storedDay(p.dueDate).getTime() === dueDate.getTime(),
+    );
+    return payment ? { paymentId: payment.id, paidAt: payment.paidAt } : {};
+  };
   const projectedBills = cardBills.map((bill) => ({
     dueDateIso: bill.dueDate.toISOString(),
     cycleEnd: bill.cycleEnd,
@@ -159,6 +165,8 @@ export default async function CardDetailPage({ params }: { params: Promise<{ id:
     estimateAmount: bill.estimateAmount,
     paid: bill.paid,
     paidAmount: bill.paidAmount,
+    // O pagamento que quitou: o "Desfazer" da linha paga e o dia em que saiu.
+    ...settlingPayment(bill.dueDate),
     partialPaid: bill.partialPaid,
     // Calculado aqui, não no cliente: refazer a conta no navegador a leria em
     // outro fuso, o mesmo motivo pelo qual date-range.ts resolve as setas no
@@ -340,6 +348,13 @@ export default async function CardDetailPage({ params }: { params: Promise<{ id:
           defaultDueDate={nextBill?.dueDate.toISOString()}
         />
       </div>
+      {/* O "Prever valor" desligado precisa dizer por quê à vista: no toque, o
+          `title` não aparece. */}
+      {dueDateOptions.length === 0 && (
+        <p className="-mt-2 text-[12.5px] text-muted-foreground">
+          Nenhuma fatura em aberto para prever: todas as próximas já estão pagas.
+        </p>
+      )}
 
       <div className="grid items-start gap-6 xl:grid-cols-2">
         <CardBillProjection
