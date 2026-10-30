@@ -163,16 +163,22 @@ export function UntilChips({
   context,
   value,
   onChange,
+  withPayday = true,
 }: {
   context: YieldContext;
   value: string;
   onChange: (date: string) => void;
+  /**
+   * O dia do pagamento só faz sentido para simular até lá. Num resgate com
+   * data, os atalhos são contas a pagar, e o salário é dinheiro que entra.
+   */
+  withPayday?: boolean;
 }) {
-  // Na ordem do calendário, o salário entre as contas.
+  // Na ordem do calendário, o pagamento entre as contas.
   const chips = [
     ...context.upcomingBills.map((b) => ({ key: `${b.label}-${b.date}`, ...b })),
-    ...(context.nextPayday
-      ? [{ key: "payday", label: "Salário", date: context.nextPayday, amount: 0 }]
+    ...(withPayday && context.nextPayday
+      ? [{ key: "payday", label: "Até o pagamento", date: context.nextPayday, amount: 0 }]
       : []),
   ].sort((a, b) => a.date.localeCompare(b.date));
   if (chips.length === 0) return null;

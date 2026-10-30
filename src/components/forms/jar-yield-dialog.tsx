@@ -91,9 +91,11 @@ export function JarYieldDialog({
           />
         }
       >
+        {/* Um verbo, como "Agendar resgate": a frase de estado sozinha não
+            parecia abrir nada. */}
         <TrendingUp className="size-3.5 text-positive" aria-hidden="true" />
         {cdiPercent != null
-          ? `Rende ${cdiPercent.toLocaleString("pt-BR")}% do CDI`
+          ? `Simular rendimento · ${cdiPercent.toLocaleString("pt-BR")}% do CDI`
           : "Quanto rende?"}
       </DialogTrigger>
       <DialogContent>

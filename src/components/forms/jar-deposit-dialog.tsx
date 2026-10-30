@@ -128,9 +128,9 @@ export function JarDepositDialog({
         }
       >
         {withdraw ? (
-          <ArrowUpFromLine aria-hidden="true" className="max-sm:hidden" />
+          <ArrowUpFromLine aria-hidden="true" />
         ) : (
-          <ArrowDownToLine aria-hidden="true" className="max-sm:hidden" />
+          <ArrowDownToLine aria-hidden="true" />
         )}
         {withdraw ? "Resgatar" : "Guardar"}
       </DialogTrigger>
@@ -194,7 +194,12 @@ export function JarDepositDialog({
                     required
                     onChange={(e) => setUntil(e.target.value)}
                   />
-                  <UntilChips context={yieldContext} value={until} onChange={setUntil} />
+                  <UntilChips
+                    context={yieldContext}
+                    value={until}
+                    onChange={setUntil}
+                    withPayday={false}
+                  />
                 </div>
               )}
               {showYield && !planned && until && (

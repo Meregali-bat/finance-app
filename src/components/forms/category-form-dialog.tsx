@@ -23,7 +23,14 @@ type CategoryValues = {
   name: string;
 };
 
-export function CategoryFormDialog({ category }: { category?: CategoryValues }) {
+export function CategoryFormDialog({
+  category,
+  uses = 0,
+}: {
+  category?: CategoryValues;
+  /** Em quantos lançamentos ela está: em uso, não se exclui, e aqui diz por quê. */
+  uses?: number;
+}) {
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -79,6 +86,13 @@ export function CategoryFormDialog({ category }: { category?: CategoryValues }) 
               autoFocus
             />
           </div>
+          {isEdit && uses > 0 && (
+            <p className="text-xs text-muted-foreground">
+              Está em {uses === 1 ? "1 lançamento" : `${uses} lançamentos`}, por isso não dá para
+              excluir: o histórico ficaria sem categoria. Para tirá-la dos formulários, desative
+              no interruptor da lista.
+            </p>
+          )}
           {error && (
             <p role="alert" className="text-sm text-negative">
               {error}

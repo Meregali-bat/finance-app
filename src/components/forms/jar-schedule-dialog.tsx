@@ -125,7 +125,7 @@ export function JarScheduleDialog({
               min={context.today}
               onChange={(e) => setUntil(e.target.value)}
             />
-            <UntilChips context={context} value={until} onChange={setUntil} />
+            <UntilChips context={context} value={until} onChange={setUntil} withPayday={false} />
           </div>
           {cdiPercent != null && amount > 0 && (
             <JarYieldPreview
