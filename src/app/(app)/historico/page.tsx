@@ -153,7 +153,9 @@ export default async function HistoryPage({
 
   return (
     // O dia tocado no calendário filtra a listagem: os dois falam por aqui.
-    <HistoryDayProvider>
+    // Com a chave do período, trocar de mês recomeça o dia escolhido e os
+    // filtros da lista: um dia de outubro aplicado a setembro esvaziava tudo.
+    <HistoryDayProvider key={`${range.firstDay}_${range.lastDay}`}>
       <div className="flex flex-col gap-6">
         <PageHeader
           title="Histórico"
@@ -178,7 +180,7 @@ export default async function HistoryPage({
         {/* O gasto do período no tempo: uma série só, em rosé, sem legenda — o
           título diz o que é. As colunas somam o "Gasto" do resumo. */}
         {calendar && (
-          <SpendingCalendarCard calendar={calendar} />
+          <SpendingCalendarCard calendar={calendar} today={today} />
         )}
 
         {buckets.length > 1 && !daily && (

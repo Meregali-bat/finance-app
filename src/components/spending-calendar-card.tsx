@@ -8,7 +8,8 @@ import { formatCurrency } from "@/lib/format";
 import type { CalendarDay, SpendingCalendar } from "@/lib/spending-calendar";
 import { cn } from "@/lib/utils";
 
-const WEEKDAYS = ["S", "T", "Q", "Q", "S", "S", "D"];
+// Abreviados, e não só a inicial: "S T Q Q S S D" repetia letras.
+const WEEKDAYS = ["seg", "ter", "qua", "qui", "sex", "sáb", "dom"];
 
 /** O rosé do gasto em quatro forças; o nível 0 é o trilho vazio. */
 const LEVEL_BG = [
@@ -41,7 +42,14 @@ function dayLabel(key: string) {
  * novo solta. O dia é um só, o da listagem: o calendário não guarda outro, e
  * limpar o filtro lá embaixo apaga a marca aqui.
  */
-export function SpendingCalendarCard({ calendar }: { calendar: SpendingCalendar }) {
+export function SpendingCalendarCard({
+  calendar,
+  today,
+}: {
+  calendar: SpendingCalendar;
+  /** "YYYY-MM-DD" de hoje, para marcar o dia no calendário. */
+  today: string;
+}) {
   const days = calendar.weeks.flat().filter((d): d is CalendarDay => d !== null);
   const { day: selectedKey, setDay } = useHistoryDay();
   const selected = days.find((d) => d.key === selectedKey) ?? null;
@@ -83,7 +91,8 @@ export function SpendingCalendarCard({ calendar }: { calendar: SpendingCalendar 
                   // dia de novo volta a mostrar o período todo.
                   onClick={() => setDay(day.key === selectedKey ? null : day.key)}
                   aria-pressed={day.key === selectedKey}
-                  aria-label={`${dayLabel(day.key)}: ${day.total > 0 ? formatCurrency(day.total) : "nada gasto"}`}
+                  aria-current={day.key === today ? "date" : undefined}
+                  aria-label={`${dayLabel(day.key)}${day.key === today ? " (hoje)" : ""}: ${day.future ? "ainda não chegou" : day.total > 0 ? formatCurrency(day.total) : "nada gasto"}`}
                   className={cn(
                     "flex aspect-square min-w-0 lg:aspect-auto lg:h-16 flex-col justify-between rounded-[10px] p-1.5 text-left transition-[box-shadow,transform] duration-150 active:scale-95 lg:p-2",
                     day.future && "opacity-45",
@@ -104,6 +113,13 @@ export function SpendingCalendarCard({ calendar }: { calendar: SpendingCalendar 
                     )}
                   >
                     {day.day}
+                    {/* Hoje: um ponto ao lado do número, nas duas cores. */}
+                    {day.key === today && (
+                      <span
+                        aria-hidden="true"
+                        className="ml-1 inline-block size-1.5 rounded-full bg-current align-middle"
+                      />
+                    )}
                   </span>
                   {day.total > 0 && (
                     <span
@@ -173,7 +189,7 @@ export function SpendingCalendarCard({ calendar }: { calendar: SpendingCalendar 
           </div>
         ) : (
           <p className="border-t border-(--hairline) pt-3 text-[12.5px] text-muted-foreground lg:border-t-0 lg:border-l lg:pt-0 lg:pl-6">
-            Toque num dia para ver o que saiu nele e filtrar a lista abaixo.
+            Escolha um dia para ver o que saiu nele e filtrar a lista abaixo.
           </p>
         )}
       </div>

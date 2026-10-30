@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import Link from "next/link";
+import Link, { useLinkStatus } from "next/link";
 import { ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -44,6 +44,9 @@ const ARROW_CLASS =
  */
 export function PeriodPicker({ range }: { range: ResolvedRange }) {
   const router = useRouter();
+  // O período novo leva um tempo para chegar: o rótulo esmaece até lá, para o
+  // toque em "Aplicar" não parecer ignorado.
+  const [navigating, startNavigation] = useTransition();
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<RangeMode>(range.mode);
@@ -66,7 +69,7 @@ export function PeriodPicker({ range }: { range: ResolvedRange }) {
     const from = form.get("from");
     const to = form.get("to");
 
-    router.push(
+    startNavigation(() => router.push(
       hrefFor(
         mode === "custom"
           ? { range: "custom", from: String(from), to: String(to) }
@@ -74,7 +77,7 @@ export function PeriodPicker({ range }: { range: ResolvedRange }) {
           // e as setas é que andam a partir dali.
           : { range: mode },
       ),
-    );
+    ));
     handleOpenChange(false);
   }
 
@@ -85,7 +88,7 @@ export function PeriodPicker({ range }: { range: ResolvedRange }) {
         className={ARROW_CLASS}
         aria-label="Período anterior"
       >
-        <ChevronLeft className="size-5" aria-hidden="true" />
+        <PendingIcon icon={ChevronLeft} />
       </Link>
 
       <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -98,7 +101,12 @@ export function PeriodPicker({ range }: { range: ResolvedRange }) {
           }
         >
           {/* `capitalize` maiusculiza toda palavra e viraria "Agosto De 2026". */}
-          <span className="truncate font-heading text-base font-semibold tracking-[-0.01em] first-letter:uppercase">
+          <span
+            className={cn(
+              "truncate font-heading text-base font-semibold tracking-[-0.01em] transition-opacity first-letter:uppercase",
+              navigating && "animate-pulse opacity-60",
+            )}
+          >
             {range.label}
           </span>
           <ChevronDown className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
@@ -181,8 +189,14 @@ export function PeriodPicker({ range }: { range: ResolvedRange }) {
         className={ARROW_CLASS}
         aria-label="Próximo período"
       >
-        <ChevronRight className="size-5" aria-hidden="true" />
+        <PendingIcon icon={ChevronRight} />
       </Link>
     </div>
   );
+}
+
+/** A seta, pulsando enquanto o período que ela pediu ainda está chegando. */
+function PendingIcon({ icon: Icon }: { icon: typeof ChevronLeft }) {
+  const { pending } = useLinkStatus();
+  return <Icon className={cn("size-5", pending && "animate-pulse")} aria-hidden="true" />;
 }
