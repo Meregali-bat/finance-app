@@ -90,7 +90,7 @@ export function SlicesEditor({
       <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
         <div className={homeCard("flex flex-col items-center gap-5")}>
           <SliceDonut
-            size={196}
+            size={168}
             label={SLICES.map((s) => `${s.name} ${percents[s.key]}%`).join(", ")}
             segments={SLICES.map((s) => ({
               key: s.key,
@@ -145,7 +145,7 @@ export function SlicesEditor({
                       </span>
                     )}
                   </span>
-                  <span className="truncate text-xs text-muted-foreground">{slice.hint}</span>
+                  <span className="line-clamp-2 text-xs text-muted-foreground">{slice.hint}</span>
                   {income > 0.005 && (
                     <span className="text-xs font-medium text-foreground/80 tabular-nums">
                       {formatCurrency((income * percents[slice.key]) / 100)} neste período

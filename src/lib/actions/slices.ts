@@ -48,14 +48,15 @@ export async function disableSlices() {
 const itemSchema = z.object({
   kind: z.enum(["transaction", "card"]),
   id: z.string().min(1),
-  categoryId: z.string().min(1),
+  /** `null` tira a categoria: o Desfazer da tela de Metas. */
+  categoryId: z.string().min(1).nullable(),
 });
 
 /** Dá categoria a um lançamento ou compra que estava sem — o atalho da tela de Metas. */
 export async function setItemCategory(input: unknown) {
   const userId = await requireUserId();
   const { kind, id, categoryId } = itemSchema.parse(input);
-  await prisma.category.findFirstOrThrow({ where: { id: categoryId, userId } });
+  if (categoryId) await prisma.category.findFirstOrThrow({ where: { id: categoryId, userId } });
   if (kind === "transaction") {
     await prisma.transaction.updateMany({ where: { id, userId }, data: { categoryId } });
   } else {

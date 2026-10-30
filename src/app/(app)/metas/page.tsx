@@ -202,7 +202,10 @@ export default async function SlicesPage() {
         </div>
 
         {savings && !noIncome && (
-          <div className={homeCard("rise-in flex flex-col gap-4")} style={stagger(1, 60)}>
+          <div
+            className={homeCard("rise-in flex flex-col gap-4 lg:self-start")}
+            style={stagger(1, 60)}
+          >
             <div className="flex items-start gap-3">
               <span
                 aria-hidden="true"
@@ -254,6 +257,9 @@ export default async function SlicesPage() {
 
       <div className="flex flex-col gap-3">
         <SectionLabel>As fatias</SectionLabel>
+        <p className="-mt-1 text-[13px] text-muted-foreground">
+          Compras no cartão entram na fatia do período em que a fatura vence.
+        </p>
         {noIncome ? (
           <div className={homeCard("flex items-start gap-3")}>
             <AlertTriangle
@@ -286,6 +292,8 @@ export default async function SlicesPage() {
                   : null;
               // Sem caixinha da fatia, nenhum depósito cai nela.
               const noJar = slice.saving && !overview.jarSlices.has(slice.key);
+              // A reserva ainda não fechou: o que sobra aqui é parte do que falta lá.
+              const poolShort = slice.saving && !!savings && savings.remaining > 0.005;
               // Inteiro, como na Início.
               const shownPercent = `${Math.round(percentUsed).toLocaleString("pt-BR")}%`;
               return (
@@ -312,7 +320,9 @@ export default async function SlicesPage() {
                         over
                           ? "bg-negative/8 text-negative"
                           : ahead
-                            ? "bg-positive/10 text-positive"
+                            ? poolShort
+                              ? "bg-muted text-muted-foreground"
+                              : "bg-positive/10 text-positive"
                             : "bg-muted text-muted-foreground",
                       )}
                     >
@@ -335,7 +345,9 @@ export default async function SlicesPage() {
                     aria-label={`${slice.name}: ${slice.saving ? "guardado da meta" : "gasto do previsto"}`}
                     aria-valuemin={0}
                     aria-valuemax={100}
-                    aria-valuenow={Math.min(100, Math.round(percentUsed))}
+                    aria-valuenow={
+                      usage.limit > 0 ? Math.min(100, Math.round(percentUsed)) : undefined
+                    }
                     aria-valuetext={`${shownPercent}${over ? ", passou do previsto" : ""}`}
                     className="h-2 overflow-hidden rounded-full bg-(--track)"
                   >
@@ -367,34 +379,26 @@ export default async function SlicesPage() {
                     <span
                       className={cn(
                         "tabular-nums",
-                        // Verde só para o que está bem: guardou a mais ou já coberto.
+                        // Verde só para o que está bem: guardou a mais (com o total
+                        // fechado) ou já coberto.
                         over
                           ? "text-negative"
-                          : ahead || sharedRemaining === 0
+                          : (ahead && !poolShort) || sharedRemaining === 0
                             ? "text-positive"
                             : "text-muted-foreground",
                       )}
                     >
-                      {noJar && used < 0.005 ? (
-                        <Link
-                          href="/metas/ajustar"
-                          className="text-primary underline-offset-4 hover:underline"
-                        >
-                          Nenhuma caixinha é desta fatia: escolher
-                        </Link>
-                      ) : over ? (
-                        `${formatCurrency(-left)} além do previsto`
-                      ) : ahead ? (
-                        `${formatCurrency(-left)} além da meta`
-                      ) : sharedRemaining !== null ? (
-                        sharedRemaining < 0.005 ? (
-                          "A outra fatia já cobre o que falta"
-                        ) : (
-                          `No total faltam ${formatCurrency(sharedRemaining)}`
-                        )
-                      ) : (
-                        `${formatCurrency(left)} ${slice.saving ? "para guardar" : "restante"}`
-                      )}
+                      {over
+                        ? `${formatCurrency(-left)} além do previsto`
+                        : ahead
+                          ? poolShort
+                            ? `${formatCurrency(-left)} a mais, conta para ${SLICES.find((s) => s.saving && s.key !== slice.key)!.name}`
+                            : `${formatCurrency(-left)} além da meta`
+                          : sharedRemaining !== null
+                            ? sharedRemaining < 0.005
+                              ? "A outra fatia já cobre o que falta"
+                              : `No total faltam ${formatCurrency(sharedRemaining)}`
+                            : `${formatCurrency(left)} ${slice.saving ? "para guardar" : "restante"}`}
                     </span>
                     <span className="whitespace-nowrap text-muted-foreground">
                       {usage.count === 0
@@ -408,6 +412,14 @@ export default async function SlicesPage() {
                             : `${usage.count} lançamentos`}
                     </span>
                   </p>
+                  {noJar && (
+                    <Link
+                      href="/metas/ajustar"
+                      className="-my-2 self-start py-2 text-[12.5px] font-medium text-primary underline-offset-4 hover:underline"
+                    >
+                      Nenhuma caixinha é desta fatia: escolher em Ajustar
+                    </Link>
+                  )}
                 </div>
               );
             })}
@@ -415,31 +427,34 @@ export default async function SlicesPage() {
         )}
       </div>
 
-      {choosable.length > 0 && (
-        <div className="flex flex-col gap-3">
-          <SectionLabel>
-            {choosable.length === 1
-              ? "1 gasto sem categoria"
-              : `${choosable.length} gastos sem categoria`}
-          </SectionLabel>
-          <p className="-mt-1 text-[13px] text-muted-foreground">
-            Sem categoria, o gasto não entra em nenhuma fatia. Escolha uma e ele passa a contar.
-          </p>
-          <CategorizeList
-            items={choosable.map((i) => ({
-              id: i.id,
-              kind: i.kind,
-              description: i.description,
-              amount: i.amount,
-              date: formatDate(i.date),
-            }))}
-            categories={overview.categories.map((c) => ({
-              id: c.id,
-              name: c.name,
-            }))}
-          />
-        </div>
-      )}
+      {/* Sempre montada: o Desfazer do último item categorizado não some junto. */}
+      <div className={cn("flex flex-col gap-3", choosable.length === 0 && "contents")}>
+        {choosable.length > 0 && (
+          <>
+            <SectionLabel>
+              {choosable.length === 1
+                ? "1 gasto sem categoria"
+                : `${choosable.length} gastos sem categoria`}
+            </SectionLabel>
+            <p className="-mt-1 text-[13px] text-muted-foreground">
+              Sem categoria, o gasto não entra em nenhuma fatia. Escolha uma e ele passa a contar.
+            </p>
+          </>
+        )}
+        <CategorizeList
+          items={choosable.map((i) => ({
+            id: i.id,
+            kind: i.kind,
+            description: i.description,
+            amount: i.amount,
+            date: formatDate(i.date),
+          }))}
+          categories={overview.categories.map((c) => ({
+            id: c.id,
+            name: c.name,
+          }))}
+        />
+      </div>
 
       {outside.length > 0 && (
         <details className={homeCard("group py-3 lg:py-3")}>

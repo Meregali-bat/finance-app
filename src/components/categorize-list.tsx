@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { homeCard } from "@/components/home-card";
 import { ChoiceSelect } from "@/components/ui/choice-select";
+import { UndoToast, type UndoToastState } from "@/components/undo-toast";
 import { setItemCategory } from "@/lib/actions/slices";
 import { errorMessage } from "@/lib/error-message";
 import { formatCurrency } from "@/lib/format";
@@ -37,6 +38,9 @@ export function CategorizeList({
   const [error, setError] = useState<string | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [, startTransition] = useTransition();
+  const [toast, setToast] = useState<(UndoToastState & { item: Item }) | null>(null);
+  const [undoing, startUndo] = useTransition();
+  const seq = useRef(0);
 
   function choose(item: Item, categoryId: string) {
     setError(null);
@@ -44,6 +48,13 @@ export function CategorizeList({
     startTransition(async () => {
       try {
         await setItemCategory({ kind: item.kind, id: item.id, categoryId });
+        const name = categories.find((c) => c.id === categoryId)?.name ?? "a categoria";
+        setToast({
+          id: ++seq.current,
+          item,
+          hasUndo: true,
+          text: `${item.description} em ${name}`,
+        });
       } catch (e) {
         setError(errorMessage(e, "Não deu para salvar a categoria."));
       } finally {
@@ -54,49 +65,74 @@ export function CategorizeList({
 
   return (
     <>
-      <ul className="flex flex-col gap-2">
-        {items.map((item) => {
-          const editable = item.kind === "transaction" || item.kind === "card";
-          return (
-            <li
-              key={`${item.kind}-${item.id}`}
-              className={homeCard(
-                "flex flex-wrap items-center gap-x-3 gap-y-2 py-3 pr-3 pl-4 lg:py-3 lg:pr-3 lg:pl-4",
-              )}
-            >
-              <div className="min-w-[10rem] flex-1">
-                <p className="truncate text-[15px] font-semibold">{item.description}</p>
-                <p className="text-[13px] text-muted-foreground">
-                  {item.date}
-                  {item.kind === "card" ? " · no cartão" : ""}
-                </p>
-              </div>
-              <span className="shrink-0 text-[15px] font-semibold tabular-nums">
-                {formatCurrency(item.amount)}
-              </span>
-              {editable ? (
-                <ChoiceSelect
-                  label={`Categoria de ${item.description}`}
-                  value={null}
-                  placeholder={savingId === item.id ? "Salvando..." : "Escolher categoria"}
-                  disabled={savingId === item.id}
-                  onChange={(value) => choose(item, value)}
-                  options={categories.map((c) => ({ value: c.id, label: c.name }))}
-                />
-              ) : (
-                <span className="text-xs text-muted-foreground">
-                  {ELSEWHERE[item.kind] ?? "sem categoria"}
+      {items.length > 0 && (
+        <ul className="flex flex-col gap-2">
+          {items.map((item) => {
+            const editable = item.kind === "transaction" || item.kind === "card";
+            return (
+              <li
+                key={`${item.kind}-${item.id}`}
+                className={homeCard(
+                  "flex flex-wrap items-center gap-x-3 gap-y-2 py-3 pr-3 pl-4 lg:py-3 lg:pr-3 lg:pl-4",
+                )}
+              >
+                <div className="min-w-[10rem] flex-1">
+                  <p className="truncate text-[15px] font-semibold">{item.description}</p>
+                  <p className="text-[13px] text-muted-foreground">
+                    {item.date}
+                    {item.kind === "card" ? " · no cartão" : ""}
+                  </p>
+                </div>
+                <span className="shrink-0 text-[15px] font-semibold tabular-nums">
+                  {formatCurrency(item.amount)}
                 </span>
-              )}
-            </li>
-          );
-        })}
-      </ul>
+                {editable ? (
+                  <ChoiceSelect
+                    label={`Categoria de ${item.description}`}
+                    value={null}
+                    placeholder={savingId === item.id ? "Salvando..." : "Escolher categoria"}
+                    disabled={savingId === item.id}
+                    onChange={(value) => choose(item, value)}
+                    options={categories.map((c) => ({ value: c.id, label: c.name }))}
+                  />
+                ) : (
+                  <span className="text-xs text-muted-foreground">
+                    {ELSEWHERE[item.kind] ?? "sem categoria"}
+                  </span>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
       {error && (
         <p role="alert" className="text-sm text-negative">
           {error}
         </p>
       )}
+      <UndoToast
+        toast={toast}
+        undoing={undoing}
+        onDismiss={() => setToast(null)}
+        onUndo={() => {
+          if (!toast) return;
+          const { item } = toast;
+          setToast(null);
+          startUndo(async () => {
+            try {
+              await setItemCategory({ kind: item.kind, id: item.id, categoryId: null });
+            } catch {
+              // Um "Desfazer" que falha calado parece um que deu certo.
+              setToast({
+                id: ++seq.current,
+                item,
+                hasUndo: true,
+                text: "Não deu para desfazer. Tente de novo",
+              });
+            }
+          });
+        }}
+      />
     </>
   );
 }
