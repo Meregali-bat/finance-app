@@ -2,8 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { categoryFromHistory } from "@/lib/category-from-history";
 import { toFixedExpenseInput } from "@/lib/budget-inputs";
 import { buildCardBills, cardBillFixedExpenses, installmentSlices } from "@/lib/period";
-import { parseSicoobCardBill } from "@/lib/statement/sicoob-card";
-import type { PdfTextItem } from "@/lib/statement/nubank";
+import type { CardBillStatement } from "@/lib/statement/sicoob-card";
 import {
   purchaseFromLine,
   reconcileCardBill,
@@ -46,15 +45,17 @@ const iso = (d: Date) => d.toISOString().slice(0, 10);
 const asStoredDay = (d: Date) => new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
 
 /**
- * Confere uma fatura do cartão com o cartão escolhido no app (ou o que tem o
- * nome do banco). Não grava nada. Chamada por `analyzeStatement`.
+ * Confere uma fatura do cartão (Sicoob ou Banrisul, já lida) com o cartão
+ * escolhido no app (ou o que tem o nome do banco). Não grava nada. Chamada por
+ * `analyzeStatement`.
  */
 export async function analyzeCardBill(
   userId: string,
-  pages: PdfTextItem[][],
+  bill: CardBillStatement,
+  /** O banco da fatura: sugere o cartão do app que tem o nome dele. */
+  bank: "sicoob" | "banrisul",
   requestedCardId: string | null,
 ): Promise<CardBillAnalysis> {
-  const bill = parseSicoobCardBill(pages);
   if (bill.lines.length === 0) {
     return { ok: false, error: "Não reconheci lançamentos nessa fatura." };
   }
@@ -68,7 +69,7 @@ export async function analyzeCardBill(
   }
   const cardId =
     cards.find((c) => c.id === requestedCardId)?.id ??
-    cards.find((c) => normalizeName(c.name).includes("sicoob"))?.id ??
+    cards.find((c) => normalizeName(c.name).includes(bank))?.id ??
     cards[0].id;
 
   const card = await prisma.creditCard.findUniqueOrThrow({

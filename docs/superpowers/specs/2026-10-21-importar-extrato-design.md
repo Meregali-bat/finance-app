@@ -53,6 +53,12 @@ A transferência entre contas próprias não confere com nada, mas procura um **
 
 O extrato de conta corrente do Banrisul ("PARA SIMPLES CONFERENCIA") também é lido (`src/lib/statement/banrisul.ts`). É fonte de máquina de escrever, com colunas fixas: o dia só na primeira linha do dia, o histórico ("PIX", "PIX RECEBIDO", "IOF ADICIONAL"), o documento e o valor com "-" no fim quando saiu. O mês e o ano vêm do cabeçalho "MOVIMENTOS OUT/2026"; quem está do outro lado vem da linha "NOME:" de baixo, sem o CNPJ de MEI na frente — então o Pix do próprio MEI do titular conta como transferência entre contas próprias. As linhas de saldo ("SALDO NA DATA", "SALDO ANT EM") não são movimento. O período vai do dia seguinte ao "SALDO ANT EM" até a data de emissão.
 
+## Fatura do cartão Banrisul (31/10)
+
+O "Extrato de Cartão de Crédito" do Banrisul (`src/lib/statement/banrisul-card.ts`) é o da fatura em aberto, que o app do banco gera a qualquer momento. Uma linha por lançamento: data completa, descrição com a cidade e o "BRA" colados, e o valor; blocos por final de cartão (físico e virtual), todos do mesmo cartão no app. O pagamento da fatura anterior vem negativo e fica de fora; o vencimento vem de "em aberto - vencimento: DD/MM/AAAA" e o total, de "Faturas em aberto". Entra na mesma conferência da fatura do Sicoob (`analyzeCardBill`), sugerindo o cartão com "Banrisul" no nome.
+
+Conferido com o extrato real: os 13 lançamentos somam o total em aberto.
+
 ## Fora desta versão
 
 Fatura do cartão do Nubank.

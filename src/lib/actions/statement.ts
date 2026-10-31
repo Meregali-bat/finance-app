@@ -8,7 +8,8 @@ import { categoryFromHistory } from "@/lib/category-from-history";
 import { pdfTextItems } from "@/lib/statement/pdf";
 import { parseStatement } from "@/lib/statement/parse";
 import { localDay, reconcile, utcDay, type AppMovement } from "@/lib/statement/reconcile";
-import { isSicoobCardBill } from "@/lib/statement/sicoob-card";
+import { isSicoobCardBill, parseSicoobCardBill } from "@/lib/statement/sicoob-card";
+import { isBanrisulCardBill, parseBanrisulCardBill } from "@/lib/statement/banrisul-card";
 import { analyzeCardBill, type CardBillAnalysis } from "@/lib/actions/card-bill-import";
 
 export type { CardBillAnalysis, CardBillDifference } from "@/lib/actions/card-bill-import";
@@ -74,9 +75,13 @@ export async function analyzeStatement(formData: FormData): Promise<StatementAna
     return { ok: false, error: "Não deu para abrir esse PDF." };
   }
   // Fatura de cartão: outra conferência, contra as compras do cartão.
+  const cardId = formData.get("cardId");
+  const requestedCard = typeof cardId === "string" ? cardId : null;
   if (isSicoobCardBill(pages)) {
-    const cardId = formData.get("cardId");
-    return analyzeCardBill(userId, pages, typeof cardId === "string" ? cardId : null);
+    return analyzeCardBill(userId, parseSicoobCardBill(pages), "sicoob", requestedCard);
+  }
+  if (isBanrisulCardBill(pages)) {
+    return analyzeCardBill(userId, parseBanrisulCardBill(pages), "banrisul", requestedCard);
   }
   const parsed = parseStatement(pages);
   if (parsed.lines.length === 0) {
