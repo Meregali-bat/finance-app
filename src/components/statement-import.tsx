@@ -18,6 +18,7 @@ import {
 import { errorMessage } from "@/lib/error-message";
 import { formatCurrency } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { StatementAiReview } from "@/components/statement-ai-review";
 
 type Decision = "add" | "ignore";
 type Ready = Extract<StatementAnalysis, { ok: true }>;
@@ -78,6 +79,9 @@ export function StatementImport({ categories }: { categories: { id: string; name
   // Guardado para conferir de novo contra outro cartão, sem escolher o arquivo de novo.
   const [file, setFile] = useState<File | null>(null);
   const [decisions, setDecisions] = useState<Record<string, Decision>>({});
+  // O último extrato de conta lido: a conferência com IA continua à mão depois
+  // de confirmar, que é quando o erro costuma aparecer.
+  const [accountFile, setAccountFile] = useState<File | null>(null);
   const [done, setDone] = useState<{ added: number; ignored: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reading, startReading] = useTransition();
@@ -99,6 +103,7 @@ export function StatementImport({ categories }: { categories: { id: string; name
           return;
         }
         setAnalysis(result);
+        setAccountFile(result.mode === "account" ? chosen : null);
         setDecisions({});
       } catch (e) {
         setError(errorMessage(e, "Não deu para ler o extrato. Tente de novo."));
@@ -310,6 +315,11 @@ export function StatementImport({ categories }: { categories: { id: string; name
             </div>
           )}
         </>
+      )}
+
+      {/* A fatura tem a conferência dela, pelas prints, na tela do cartão. */}
+      {accountFile && (
+        <StatementAiReview key={`${accountFile.name}-${accountFile.size}`} file={accountFile} />
       )}
     </div>
   );
