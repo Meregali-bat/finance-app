@@ -6,7 +6,12 @@ import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/auth-helpers";
 import { Refusal, refusing } from "@/lib/action-result";
 import { toFixedExpenseInput } from "@/lib/budget-inputs";
-import { deferralTargetDate, installmentsStart, startAfterCurrentCharge } from "@/lib/period";
+import {
+  deferralTargetDate,
+  installmentSpan,
+  installmentsStart,
+  startAfterCurrentCharge,
+} from "@/lib/period";
 
 const expenseSchema = z
   .object({
@@ -113,23 +118,31 @@ export async function updateFixedExpense(id: string, formData: FormData) {
       select: { dueDate: true },
     });
 
+    // O formulário mostra quantas faltam a partir do próximo vencimento, e é
+    // de lá que o número salvo conta — salvar sem mexer dá na mesma última
+    // parcela. As adiantadas fora de ordem ficam no caminho: o número gravado
+    // é quantos meses as que faltam ocupam, pulando as já pagas.
+    const paidDueDates = paid.map((p) => p.dueDate);
+    const installmentsFrom = installmentsFromFor(
+      cardId,
+      dueDay,
+      installmentCount,
+      new Date(),
+      paidDueDates,
+    );
     await prisma.fixedExpense.update({
       where: { id, userId },
       data: {
         ...data,
         dueDay: cardId ? null : (dueDay ?? null),
         // No cartão o parcelamento é da compra, não da despesa.
-        installmentCount: cardId ? null : (installmentCount ?? null),
-        // O formulário mostra quantas faltam a partir do próximo vencimento, e é
-        // de lá que o número salvo conta — salvar sem mexer dá na mesma última
-        // parcela.
-        installmentsFrom: installmentsFromFor(
-          cardId,
-          dueDay,
-          installmentCount,
-          new Date(),
-          paid.map((p) => p.dueDate),
-        ),
+        installmentCount:
+          installmentsFrom && dueDay != null && installmentCount != null
+            ? installmentSpan(dueDay, installmentsFrom, installmentCount, paidDueDates)
+            : cardId
+              ? null
+              : (installmentCount ?? null),
+        installmentsFrom,
         cardId: cardId || null,
         categoryId: categoryId || null,
       },

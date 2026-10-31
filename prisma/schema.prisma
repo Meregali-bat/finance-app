@@ -235,6 +235,11 @@ model ExpensePayment {
   /// fica com amount 0 e só existe para quitar a ocorrência. Apagar a compra
   /// apaga o pagamento junto, e o lembrete volta.
   cardPurchaseId String?       @unique
+  /// Preenchido quando a parcela foi adiantada junto com outras: o dinheiro
+  /// mora no lançamento do adiantamento (um só, com o valor pago, talvez com
+  /// desconto), e este pagamento fica com amount 0 só para quitar a parcela.
+  /// Apagar o lançamento apaga os pagamentos, e as parcelas voltam a faltar.
+  advanceTransactionId String?
   /// false = pagamento parcial de uma despesa fixa ou fatura: abate do valor, mas a
   /// ocorrência segue em aberto, e o lembrete continua com o que falta. Uma
   /// ocorrência pode ter vários parciais e, no fim, um que a quita.
@@ -243,12 +248,14 @@ model ExpensePayment {
   fixedExpense   FixedExpense? @relation(fields: [fixedExpenseId], references: [id], onDelete: Cascade)
   card           CreditCard?   @relation(fields: [cardId], references: [id], onDelete: Cascade)
   cardPurchase   CardPurchase? @relation(fields: [cardPurchaseId], references: [id], onDelete: Cascade)
+  advanceTransaction Transaction? @relation(fields: [advanceTransactionId], references: [id], onDelete: Cascade)
 
   /// Sem UNIQUE: os pagamentos parciais de uma despesa fixa ou de uma fatura
   /// dividem o vencimento.
   @@index([fixedExpenseId, dueDate])
   @@index([cardId, dueDate])
   @@index([userId, paidAt])
+  @@index([advanceTransactionId])
 }
 
 model Transaction {
@@ -275,6 +282,8 @@ model Transaction {
   loans           Loan[]
   /// Esta receita é dinheiro que alguém devolveu (ver LoanRepayment).
   loanRepayment   LoanRepayment?
+  /// As parcelas de despesa fixa que este lançamento adiantou (ExpensePayment.advanceTransactionId).
+  advancedPayments ExpensePayment[]
   /// O nome do cartão que a Carteira mandou pelo atalho, quando o app não o
   /// reconheceu e lançou como gasto da conta. Ligar esse nome a um cartão
   /// (WalletCardAlias) move estes lançamentos para o cartão.
