@@ -32,7 +32,7 @@ O período não é o mês do calendário: vai **de um pagamento ao próximo**, c
 - Rotina: confirmar o salário quando cai, marcar contas e faturas como pagas (inteiras ou em parcelas), adiar uma conta, lançar gastos do dia, guardar sobra em caixinhas, conferir a previsão.
 - Cartões de crédito com fechamento e vencimento: as compras entram na fatura do ciclo certo, parceladas mês a mês; o limite usado é acompanhado.
 - O saldo em conta é corrigido à mão de tempos em tempos olhando o extrato do banco; depois disso, nada que já estava no extrato pode contar duas vezes.
-- Bancos do usuário atual: Nubank e Sicoob, e o extrato do Banrisul (as cores de cartão do catálogo existem só para eles; outros entram quando alguém tiver o cartão).
+- Bancos do usuário atual: Nubank, Sicoob e Banrisul (as cores de cartão do catálogo existem só para eles; outros entram quando alguém tiver o cartão).
 
 ## Capabilities and Constraints
 

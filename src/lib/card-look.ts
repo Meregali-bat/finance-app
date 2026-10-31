@@ -77,6 +77,35 @@ export const CARD_BANKS: { bank: string; models: CardStyleOption[] }[] = [
       },
     ],
   },
+  {
+    bank: "Banrisul",
+    models: [
+      {
+        id: "banrisul:internacional",
+        bank: "Banrisul",
+        model: "Banrisul Internacional",
+        gradient: "linear-gradient(140deg,#1a6fc4 0%,#0a4a91 50%,#062a55 100%)",
+      },
+      {
+        id: "banrisul:gold",
+        bank: "Banrisul",
+        model: "Banrisul Gold",
+        gradient: "linear-gradient(140deg,#c9a24a 0%,#8a6a22 50%,#4a3710 100%)",
+      },
+      {
+        id: "banrisul:platinum",
+        bank: "Banrisul",
+        model: "Banrisul Platinum",
+        gradient: "linear-gradient(140deg,#8f9aa3 0%,#55606a 50%,#272d33 100%)",
+      },
+      {
+        id: "banrisul:black",
+        bank: "Banrisul",
+        model: "Banrisul Black",
+        gradient: "linear-gradient(140deg,#16263d 0%,#0b1524 55%,#03070d 100%)",
+      },
+    ],
+  },
 ];
 
 const BY_ID = new Map(CARD_BANKS.flatMap((b) => b.models).map((m) => [m.id, m]));
