@@ -70,7 +70,7 @@ function shortDay(iso: string) {
 }
 
 /**
- * Importar extrato (Nubank, Sicoob, Banrisul) ou fatura do cartão (Sicoob): escolher o
+ * Importar extrato (Nubank, Sicoob, Banrisul) ou fatura do cartão (Sicoob, Banrisul): escolher o
  * PDF, ver o que não está no app e decidir linha a linha. Nada é gravado
  * antes de "Confirmar".
  */
@@ -168,8 +168,8 @@ export function StatementImport({ categories }: { categories: { id: string; name
               : "Escolher o PDF do extrato"}
         </span>
         <span className="text-[13px] text-muted-foreground">
-          O PDF do extrato da conta (Nubank, Sicoob ou Banrisul) ou da fatura do cartão Sicoob, como
-          o app do banco exporta.
+          O PDF do extrato da conta (Nubank, Sicoob ou Banrisul) ou da fatura do cartão (Sicoob ou
+          Banrisul), como o app do banco exporta.
         </span>
         <input
           type="file"
