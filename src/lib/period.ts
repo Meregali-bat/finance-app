@@ -558,9 +558,40 @@ export function installmentsStart(dueDay: number, today: Date, paidDueDates: Dat
   return new Date(Date.UTC(next.getFullYear(), next.getMonth(), next.getDate()));
 }
 
+/** O vencimento da parcela `index` (0 = a primeira), re-derivado do mês para o dia 31 não grudar no 28. */
+function installmentDue(first: Date, dueDay: number, index: number): Date {
+  const at = addMonths(first.getFullYear(), first.getMonth(), index);
+  return dateForDayInMonth(at.year, at.month, dueDay);
+}
+
+/**
+ * As parcelas que ainda faltam pagar, a partir do próximo vencimento em
+ * aberto, com o número de cada uma ("5 de 12"). Pula as já quitadas, mesmo
+ * fora de ordem: adiantar a 9ª e a 10ª deixa a 6ª, a 7ª e a 8ª faltando.
+ */
+export function openInstallments(
+  expense: InstallmentFields & { amount: number },
+  today: Date,
+  paidDueDates: Date[] = [],
+): { number: number; dueDate: Date; amount: number }[] {
+  if (expense.installmentCount == null || expense.dueDay == null) return [];
+  const first = firstDueDate(expense);
+  if (!first) return [];
+  const paid = new Set(paidDueDates.map((d) => storedDay(d).getTime()));
+  const next = nextUnpaidDue(expense.dueDay, today, paidDueDates).getTime();
+  const open: { number: number; dueDate: Date; amount: number }[] = [];
+  for (let i = 0; i < expense.installmentCount; i++) {
+    const due = installmentDue(first, expense.dueDay, i);
+    if (due.getTime() < next || paid.has(due.getTime())) continue;
+    open.push({ number: i + 1, dueDate: due, amount: expense.amount });
+  }
+  return open;
+}
+
 /**
  * Quantas parcelas ainda faltam pagar, a partir do próximo vencimento em
- * aberto, e quando cai a última. Nulo para despesa sem número de parcelas.
+ * aberto, e quando cai a última que falta (a do contrato, se não falta
+ * nenhuma). Nulo para despesa sem número de parcelas.
  */
 export function installmentsLeft(
   expense: InstallmentFields,
@@ -570,10 +601,32 @@ export function installmentsLeft(
   if (expense.installmentCount == null || expense.dueDay == null) return null;
   const first = firstDueDate(expense);
   if (!first) return null;
-  const next = nextUnpaidDue(expense.dueDay, today, paidDueDates);
-  const remaining = Math.max(0, expense.installmentCount - Math.max(0, monthsBetween(first, next)));
-  const end = addMonths(first.getFullYear(), first.getMonth(), expense.installmentCount - 1);
-  return { remaining, last: dateForDayInMonth(end.year, end.month, expense.dueDay) };
+  const open = openInstallments({ ...expense, amount: 0 }, today, paidDueDates);
+  return {
+    remaining: open.length,
+    last: open.at(-1)?.dueDate ?? installmentDue(first, expense.dueDay, expense.installmentCount - 1),
+  };
+}
+
+/**
+ * Quantos meses as `remaining` parcelas que faltam ocupam a partir de `from`,
+ * pulando as já quitadas no caminho. É o que se grava em `installmentCount`
+ * quando a pessoa diz "faltam N": com a 9ª e a 10ª adiantadas, as 5 que
+ * faltam a partir da 6ª vão até a 12ª.
+ */
+export function installmentSpan(
+  dueDay: number,
+  from: Date,
+  remaining: number,
+  paidDueDates: Date[] = [],
+): number {
+  const start = storedDay(from);
+  const paid = new Set(paidDueDates.map((d) => storedDay(d).getTime()));
+  let span = 0;
+  for (let left = remaining; left > 0 && span < 600; span++) {
+    if (!paid.has(installmentDue(start, dueDay, span).getTime())) left--;
+  }
+  return span;
 }
 
 /**

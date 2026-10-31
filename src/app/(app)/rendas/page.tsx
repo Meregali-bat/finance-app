@@ -2,7 +2,13 @@ import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/auth-helpers";
 import { formatCurrency, formatShortDate } from "@/lib/format";
 import Link from "next/link";
-import { dateForDayInMonth, getPeriodBounds, installmentsLeft, storedDay } from "@/lib/period";
+import {
+  dateForDayInMonth,
+  getPeriodBounds,
+  installmentsLeft,
+  openInstallments,
+  storedDay,
+} from "@/lib/period";
 import { EmptyState } from "@/components/ui/empty-state";
 import { FixedTabs, type FixedTab } from "@/components/fixed-tabs";
 import { ListRow, SubtitleParts, stagger } from "@/components/list-row";
@@ -11,6 +17,8 @@ import { IncomeFormDialog } from "@/components/forms/income-form-dialog";
 import { ExpenseFormDialog } from "@/components/forms/expense-form-dialog";
 import { CategoryFormDialog } from "@/components/forms/category-form-dialog";
 import { DeleteIconButton } from "@/components/delete-icon-button";
+import { AdvanceInstallmentsDialog } from "@/components/advance-installments-dialog";
+import { undoInstallmentAdvance } from "@/lib/actions/installment-advance";
 import { ToggleActiveButton } from "@/components/toggle-active-button";
 import { deleteIncome, toggleIncomeActive } from "@/lib/actions/income";
 import {
@@ -67,7 +75,11 @@ export default async function FixedPage({
         // Os pagos de agora para a frente: a parcela adiantada já não falta.
         payments: {
           where: { settled: true, dueDate: { gte: new Date(today.getTime() - 40 * 86_400_000) } },
-          select: { dueDate: true, paidAt: true },
+          select: {
+            dueDate: true,
+            paidAt: true,
+            advanceTransaction: { select: { id: true, amount: true, date: true } },
+          },
         },
         pauses: { where: { endedAt: null }, select: { startedAt: true } },
       },
@@ -137,7 +149,41 @@ export default async function FixedPage({
       (d) => storedDay(d.targetDueDate).getTime() >= todayStart.getTime(),
     );
     const afterLast = deferrals.filter((d) => d.mode === "end");
-    return { expense, left, deferrals, afterLast, ended: left?.remaining === 0 && afterLast.length === 0 };
+    // As que dá para adiantar: as que faltam, de qualquer mês.
+    const open =
+      left && !expense.cardId
+        ? openInstallments(
+            {
+              amount: Number(expense.amount),
+              dueDay: expense.dueDay ?? undefined,
+              createdAt: expense.createdAt,
+              installmentCount: expense.installmentCount ?? undefined,
+              installmentsFrom: expense.installmentsFrom ?? undefined,
+            },
+            today,
+            expense.payments.map((p) => p.dueDate),
+          )
+        : [];
+    // Cada adiantamento é um lançamento que quitou várias parcelas de uma vez.
+    const advances = [
+      ...new Map(
+        expense.payments.flatMap((p) =>
+          p.advanceTransaction ? [[p.advanceTransaction.id, p.advanceTransaction] as const] : [],
+        ),
+      ).values(),
+    ].map((t) => ({
+      ...t,
+      count: expense.payments.filter((p) => p.advanceTransaction?.id === t.id).length,
+    }));
+    return {
+      expense,
+      left,
+      deferrals,
+      afterLast,
+      open,
+      advances,
+      ended: left?.remaining === 0 && afterLast.length === 0,
+    };
   });
 
   /**
@@ -280,7 +326,7 @@ export default async function FixedPage({
   const onlyActiveIncome = activeIncomes.length === 1 ? activeIncomes[0].id : null;
 
   const expenseItem = (row: (typeof rows)[number], index: number) => {
-    const { expense, left, deferrals, afterLast } = row;
+    const { expense, left, deferrals, afterLast, open, advances } = row;
     const state = expenseState(row);
     const cardName = expense.cardId ? cardNameById.get(expense.cardId) : undefined;
     // Uma parcela adiada para depois da última também falta, e é ela a última.
@@ -332,6 +378,18 @@ export default async function FixedPage({
                 }}
                 onToggle={toggleFixedExpenseActive.bind(null, expense.id)}
               />
+              {expense.active && open.length > 0 && expense.installmentCount != null && (
+                <AdvanceInstallmentsDialog
+                  expenseId={expense.id}
+                  label={expense.label}
+                  total={expense.installmentCount}
+                  installments={open.map((i) => ({
+                    number: i.number,
+                    dueDate: `${i.dueDate.getFullYear()}-${String(i.dueDate.getMonth() + 1).padStart(2, "0")}-${String(i.dueDate.getDate()).padStart(2, "0")}`,
+                    amount: i.amount,
+                  }))}
+                />
+              )}
               <ExpenseFormDialog
                 expense={{
                   id: expense.id,
@@ -354,6 +412,27 @@ export default async function FixedPage({
             </>
           }
         >
+          {advances.map((advance) => {
+            const on = dayMonth(storedDay(advance.date));
+            return (
+              <div
+                key={advance.id}
+                className="flex items-center justify-between gap-2 rounded-xl bg-muted py-1 pr-1 pl-3 text-xs text-muted-foreground"
+              >
+                <span className="tabular-nums">
+                  {advance.count === 1 ? "1 parcela adiantada" : `${advance.count} parcelas adiantadas`}{" "}
+                  em {on} ({formatCurrency(Number(advance.amount))})
+                </span>
+                <DeleteIconButton
+                  undo
+                  itemLabel={`adiantamento de ${on}`}
+                  title="Desfazer adiantamento"
+                  action={undoInstallmentAdvance.bind(null, advance.id)}
+                  confirmMessage={`Desfazer o adiantamento? O lançamento de ${formatCurrency(Number(advance.amount))} sai e as parcelas voltam a faltar.`}
+                />
+              </div>
+            );
+          })}
           {/* Um adiamento não é dinheiro e não aparece no Histórico; é aqui
               que ele se vê e se desfaz. */}
           {deferrals.map((deferral) => {
