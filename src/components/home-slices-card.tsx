@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ChevronRight, Target } from "lucide-react";
+import { iconButton } from "@/components/ui/icon-button";
 import { homeCard } from "@/components/home-card";
 import { SectionLabel } from "@/components/page-header";
 import { formatCurrency } from "@/lib/format";
@@ -42,10 +43,11 @@ export function HomeSlicesCard({
             Custos fixos, conforto, prazeres, conhecimento e o que guardar — cada um com sua parte.
           </p>
         </div>
-        <Target
-          className="size-5 shrink-0 text-primary transition-transform duration-150 group-hover/row:translate-x-0.5"
-          aria-hidden="true"
-        />
+        {/* O mesmo círculo do "Posso comprar isso?" ao lado: os cards da faixa
+            falam a mesma língua. O card inteiro é o link. */}
+        <span aria-hidden="true" className={iconButton({ tone: "outline" })}>
+          <Target className="text-primary" />
+        </span>
       </Link>
     );
   }

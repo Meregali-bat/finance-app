@@ -160,6 +160,7 @@ export default async function DashboardPage() {
       commitment={commitment}
       limitPercent={profile.commitmentLimitPercent ?? DEFAULT_COMMITMENT_LIMIT_PERCENT}
       startLabel={formatDate(commitment.periodStart)}
+      reservedNow={reservedForLater > 0.005}
     />
   );
   const registeredMovement = registeredMovementOf(inputs, today);
@@ -819,7 +820,8 @@ export default async function DashboardPage() {
               (pagar, lançar), no mesmo lugar no celular e no desktop, onde a
               coluna do dia sobrava vazia. */}
           {commitmentCard && (
-            <div className="rise-in" style={rise(120)}>
+            <div className="rise-in flex flex-col gap-3" style={rise(120)}>
+              <SectionLabel>Próximo ciclo</SectionLabel>
               {commitmentCard}
             </div>
           )}

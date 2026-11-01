@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ChevronRight, CreditCard } from "lucide-react";
+import { ChevronRight, CreditCard, TriangleAlert } from "lucide-react";
 import { homeCard } from "@/components/home-card";
 import { formatCurrency } from "@/lib/format";
 import type { NextCycleCommitment } from "@/lib/next-cycle-commitment";
@@ -18,12 +18,15 @@ export function NextCycleCommitmentCard({
   commitment,
   limitPercent,
   startLabel,
+  reservedNow,
 }: {
   commitment: NextCycleCommitment;
   limitPercent: number;
   /** "15 de nov.": o dia em que o próximo ciclo começa. Pela data, e não pelo
    * mês: em 1º de novembro, "novembro" se lia como o ciclo de agora. */
   startLabel: string;
+  /** O número de hoje já guarda dinheiro para um ciclo à frente que vai faltar. */
+  reservedNow: boolean;
 }) {
   const alert = commitment.tone === "alert";
   const fixedShare = commitment.income > 0 ? commitment.fixed / commitment.income : 0;
@@ -45,15 +48,18 @@ export function NextCycleCommitmentCard({
             alert ? "bg-negative/12 text-negative" : "bg-muted text-primary",
           )}
         >
-          <CreditCard className="size-[18px]" />
+          {/* No alerta, o ícone também muda: a cor sozinha não avisa todo mundo. */}
+          {alert ? <TriangleAlert className="size-[18px]" /> : <CreditCard className="size-[18px]" />}
         </span>
         <p className="min-w-0 text-[15px] leading-snug font-semibold text-pretty tabular-nums">
-          O ciclo de {startLabel} já começa{" "}
+          Do que entra em {startLabel},{" "}
           <span className={alert ? "text-negative" : undefined}>
-            {percent(commitment.totalShare)} comprometido
+            {percent(commitment.totalShare)} já está comprometido
           </span>
           {commitment.overLimit && (
-            <span className="font-medium text-muted-foreground"> · seu teto é {limitPercent}%</span>
+            <span className="font-medium text-muted-foreground">
+              , acima dos {limitPercent}% que você definiu
+            </span>
           )}
         </p>
       </div>
@@ -92,15 +98,18 @@ export function NextCycleCommitmentCard({
         </ul>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-x-3">
-        <p className="text-[13px] text-muted-foreground tabular-nums">
-          Cada {formatCurrency(100)} no cartão agora sai da renda desse ciclo.
+      {/* O que isso muda para quem olha o número do dia, e para onde ir. */}
+      <div className="flex flex-col gap-0.5">
+        <p className="text-[13px] text-pretty text-muted-foreground">
+          {reservedNow
+            ? `O número de hoje já guarda uma parte para esse ciclo. Cada compra no cartão agora aumenta o que vence lá.`
+            : `O número de hoje não muda: é o ciclo de ${startLabel} que chega apertado, e cada compra no cartão agora aumenta o que vence lá.`}
         </p>
         <Link
-          href="/cartoes"
-          className="-my-2 flex min-h-11 items-center gap-0.5 text-[13px] font-medium text-primary underline-offset-4 hover:underline"
+          href="/previsao?p=1"
+          className="-my-1 flex min-h-11 w-fit items-center gap-0.5 text-[13px] font-medium text-primary underline-offset-4 hover:underline"
         >
-          Ver as faturas
+          Ver esse ciclo na Previsão
           <ChevronRight className="size-3.5" aria-hidden="true" />
         </Link>
       </div>
