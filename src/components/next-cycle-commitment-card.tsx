@@ -93,7 +93,14 @@ export function NextCycleCommitmentCard({
               className="bg-foreground/55 dark:bg-foreground/40"
               style={{ width: `${fixedWidth}%` }}
             />
-            {overWidth > 0 && <div className="bg-negative" style={{ width: `${overWidth}%` }} />}
+            {overWidth > 0 && (
+              // O vão antes do excesso pintado com a cor do card: o fundo da
+              // barra quase não aparece contra ele, e o vermelho encostava no cinza.
+              <div
+                className="bg-negative shadow-[-2px_0_0_var(--card)]"
+                style={{ width: `${overWidth}%` }}
+              />
+            )}
           </div>
           <span
             className="absolute -top-1 h-4 w-0.5 rounded-full bg-foreground/70"
