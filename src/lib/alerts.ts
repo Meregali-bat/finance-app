@@ -77,10 +77,11 @@ export function dailyAlerts(inputs: BudgetInputs, today: Date): Alert[] {
     alerts.push({
       title: "No ritmo atual, vai faltar",
       body:
-        `Faltam ${formatCurrency(-pace.left)} em ${formatDate(pace.lastDay).replace(/\.$/, "")}` +
+        `${pace.offset === 0 ? "Este ciclo" : "O próximo ciclo"} fecha ` +
+        `${formatCurrency(-pace.left)} no negativo em ${formatDate(pace.lastDay)}` +
         (pace.perDayTarget !== null
-          ? `. Para fechar, segure em ${formatCurrency(pace.perDayTarget)} por dia até lá.`
-          : ": mesmo sem gastar, as contas não cabem. Veja o que adiar."),
+          ? ` Para evitar, gaste até ${formatCurrency(pace.perDayTarget)} por dia até lá.`
+          : " Mesmo sem gastar, as contas não cabem. Veja o que adiar."),
       url: pace.perDayTarget !== null ? `/previsao?p=${pace.offset}` : "/#lembretes",
       tag: `pace-${pace.periodStart.toISOString()}`,
     });

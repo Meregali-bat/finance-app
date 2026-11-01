@@ -82,7 +82,7 @@ export function NextCycleCommitmentCard({
               style={{ width: `${Math.min(100, commitment.cardShare * 100)}%` }}
             />
             <div
-              className="bg-foreground/55"
+              className="bg-foreground/55 dark:bg-foreground/40"
               style={{ width: `${Math.max(0, Math.min(100 - commitment.cardShare * 100, fixedShare * 100))}%` }}
             />
           </div>
@@ -124,7 +124,7 @@ export function NextCycleCommitmentCard({
             Faturas {formatCurrency(commitment.cardBills)} ({percent(commitment.cardShare)})
           </li>
           <li className="flex items-center gap-1.5">
-            <span aria-hidden="true" className="size-2 rounded-full bg-foreground/55" />
+            <span aria-hidden="true" className="size-2 rounded-full bg-foreground/55 dark:bg-foreground/40" />
             Contas fixas {formatCurrency(commitment.fixed)} ({percent(fixedShare)})
           </li>
         </ul>

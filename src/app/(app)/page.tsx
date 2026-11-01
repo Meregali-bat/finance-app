@@ -640,16 +640,22 @@ export default async function DashboardPage() {
                     período fecha no negativo. */}
                 {paceWarn && !isOverBudget && (
                   <div className="flex flex-col gap-0.5 text-sm">
-                    <p className="font-medium text-(--hero-fg) text-pretty tabular-nums">
-                      No ritmo atual, faltam {formatCurrency(-paceWarn.left)} em{" "}
-                      {formatDate(paceWarn.lastDay).replace(/\.$/, "")}
-                      {/* "Até lá": o alvo vale até o fim do ciclo do aviso, e pode
-                          ser menor que o número do dia, que só olha este ciclo. */}
-                      {paceWarn.perDayTarget !== null
-                        ? `. Para fechar, segure em ${formatCurrency(paceWarn.perDayTarget)} por dia até lá.`
-                        : ": mesmo sem gastar, as contas não cabem."}
+                    {/* "Fecha no negativo", e não "faltam": o "faltam 14 dias"
+                        da régua logo abaixo é de dias. E diz de qual ciclo:
+                        quando é o próximo, o número grande (deste ciclo) segue
+                        valendo, e o alvo explica por que é menor que ele. */}
+                    <p className="flex items-start gap-1 font-medium text-(--hero-fg) text-pretty tabular-nums">
+                      <CircleAlert aria-hidden="true" className="mt-[3px] size-3.5 shrink-0" />
+                      <span>
+                        No ritmo de agora, {paceWarn.offset === 0 ? "este ciclo" : "o próximo ciclo"}{" "}
+                        fecha {formatCurrency(-paceWarn.left)} no negativo em{" "}
+                        {formatDate(paceWarn.lastDay)}
+                        {paceWarn.perDayTarget !== null
+                          ? ` Para evitar, gaste até ${formatCurrency(paceWarn.perDayTarget)} por dia até lá.`
+                          : " Mesmo sem gastar, as contas não cabem."}
+                      </span>
                     </p>
-                    <Link href={`/previsao?p=${paceWarn.offset}`} className={heroLink}>
+                    <Link href={`/previsao?p=${paceWarn.offset}`} className={cn(heroLink, "-my-3 ml-[18px] inline-block w-fit py-3")}>
                       Ver o ritmo na Previsão
                     </Link>
                   </div>
