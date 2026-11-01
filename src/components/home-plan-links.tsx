@@ -106,7 +106,7 @@ export function HomePlanLinks({
                 valueClassName={slicesOver > 0 ? "text-negative" : undefined}
               />
             ) : (
-              <RowBody icon={Target} label="Divida a renda em fatias" />
+              <RowBody icon={Target} label="Metas: divida a renda em fatias" />
             )}
           </Link>
         </li>

@@ -83,7 +83,7 @@ export function NextCycleCommitmentCard({
         </div>
         {/* O traço dito em palavras, embaixo dele: sem isso, o leitor tinha de
             adivinhar o que a marca na barra queria dizer. */}
-        <div className="relative h-4 text-[11.5px] text-muted-foreground tabular-nums">
+        <div className="relative h-[18px] text-[11.5px] text-muted-foreground tabular-nums">
           <span
             className="absolute -translate-x-1/2 whitespace-nowrap"
             style={{ left: `${Math.min(92, Math.max(8, limitPercent))}%` }}

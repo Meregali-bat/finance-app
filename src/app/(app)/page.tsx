@@ -711,7 +711,9 @@ export default async function DashboardPage() {
                       {formatCurrency(spentInPeriod)}
                     </span>
                   </p>
-                  <p className="ml-auto text-right">
+                  {/* No celular, as duas linhas alinhadas à esquerda, uma embaixo da
+                      outra; no desktop, cada uma numa ponta. */}
+                  <p className="lg:ml-auto lg:text-right">
                     {/* Cada parte inteira: se não couber, quebra entre elas,
                         nunca no meio do valor. */}
                     {!isOverBudget && (
