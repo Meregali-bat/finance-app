@@ -62,20 +62,30 @@ export function NextCycleCommitmentCard({
         </p>
       </div>
 
-      {/* As faturas na cor do aviso, as contas fixas atrás, e um traço no
-          teto: dá para ver de longe quanto é cartão e quanto passou. */}
+      {/* As faturas em tom forte, as contas fixas em tom fraco, e um traço no
+          teto. Vermelho, só o que passa do teto: a cor de alerta marca o
+          problema, e não uma categoria. */}
       <div className="flex flex-col gap-1.5">
         <div className="relative h-2 rounded-full bg-(--track)" aria-hidden="true">
           <div className="flex h-full overflow-hidden rounded-full">
             <div
-              className={alert ? "bg-negative" : "bg-primary"}
+              className="bg-foreground/65"
               style={{ width: `${Math.min(100, commitment.cardShare * 100)}%` }}
             />
             <div
-              className="bg-foreground/40"
+              className="bg-foreground/25"
               style={{ width: `${Math.max(0, Math.min(100 - commitment.cardShare * 100, fixedShare * 100))}%` }}
             />
           </div>
+          {commitment.overLimit && (
+            <div
+              className="absolute inset-y-0 rounded-r-full bg-negative"
+              style={{
+                left: `${Math.min(100, limitPercent)}%`,
+                width: `${Math.max(0, Math.min(100, commitment.totalShare * 100) - Math.min(100, limitPercent))}%`,
+              }}
+            />
+          )}
           <span
             className="absolute -top-1 h-4 w-0.5 rounded-full bg-foreground/70"
             style={{ left: `calc(${Math.min(100, limitPercent)}% - 1px)` }}
@@ -93,16 +103,19 @@ export function NextCycleCommitmentCard({
         </div>
         <ul className="flex flex-wrap gap-x-3 gap-y-0.5 text-[12.5px] text-muted-foreground tabular-nums">
           <li className="flex items-center gap-1.5">
-            <span
-              aria-hidden="true"
-              className={cn("size-2 rounded-full", alert ? "bg-negative" : "bg-primary")}
-            />
+            <span aria-hidden="true" className="size-2 rounded-full bg-foreground/65" />
             Faturas {formatCurrency(commitment.cardBills)} ({percent(commitment.cardShare)})
           </li>
           <li className="flex items-center gap-1.5">
-            <span aria-hidden="true" className="size-2 rounded-full bg-foreground/40" />
+            <span aria-hidden="true" className="size-2 rounded-full bg-foreground/25" />
             Contas fixas {formatCurrency(commitment.fixed)} ({percent(fixedShare)})
           </li>
+          {commitment.overLimit && (
+            <li className="flex items-center gap-1.5">
+              <span aria-hidden="true" className="size-2 rounded-full bg-negative" />
+              Acima do teto ({percent(commitment.totalShare - limitPercent / 100)})
+            </li>
+          )}
         </ul>
       </div>
 
