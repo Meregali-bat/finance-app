@@ -17,19 +17,19 @@ const percent = (share: number) => `${Math.round(share * 100)}%`;
 export function NextCycleCommitmentCard({
   commitment,
   limitPercent,
-  monthLabel,
+  startLabel,
 }: {
   commitment: NextCycleCommitment;
   limitPercent: number;
-  /** "novembro": o mês em que o próximo ciclo começa. */
-  monthLabel: string;
+  /** "15 de nov.": o dia em que o próximo ciclo começa. Pela data, e não pelo
+   * mês: em 1º de novembro, "novembro" se lia como o ciclo de agora. */
+  startLabel: string;
 }) {
   const alert = commitment.tone === "alert";
   const fixedShare = commitment.income > 0 ? commitment.fixed / commitment.income : 0;
-  const month = monthLabel.charAt(0).toUpperCase() + monthLabel.slice(1);
   return (
     <section
-      aria-label={`Comprometido no ciclo de ${monthLabel}`}
+      aria-label={`Comprometido no ciclo de ${startLabel}`}
       className={homeCard(
         cn(
           "flex flex-col gap-3",
@@ -48,7 +48,7 @@ export function NextCycleCommitmentCard({
           <CreditCard className="size-[18px]" />
         </span>
         <p className="min-w-0 text-[15px] leading-snug font-semibold text-pretty tabular-nums">
-          {month} já chega{" "}
+          O ciclo de {startLabel} já começa{" "}
           <span className={alert ? "text-negative" : undefined}>
             {percent(commitment.totalShare)} comprometido
           </span>
@@ -68,7 +68,7 @@ export function NextCycleCommitmentCard({
               style={{ width: `${Math.min(100, commitment.cardShare * 100)}%` }}
             />
             <div
-              className="bg-foreground/25"
+              className="bg-foreground/40"
               style={{ width: `${Math.max(0, Math.min(100 - commitment.cardShare * 100, fixedShare * 100))}%` }}
             />
           </div>
@@ -86,7 +86,7 @@ export function NextCycleCommitmentCard({
             Faturas {formatCurrency(commitment.cardBills)} ({percent(commitment.cardShare)})
           </li>
           <li className="flex items-center gap-1.5">
-            <span aria-hidden="true" className="size-2 rounded-full bg-foreground/25" />
+            <span aria-hidden="true" className="size-2 rounded-full bg-foreground/40" />
             Contas fixas {formatCurrency(commitment.fixed)} ({percent(fixedShare)})
           </li>
         </ul>
@@ -94,7 +94,7 @@ export function NextCycleCommitmentCard({
 
       <div className="flex flex-wrap items-center justify-between gap-x-3">
         <p className="text-[13px] text-muted-foreground tabular-nums">
-          Cada {formatCurrency(100)} no cartão agora sai da renda de {monthLabel}.
+          Cada {formatCurrency(100)} no cartão agora sai da renda desse ciclo.
         </p>
         <Link
           href="/cartoes"
