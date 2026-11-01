@@ -62,8 +62,16 @@ export function NextCycleCommitmentCard({
         </p>
       </div>
 
+      {/* Logo depois do alerta, o que ele muda para o número de hoje: o
+          conforto antes da barra, e não depois. */}
+      <p className="text-[13px] text-pretty text-muted-foreground">
+        {reservedNow
+          ? "O número de hoje já guarda uma parte; cada compra no cartão agora aumenta o que vence lá."
+          : "O número de hoje não muda; cada compra no cartão agora aumenta o que vence lá."}
+      </p>
+
       {/* As faturas em tom forte, as contas fixas em tom médio (cada um com
-          3:1 do vizinho, e um fio da cor do card entre eles), e um traço no
+          3:1 do vizinho e do fundo, e um fio separando), e um traço no
           teto. Vermelho, só o que passa do teto: a cor de alerta marca o
           problema, e não uma categoria. */}
       <div className="flex flex-col gap-1.5">
@@ -74,13 +82,13 @@ export function NextCycleCommitmentCard({
               style={{ width: `${Math.min(100, commitment.cardShare * 100)}%` }}
             />
             <div
-              className="bg-foreground/45"
+              className="bg-foreground/55"
               style={{ width: `${Math.max(0, Math.min(100 - commitment.cardShare * 100, fixedShare * 100))}%` }}
             />
           </div>
           {commitment.overLimit && (
             <div
-              className="absolute inset-y-0 rounded-r-full border-l-2 border-card bg-negative"
+              className="absolute inset-y-0 rounded-r-full bg-negative shadow-[-2px_0_0_var(--card)]"
               style={{
                 left: `${Math.min(100, limitPercent)}%`,
                 width: `${Math.max(0, Math.min(100, commitment.totalShare * 100) - Math.min(100, limitPercent))}%`,
@@ -100,6 +108,14 @@ export function NextCycleCommitmentCard({
             style={{ left: `${Math.min(92, Math.max(8, limitPercent))}%` }}
           >
             teto {limitPercent}%
+            {/* O excesso é parte das faturas e contas fixas, não uma terceira
+                fatia: vai junto do teto, e a legenda continua somando o total. */}
+            {commitment.overLimit && (
+              <span className="text-negative">
+                {" "}
+                · +{Math.round(commitment.totalShare * 100) - limitPercent}
+              </span>
+            )}
           </span>
         </div>
         <ul className="flex flex-wrap gap-x-3 gap-y-0.5 text-[12.5px] text-muted-foreground tabular-nums">
@@ -108,33 +124,20 @@ export function NextCycleCommitmentCard({
             Faturas {formatCurrency(commitment.cardBills)} ({percent(commitment.cardShare)})
           </li>
           <li className="flex items-center gap-1.5">
-            <span aria-hidden="true" className="size-2 rounded-full bg-foreground/45" />
+            <span aria-hidden="true" className="size-2 rounded-full bg-foreground/55" />
             Contas fixas {formatCurrency(commitment.fixed)} ({percent(fixedShare)})
           </li>
-          {commitment.overLimit && (
-            <li className="flex items-center gap-1.5">
-              <span aria-hidden="true" className="size-2 rounded-full bg-negative" />
-              Acima do teto ({percent(commitment.totalShare - limitPercent / 100)})
-            </li>
-          )}
         </ul>
       </div>
 
-      {/* O que isso muda para quem olha o número do dia, e para onde ir. */}
-      <div className="flex flex-col gap-0.5">
-        <p className="text-[13px] text-pretty text-muted-foreground">
-          {reservedNow
-            ? "O número de hoje já guarda uma parte; cada compra no cartão agora aumenta o que vence lá."
-            : "O número de hoje não muda; cada compra no cartão agora aumenta o que vence lá."}
-        </p>
-        <Link
-          href="/previsao?p=1"
-          className="-my-1 flex min-h-11 w-fit items-center gap-0.5 text-[13px] font-medium text-primary underline-offset-4 hover:underline"
-        >
-          Ver esse ciclo na Previsão
-          <ChevronRight className="size-3.5" aria-hidden="true" />
-        </Link>
-      </div>
+      {/* Para onde ir. */}
+      <Link
+        href="/previsao?p=1"
+        className="-my-1 flex min-h-11 w-fit items-center gap-0.5 text-[13px] font-medium text-primary underline-offset-4 hover:underline"
+      >
+        Ver esse ciclo na Previsão
+        <ChevronRight className="size-3.5" aria-hidden="true" />
+      </Link>
     </section>
   );
 }
