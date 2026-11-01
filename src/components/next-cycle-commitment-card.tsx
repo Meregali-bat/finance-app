@@ -29,6 +29,14 @@ export function NextCycleCommitmentCard({
   reservedNow: boolean;
 }) {
   const alert = commitment.tone === "alert";
+  // As larguras da barra, em % da renda: até o teto, faturas e depois contas
+  // fixas; o que passa do teto (seja de qual for), em vermelho.
+  const limit = Math.min(100, limitPercent);
+  const total = Math.min(100, commitment.totalShare * 100);
+  const within = Math.min(total, limit);
+  const cardWidth = Math.min(commitment.cardShare * 100, within);
+  const fixedWidth = Math.max(0, within - cardWidth);
+  const overWidth = Math.max(0, total - within);
   const fixedShare = commitment.income > 0 ? commitment.fixed / commitment.income : 0;
   return (
     <section
@@ -71,33 +79,25 @@ export function NextCycleCommitmentCard({
       </p>
 
       {/* As faturas em tom forte, as contas fixas em tom médio (cada um com
-          3:1 do vizinho e do fundo, e um fio separando), e um traço no
-          teto. Vermelho, só o que passa do teto: a cor de alerta marca o
-          problema, e não uma categoria. */}
+          3:1 do vizinho e do fundo), e um traço no teto. Vermelho, só o que
+          passa do teto: a cor de alerta marca o problema, e não uma
+          categoria. */}
       <div className="flex flex-col gap-1.5">
         <div className="relative h-2 rounded-full bg-(--track)" aria-hidden="true">
+          {/* Três trechos lado a lado, sem sobreposição: até o teto, faturas e
+              contas fixas; o que passa dele, em vermelho. O vão entre eles
+              separa as cores, e a marca do teto cai no vão. */}
           <div className="flex h-full gap-0.5 overflow-hidden rounded-full">
-            <div
-              className="bg-foreground/90"
-              style={{ width: `${Math.min(100, commitment.cardShare * 100)}%` }}
-            />
+            <div className="bg-foreground/90" style={{ width: `${cardWidth}%` }} />
             <div
               className="bg-foreground/55 dark:bg-foreground/40"
-              style={{ width: `${Math.max(0, Math.min(100 - commitment.cardShare * 100, fixedShare * 100))}%` }}
+              style={{ width: `${fixedWidth}%` }}
             />
+            {overWidth > 0 && <div className="bg-negative" style={{ width: `${overWidth}%` }} />}
           </div>
-          {commitment.overLimit && (
-            <div
-              className="absolute inset-y-0 rounded-r-full bg-negative shadow-[-2px_0_0_var(--card)]"
-              style={{
-                left: `${Math.min(100, limitPercent)}%`,
-                width: `${Math.max(0, Math.min(100, commitment.totalShare * 100) - Math.min(100, limitPercent))}%`,
-              }}
-            />
-          )}
           <span
             className="absolute -top-1 h-4 w-0.5 rounded-full bg-foreground/70"
-            style={{ left: `calc(${Math.min(100, limitPercent)}% - 1px)` }}
+            style={{ left: `calc(${limit}% - 1px)` }}
           />
         </div>
         {/* O traço dito em palavras, embaixo dele: sem isso, o leitor tinha de
@@ -113,7 +113,7 @@ export function NextCycleCommitmentCard({
             {commitment.overLimit && (
               <span className="text-negative">
                 {" "}
-                · +{Math.round(commitment.totalShare * 100) - limitPercent}
+                · {Math.round(commitment.totalShare * 100) - limitPercent} pontos acima
               </span>
             )}
           </span>

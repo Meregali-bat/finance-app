@@ -647,8 +647,10 @@ export default async function DashboardPage() {
                     <p className="flex items-start gap-1 font-medium text-(--hero-fg) text-pretty tabular-nums">
                       <CircleAlert aria-hidden="true" className="mt-[3px] size-3.5 shrink-0" />
                       <span>
-                        No ritmo de agora, {paceWarn.offset === 0 ? "este ciclo" : "o próximo ciclo"}{" "}
-                        fecha {formatCurrency(-paceWarn.left)} no negativo em{" "}
+                        {/* O ritmo dito em número: sem ele, o aviso reagia a algo
+                            que a tela não mostrava. */}
+                        Gastando {formatCurrency(paceWarn.perDay)} por dia, como até agora,{" "}
+                        {paceWarn.offset === 0 ? "este ciclo" : "o próximo ciclo"} fecha {formatCurrency(-paceWarn.left)} no negativo em{" "}
                         {formatDate(paceWarn.lastDay)}
                         {paceWarn.perDayTarget !== null
                           ? ` Para evitar, gaste até ${formatCurrency(paceWarn.perDayTarget)} por dia até lá.`

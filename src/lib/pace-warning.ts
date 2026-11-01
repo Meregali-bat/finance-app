@@ -14,7 +14,7 @@ export function paceWarningFor(
   inputs: BudgetInputs,
   periods: PeriodForecast[],
   today: Date,
-): (PaceWarning & { elapsedDays: number; periodStart: Date }) | null {
+): (PaceWarning & { elapsedDays: number; periodStart: Date; perDay: number }) | null {
   const current = periods[0];
   if (!current) return null;
   const pace = spendingPace({
@@ -32,5 +32,12 @@ export function paceWarningFor(
   }));
   const tomorrow = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
   const warning = paceWarning(pace, periods, cards, tomorrow);
-  return warning && { ...warning, elapsedDays: pace.elapsedDays, periodStart: current.periodStart };
+  return (
+    warning && {
+      ...warning,
+      elapsedDays: pace.elapsedDays,
+      periodStart: current.periodStart,
+      perDay: pace.perDay,
+    }
+  );
 }
