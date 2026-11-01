@@ -1,7 +1,8 @@
 /**
  * O peso das faturas do cartão sobre a renda do próximo ciclo: o cartão dá a
  * sensação de que o dinheiro ainda está na conta, e o mês seguinte chega já
- * comprometido. Puro; a Início mostra quando passa de `ATTENTION_SHARE`.
+ * comprometido. Puro; a Início mostra quando passa de `ATTENTION_SHARE`, e
+ * em alerta a partir de `ALERT_SHARE` ou acima do teto de comprometimento.
  */
 
 /** Daqui para cima, a Início avisa. */
@@ -15,6 +16,8 @@ export interface NextCycleCommitment {
   cardBills: number;
   /** Faturas mais contas fixas. */
   committed: number;
+  /** Só as contas fixas. */
+  fixed: number;
   /** Faturas sobre a renda, de 0 a 1+. */
   cardShare: number;
   /** Faturas e contas fixas sobre a renda. */
@@ -37,15 +40,18 @@ export function nextCycleCommitment(
   const cardShare = next.cardBillTotal / income;
   if (cardShare < ATTENTION_SHARE - 1e-9) return null;
   const committed = next.cardBillTotal + next.fixedExpenseTotal;
+  const overLimit = committed > income * (limitPercent / 100) + 0.005;
   const round = (n: number) => Math.round(n * 100) / 100;
   return {
     periodStart: next.periodStart,
     income,
     cardBills: next.cardBillTotal,
     committed,
+    fixed: next.fixedExpenseTotal,
     cardShare: round(cardShare),
     totalShare: round(committed / income),
-    overLimit: committed > income * (limitPercent / 100) + 0.005,
-    tone: cardShare >= ALERT_SHARE ? "alert" : "attention",
+    overLimit,
+    // Passar do teto que a própria pessoa escolheu também é alerta.
+    tone: cardShare >= ALERT_SHARE || overLimit ? "alert" : "attention",
   };
 }
