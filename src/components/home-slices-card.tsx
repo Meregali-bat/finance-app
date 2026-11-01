@@ -38,7 +38,7 @@ export function HomeSlicesCard({
         style={style}
       >
         <div className="flex min-w-0 flex-col gap-1.5">
-          <SectionLabel>Divida a renda em fatias</SectionLabel>
+          <SectionLabel>Metas: divida a renda em fatias</SectionLabel>
           <p className="text-sm text-muted-foreground">
             Custos fixos, conforto, prazeres, conhecimento e o que guardar — cada um com sua parte.
           </p>
