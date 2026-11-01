@@ -162,3 +162,63 @@ export function paceAcrossCycles(
   });
   return result;
 }
+
+export interface PaceWarning {
+  /** O ciclo que fica no vermelho: 0 o atual, 1 o próximo. */
+  offset: number;
+  /** Com quanto ele fecha no ritmo: negativo. */
+  left: number;
+  /** O último dia dele. */
+  lastDay: Date;
+  /**
+   * Quanto gastar por dia, de amanhã em diante, para nenhum ciclo até ele
+   * fechar no vermelho. Nulo quando nem sem gastar nada fecha: aí são as
+   * contas que não cabem, e um "segure em R$ X" mentiria.
+   */
+  perDayTarget: number | null;
+}
+
+/**
+ * "Se continuar gastando assim, vai faltar": o primeiro ciclo, entre o atual e
+ * o próximo, que fecha no vermelho no ritmo de hoje (o cartão no ciclo da
+ * fatura, como na Previsão). O alvo escala o ritmo inteiro: gastar X por dia
+ * tira de cada trecho `X / perDay` do que o ritmo tira, e fecha quando o que
+ * sobra em cada trecho até o ciclo do aviso zera. É a mesma conta do card da
+ * Previsão, para a Início e o aviso no celular dizerem o mesmo número.
+ */
+export function paceWarning(
+  pace: Pick<SpendingPace, "perDay" | "accountPerDay" | "cardPerDay">,
+  periods: { periodStart: Date; periodEnd: Date; freeToSpend: number; endBalance: number }[],
+  cards: { id: string; closingDay: number; dueDay: number }[],
+  from: Date,
+): PaceWarning | null {
+  const window = periods.slice(0, 2);
+  if (window.length === 0 || pace.perDay <= 0) return null;
+  const spend = paceSpendByCycle(pace, window, cards, from);
+  const left = paceAcrossCycles(spend, window);
+  const offset = left.findIndex((l) => l < -0.005);
+  if (offset < 0) return null;
+
+  const noSpend = paceAcrossCycles(
+    window.map(() => 0),
+    window,
+  );
+  const floorCents = (n: number) => Math.max(0, Math.floor(n * 100 + 1e-6) / 100);
+  let perDayTarget: number | null = null;
+  if (noSpend.slice(0, offset + 1).every((l) => l >= -0.005)) {
+    let spent = 0;
+    const targets: number[] = [];
+    for (let k = 0; k <= offset; k++) {
+      spent += spend[k];
+      if (spent > 0.005) targets.push(floorCents(pace.perDay + (left[k] * pace.perDay) / spent));
+    }
+    perDayTarget = targets.length > 0 ? Math.min(...targets) : null;
+  }
+  const end = window[offset].periodEnd;
+  return {
+    offset,
+    left: left[offset],
+    lastDay: new Date(end.getFullYear(), end.getMonth(), end.getDate() - 1),
+    perDayTarget,
+  };
+}

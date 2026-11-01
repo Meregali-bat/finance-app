@@ -40,6 +40,7 @@ import { ScrollAwayFab } from "@/components/scroll-away-fab";
 import { BudgetBreakdown } from "@/components/budget-breakdown";
 import { NextCycleCommitmentCard } from "@/components/next-cycle-commitment-card";
 import { nextCycleCommitment } from "@/lib/next-cycle-commitment";
+import { paceWarningFor } from "@/lib/pace-warning";
 import { DEFAULT_COMMITMENT_LIMIT_PERCENT } from "@/lib/purchase-simulation";
 
 /** "Quinta-feira" e "16 de outubro": o cabeçalho do desktop. */
@@ -147,8 +148,11 @@ export default async function DashboardPage() {
     loadSlicesOverview(userId, today),
   ]);
 
-  const { accountBalance, budget, dailyAvailable, reservedForLater, savings, nextPeriod } =
+  const { accountBalance, budget, dailyAvailable, reservedForLater, savings, nextPeriod, periods } =
     todayBudget(inputs, today);
+  // "Se continuar gastando assim, vai faltar": o aviso da Previsão, aqui, onde
+  // quem precisa dele olha. O mesmo cálculo do aviso no celular do dia 10.
+  const paceWarn = paceWarningFor(inputs, periods, today);
   // O cartão come o mês seguinte em silêncio: o peso das faturas sobre a
   // renda do próximo ciclo, quando já passa de 30%.
   const commitment = nextCycleCommitment(
@@ -628,6 +632,26 @@ export default async function DashboardPage() {
                         Veja o que dá para adiar
                       </a>
                     )}
+                  </div>
+                )}
+                {/* No ritmo de agora, um ciclo (este ou o próximo) fecha no
+                    vermelho: quanto falta, quando, e o "por dia" que evita. No
+                    vermelho de verdade ele não aparece: o hero já diz que o
+                    período fecha no negativo. */}
+                {paceWarn && !isOverBudget && (
+                  <div className="flex flex-col gap-0.5 text-sm">
+                    <p className="font-medium text-(--hero-fg) text-pretty tabular-nums">
+                      No ritmo atual, faltam {formatCurrency(-paceWarn.left)} em{" "}
+                      {formatDate(paceWarn.lastDay).replace(/\.$/, "")}
+                      {/* "Até lá": o alvo vale até o fim do ciclo do aviso, e pode
+                          ser menor que o número do dia, que só olha este ciclo. */}
+                      {paceWarn.perDayTarget !== null
+                        ? `. Para fechar, segure em ${formatCurrency(paceWarn.perDayTarget)} por dia até lá.`
+                        : ": mesmo sem gastar, as contas não cabem."}
+                    </p>
+                    <Link href={`/previsao?p=${paceWarn.offset}`} className={heroLink}>
+                      Ver o ritmo na Previsão
+                    </Link>
                   </div>
                 )}
                 {isOverBudget && (

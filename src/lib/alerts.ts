@@ -3,6 +3,7 @@ import { fallsOnDay, obligationsInRange, openOccurrenceAmounts, ownSpendingOf } 
 import { todayBudget } from "@/lib/today-budget";
 import type { BudgetInputs } from "@/lib/budget-inputs";
 import { formatCurrency, formatDate } from "@/lib/format";
+import { PACE_ALERT_DAY, paceWarningFor } from "@/lib/pace-warning";
 
 /**
  * Os avisos no celular, decididos aqui e mandados por src/lib/push.ts. Só
@@ -67,7 +68,24 @@ export function dailyAlerts(inputs: BudgetInputs, today: Date): Alert[] {
     });
   }
 
-  const { budget } = todayBudget(inputs, today);
+  const { budget, periods } = todayBudget(inputs, today);
+
+  // No meio do ciclo, se o ritmo leva ao vermelho: quem precisa do aviso da
+  // Previsão é quem não abre a Previsão. Uma vez por ciclo, no dia 10.
+  const pace = paceWarningFor(inputs, periods, today);
+  if (pace && pace.elapsedDays === PACE_ALERT_DAY) {
+    alerts.push({
+      title: "No ritmo atual, vai faltar",
+      body:
+        `Faltam ${formatCurrency(-pace.left)} em ${formatDate(pace.lastDay).replace(/\.$/, "")}` +
+        (pace.perDayTarget !== null
+          ? `. Para fechar, segure em ${formatCurrency(pace.perDayTarget)} por dia até lá.`
+          : ": mesmo sem gastar, as contas não cabem. Veja o que adiar."),
+      url: pace.perDayTarget !== null ? `/previsao?p=${pace.offset}` : "/#lembretes",
+      tag: `pace-${pace.periodStart.toISOString()}`,
+    });
+  }
+
   for (const reminder of budget.incomeReminders) {
     if (!isSameDay(reminder.dueDate, day)) continue;
     const label = inputs.incomes.find((i) => i.id === reminder.incomeId)?.label ?? "Renda";
