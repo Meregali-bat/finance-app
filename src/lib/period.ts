@@ -918,6 +918,20 @@ export function installmentSlices(
 }
 
 /**
+ * O vencimento da fatura em que cai uma compra feita em `day`: a fatura que
+ * fecha no primeiro fechamento em ou depois dela (a regra de
+ * `installmentSlices`), e vence no primeiro dia de vencimento depois desse
+ * fechamento (o inverso de `buildCardBills`).
+ */
+export function cardBillDueFor(day: Date, closingDay: number, dueDay: number): Date {
+  const close = earliestOccurrenceOnOrAfter(closingDay, startOfDay(day));
+  return earliestOccurrenceOnOrAfter(
+    dueDay,
+    new Date(close.getFullYear(), close.getMonth(), close.getDate() + 1),
+  );
+}
+
+/**
  * Quanto tempo uma fatura vencida continua ocupando o limite sem confirmação.
  *
  * Pagar alguns dias atrasado é normal, então zerar no vencimento liberaria o

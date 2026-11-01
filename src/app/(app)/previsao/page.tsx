@@ -34,7 +34,7 @@ import { LineChart, type LinePoint } from "@/components/charts/line-chart";
 import { CollapsibleList } from "@/components/collapsible-list";
 import { cn } from "@/lib/utils";
 import { TIGHT_SHARE } from "@/lib/hero-tone";
-import { paceAcrossCycles, spendingPace } from "@/lib/spending-pace";
+import { paceAcrossCycles, paceSpendByCycle, spendingPace } from "@/lib/spending-pace";
 
 /**
  * Quantos ciclos o gráfico mostra abaixo de `lg`: mais que isso, as colunas
@@ -353,12 +353,23 @@ export default async function ForecastPage({
   const pace = spendingPace({
     periodStart: current.periodStart,
     daysLeft: current.daysLeft,
-    freeToSpend: isNegativeCycle(current) ? current.endBalance : current.freeToSpend,
     today,
     transactions: inputs.transactions,
     cardPurchases: inputs.cardPurchases,
   });
-  const paceByCycle = pace ? paceAcrossCycles(pace, periods) : null;
+  // O que o ritmo tira de cada ciclo: a conta no dia, o cartão na fatura em
+  // que a compra cai. A partir de amanhã (hoje já está na média), e, para o
+  // alvo com o ciclo atual parado, a partir do próximo ciclo.
+  const paceCards = inputs.creditCards.map((c) => ({
+    id: c.id,
+    closingDay: c.closingDay,
+    dueDay: c.dueDay,
+  }));
+  const tomorrow = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+  const spendNow = pace ? paceSpendByCycle(pace, periods, paceCards, tomorrow) : null;
+  const spendFromNext =
+    pace && periods[1] ? paceSpendByCycle(pace, periods, paceCards, periods[1].periodStart) : null;
+  const paceByCycle = spendNow ? paceAcrossCycles(spendNow, periods) : null;
   const paceLeft = paceByCycle ? paceByCycle[offset] : null;
   // O que chega ao ciclo da tela vindo do anterior, no ritmo, além do que a
   // previsão já desconta: a linha "a mais" da conta do card.
@@ -372,10 +383,7 @@ export default async function ForecastPage({
   // o dia a dia não fecha a conta, e dizer "gaste R$ X a menos" mentiria.
   const noSpendLeft = pace
     ? paceAcrossCycles(
-        {
-          perDay: 0,
-          projectedLeft: isNegativeCycle(current) ? current.endBalance : current.freeToSpend,
-        },
+        periods.map(() => 0),
         periods,
       )[offset]
     : 0;
@@ -391,14 +399,18 @@ export default async function ForecastPage({
   // folga que só chega em março não paga dezembro). Por isso é o menor dos
   // alvos de cada trecho — até o ciclo 1, até o 2, … até o da tela.
   const floorCents = (value: number) => Math.max(0, Math.floor(value * 100) / 100);
-  const cycleDays = (k: number) =>
-    periods.slice(1, k + 1).reduce((sum, p) => sum + p.totalDays, 0);
+  // O alvo escala o ritmo inteiro (conta e cartão juntos): gastar X por dia
+  // tira de cada trecho `X / perDay` do que o ritmo tira, e fecha quando o
+  // que sobra no trecho zera.
+  const upTo = (spend: number[], k: number) => spend.slice(0, k + 1).reduce((a, b) => a + b, 0);
   const paceTarget =
-    pace && paceByCycle && paceDays > 0
+    pace && spendNow && paceByCycle && paceDays > 0
       ? Math.min(
           ...Array.from({ length: offset + 1 }, (_, k) => {
-            const days = pace.remainingDays + cycleDays(k);
-            return days > 0 ? floorCents(pace.perDay + paceByCycle[k] / days) : Infinity;
+            const spent = upTo(spendNow, k);
+            return spent > 0.005
+              ? floorCents(pace.perDay + (paceByCycle[k] * pace.perDay) / spent)
+              : Infinity;
           }),
         )
       : 0;
@@ -424,14 +436,16 @@ export default async function ForecastPage({
   // vale se nenhum deles fecha no vermelho por conta própria.
   const followEachCycle =
     offset > 0 && isNegativeCycle(current) && periods.slice(1, offset + 1).every((p) => !isNegativeCycle(p));
+  const leftFromNext = spendFromNext ? paceAcrossCycles(spendFromNext, periods) : null;
   const targetFromNext =
-    pace && paceByCycle && offset > 0 && isNegativeCycle(current)
+    pace && spendFromNext && leftFromNext && offset > 0 && isNegativeCycle(current)
       ? Math.min(
           ...Array.from({ length: offset }, (_, i) => {
             const k = i + 1;
-            return floorCents(
-              pace.perDay + (paceByCycle[k] + pace.perDay * pace.remainingDays) / cycleDays(k),
-            );
+            const spent = upTo(spendFromNext, k);
+            return spent > 0.005
+              ? floorCents(pace.perDay + (leftFromNext[k] * pace.perDay) / spent)
+              : Infinity;
           }),
         )
       : null;
@@ -902,9 +916,13 @@ export default async function ForecastPage({
             {/* De onde vem o ritmo, e o que ele leva: sem a origem, o valor
                 por dia é um número solto. */}
             <p className="text-[13.5px] leading-relaxed text-muted-foreground tabular-nums">
-              {`É a média do ciclo atual (${formatCurrency(pace.spent)} em ${pace.elapsedDays} ${pace.elapsedDays === 1 ? "dia" : "dias"}, na conta e no cartão)`}
-              {period.offset === 0 && pace.remainingDays > 0
-                ? `: saem mais ${formatCurrency(pace.projectedSpending)} nos ${pace.remainingDays} ${pace.remainingDays === 1 ? "dia" : "dias"} depois de hoje (hoje já entra na média).`
+              {`É a média do ciclo atual (${formatCurrency(pace.spent)} em ${pace.elapsedDays} ${pace.elapsedDays === 1 ? "dia" : "dias"}, na conta e no cartão). O do cartão pesa no ciclo em que a fatura vence`}
+              {period.offset === 0 && spendNow && pace.remainingDays > 0
+                ? `: até o fim deste ciclo saem mais ${formatCurrency(spendNow[0])}${
+                    pace.perDay * pace.remainingDays - spendNow[0] > 0.005
+                      ? `, e ${formatCurrency(pace.perDay * pace.remainingDays - spendNow[0])} do cartão ficam para as faturas dos próximos`
+                      : ""
+                  }.`
                 : "."}
             </p>
             {/* À frente, a conta em linhas, partindo do número de cima: numa
@@ -922,9 +940,9 @@ export default async function ForecastPage({
                 </div>
                 <div className="flex justify-between gap-3">
                   <dt className="text-muted-foreground">
-                    {period.totalDays} dias no seu ritmo
+                    No seu ritmo (conta e faturas que vencem neste ciclo)
                   </dt>
-                  <dd className="shrink-0">−{formatCurrency(pace.perDay * period.totalDays)}</dd>
+                  <dd className="shrink-0">−{formatCurrency(spendNow?.[offset] ?? 0)}</dd>
                 </div>
                 {Math.abs(carryIn) >= 0.005 && (
                   <div className="flex justify-between gap-3">
