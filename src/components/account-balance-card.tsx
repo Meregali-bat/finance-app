@@ -77,7 +77,7 @@ export function AccountBalanceCard({
             ) : adjustedAt && (
               <p className="text-xs text-muted-foreground">
                 Conferido em {formatDate(adjustedAt)}
-                <span className="hidden sm:inline"> · atualizado pelos lançamentos</span>
+                {" · atualizado pelos lançamentos"}
               </p>
             )}
           </>

@@ -81,6 +81,16 @@ export function NextCycleCommitmentCard({
             style={{ left: `calc(${Math.min(100, limitPercent)}% - 1px)` }}
           />
         </div>
+        {/* O traço dito em palavras, embaixo dele: sem isso, o leitor tinha de
+            adivinhar o que a marca na barra queria dizer. */}
+        <div className="relative h-4 text-[11.5px] text-muted-foreground tabular-nums">
+          <span
+            className="absolute -translate-x-1/2 whitespace-nowrap"
+            style={{ left: `${Math.min(92, Math.max(8, limitPercent))}%` }}
+          >
+            teto {limitPercent}%
+          </span>
+        </div>
         <ul className="flex flex-wrap gap-x-3 gap-y-0.5 text-[12.5px] text-muted-foreground tabular-nums">
           <li className="flex items-center gap-1.5">
             <span
@@ -100,8 +110,8 @@ export function NextCycleCommitmentCard({
       <div className="flex flex-col gap-0.5">
         <p className="text-[13px] text-pretty text-muted-foreground">
           {reservedNow
-            ? `O número de hoje já guarda uma parte para esse ciclo. Cada compra no cartão agora aumenta o que vence lá.`
-            : `O número de hoje não muda: é o ciclo de ${startLabel} que chega apertado, e cada compra no cartão agora aumenta o que vence lá.`}
+            ? "O número de hoje já guarda uma parte; cada compra no cartão agora aumenta o que vence lá."
+            : "O número de hoje não muda; cada compra no cartão agora aumenta o que vence lá."}
         </p>
         <Link
           href="/previsao?p=1"

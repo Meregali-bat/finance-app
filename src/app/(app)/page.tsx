@@ -706,8 +706,7 @@ export default async function DashboardPage() {
                   {/* No celular também: sem ele, a curva embaixo da régua não
                       dizia o que mede. */}
                   <p>
-                    <span className="lg:hidden">Gasto</span>
-                    <span className="hidden lg:inline">Gasto no período</span>{" "}
+                    Gasto no período{" "}
                     <span className="font-semibold text-(--hero-fg)">
                       {formatCurrency(spentInPeriod)}
                     </span>
