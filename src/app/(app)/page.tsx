@@ -140,6 +140,15 @@ export default async function DashboardPage() {
     nextPeriod,
     profile.commitmentLimitPercent ?? DEFAULT_COMMITMENT_LIMIT_PERCENT,
   );
+  const commitmentCard = commitment && (
+    <NextCycleCommitmentCard
+      commitment={commitment}
+      limitPercent={profile.commitmentLimitPercent ?? DEFAULT_COMMITMENT_LIMIT_PERCENT}
+      monthLabel={new Intl.DateTimeFormat("pt-BR", { month: "long" }).format(
+        commitment.periodStart,
+      )}
+    />
+  );
   const registeredMovement = registeredMovementOf(inputs, today);
   const transactions = inputs.transactions.filter((t) => !t.fromPeriodClose);
 
@@ -762,17 +771,10 @@ export default async function DashboardPage() {
           da sua altura na tela (ver `rise`). */}
       <div className="flex flex-col gap-5 lg:grid lg:grid-cols-2 lg:items-start lg:gap-6 lg:[grid-template-areas:'reminders_today'_'tools_tools'_'bottom_bottom']">
         <div id="lembretes" className="rise-in flex scroll-mt-4 flex-col gap-3 lg:[grid-area:reminders]" style={rise(120)}>
-          {/* Antes dos lembretes: o que o cartão já tirou do mês que vem é o
-              aviso que ainda dá tempo de ouvir. */}
-          {commitment && (
-            <NextCycleCommitmentCard
-              commitment={commitment}
-              limitPercent={profile.commitmentLimitPercent ?? DEFAULT_COMMITMENT_LIMIT_PERCENT}
-              monthLabel={new Intl.DateTimeFormat("pt-BR", { month: "long" }).format(
-                commitment.periodStart,
-              )}
-            />
-          )}
+          {/* No celular, logo abaixo do número do dia: o que o cartão já tirou
+              do mês que vem é o aviso que ainda dá tempo de ouvir. No desktop
+              ele vai para a coluna do dia, que sobrava vazia. */}
+          {commitmentCard && <div className="lg:hidden">{commitmentCard}</div>}
           <HomeReminders reminders={reminders} />
         </div>
 
@@ -801,6 +803,12 @@ export default async function DashboardPage() {
               <ul className="flex flex-col gap-2.5">
                 {movementRows(tomorrowsItems)}
               </ul>
+            </div>
+          )}
+
+          {commitmentCard && (
+            <div className="rise-in hidden lg:block" style={rise(120)}>
+              {commitmentCard}
             </div>
           )}
         </div>

@@ -62,8 +62,12 @@ type Toast = {
 
 /** O tempo do check turquesa antes de o card começar a sair. */
 const CONFIRM_MS = 380;
-/** Quantos lembretes a Início mostra antes do "Mostrar mais". */
-const COLLAPSED_COUNT = 4;
+/**
+ * Quantos lembretes a Início mostra antes do "Mostrar mais". Três: no
+ * celular, com os botões no rodapé de cada card, o quarto já empurrava as
+ * movimentações de hoje para a segunda tela.
+ */
+const COLLAPSED_COUNT = 3;
 
 /**
  * Os lembretes da Início. Confirmar no diálogo não some com o card de
@@ -177,7 +181,11 @@ export function HomeReminders({ reminders }: { reminders: HomeReminder[] }) {
       window.removeEventListener("hashchange", reveal);
     };
   }, []);
-  const shown = expanded ? visible : visible.slice(0, COLLAPSED_COUNT);
+  // Esconder um só não vale um botão do mesmo tamanho dele: aí mostra todos.
+  const shown =
+    expanded || visible.length <= COLLAPSED_COUNT + 1
+      ? visible
+      : visible.slice(0, COLLAPSED_COUNT);
   const hiddenCount = visible.length - shown.length;
 
   return (

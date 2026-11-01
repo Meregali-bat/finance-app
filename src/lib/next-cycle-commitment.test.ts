@@ -13,7 +13,7 @@ describe("nextCycleCommitment", () => {
     expect(nextCycleCommitment(next(1499), 70)).toBeNull();
   });
 
-  it("de 30% a 50% é atenção; acima, alerta", () => {
+  it("de 30% a 50% é atenção; acima, ou passando do teto, alerta", () => {
     expect(nextCycleCommitment(next(1500), 70)).toMatchObject({
       tone: "attention",
       cardShare: 0.3,
@@ -24,6 +24,11 @@ describe("nextCycleCommitment", () => {
       tone: "alert",
       cardShare: 0.54,
       totalShare: 0.92,
+      overLimit: true,
+    });
+    expect(nextCycleCommitment(next(1600, 2500), 70)).toMatchObject({
+      tone: "alert",
+      cardShare: 0.32,
       overLimit: true,
     });
   });
