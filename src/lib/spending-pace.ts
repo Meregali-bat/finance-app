@@ -1,4 +1,4 @@
-import { ownSpendingOf, storedDay } from "@/lib/period";
+import { cardBillDueFor, ownSpendingOf, storedDay } from "@/lib/period";
 
 /**
  * "Se continuar gastando assim": o ritmo do dia a dia no ciclo até hoje,
@@ -11,7 +11,9 @@ import { ownSpendingOf, storedDay } from "@/lib/period";
  *
  * O que já saiu no ciclo também já está no "livre para gastar" (lançamentos
  * descontados, compras dentro das faturas), então a projeção só tira dele os
- * dias que ainda vêm: o ritmo vezes os dias depois de hoje.
+ * dias que ainda vêm. E o ritmo se divide como o dinheiro sai: o da conta sai
+ * no dia; o de cada cartão, na fatura em que a compra cai — gastar no cartão
+ * no fim de um ciclo só pesa no ciclo em que a fatura vence.
  */
 
 const DAY = 86_400_000;
@@ -24,16 +26,14 @@ export interface SpendingPace {
   spent: number;
   /** Dias do ciclo até hoje, hoje incluído. */
   elapsedDays: number;
-  /** A média por dia. */
+  /** A média por dia, conta e cartão juntos. */
   perDay: number;
+  /** A parte da média que sai da conta no dia. */
+  accountPerDay: number;
+  /** A parte de cada cartão, que sai na fatura. */
+  cardPerDay: { cardId: string; perDay: number }[];
   /** Dias depois de hoje até o fim do ciclo. */
   remainingDays: number;
-  /** O que ainda sairia nesse ritmo. */
-  projectedSpending: number;
-  /** O livre para gastar menos o que ainda sairia: negativo = vai faltar. */
-  projectedLeft: number;
-  /** Num ciclo que vai faltar, quanto a menos por dia fecha a conta. */
-  cutPerDay: number;
 }
 
 function cents(n: number) {
@@ -45,7 +45,6 @@ export function spendingPace(input: {
   periodStart: Date;
   /** Dias até o fim contando hoje, como `PeriodForecast.daysLeft`. */
   daysLeft: number;
-  freeToSpend: number;
   today: Date;
   /** Saída positiva, receita negativa; datas em meia-noite UTC. */
   transactions: {
@@ -55,7 +54,13 @@ export function spendingPace(input: {
     transfer?: boolean;
     lent?: number;
   }[];
-  cardPurchases: { amount: number; date: Date; installments?: number; lent?: number }[];
+  cardPurchases: {
+    cardId: string;
+    amount: number;
+    date: Date;
+    installments?: number;
+    lent?: number;
+  }[];
 }): SpendingPace | null {
   const start = input.periodStart.getTime();
   const todayStart = new Date(
@@ -70,38 +75,72 @@ export function spendingPace(input: {
     const t = storedDay(date).getTime();
     return t >= start && t <= todayStart;
   };
-  const spent = cents(
-    // Só o gasto seu: sem transferência e sem a parte emprestada.
-    input.transactions
-      .filter((t) => inCycle(t.date))
-      .reduce((sum, t) => sum + ownSpendingOf(t), 0) +
-      input.cardPurchases
-        .filter((p) => inCycle(p.date))
-        .reduce((sum, p) => sum + ownSpendingOf(p) / Math.max(1, p.installments ?? 1), 0),
-  );
+  // Só o gasto seu: sem transferência e sem a parte emprestada.
+  const account = input.transactions
+    .filter((t) => inCycle(t.date))
+    .reduce((sum, t) => sum + ownSpendingOf(t), 0);
+  const byCard = new Map<string, number>();
+  for (const p of input.cardPurchases.filter((p) => inCycle(p.date))) {
+    const parcel = ownSpendingOf(p) / Math.max(1, p.installments ?? 1);
+    byCard.set(p.cardId, (byCard.get(p.cardId) ?? 0) + parcel);
+  }
+  const card = [...byCard.values()].reduce((sum, v) => sum + v, 0);
+  const spent = cents(account + card);
   if (spent <= 0) return null;
 
-  const perDay = cents(spent / elapsedDays);
-  const remainingDays = Math.max(0, input.daysLeft - 1);
-  const projectedSpending = cents((spent / elapsedDays) * remainingDays);
-  const projectedLeft = cents(input.freeToSpend - projectedSpending);
-  const cutPerDay =
-    projectedLeft < 0 && remainingDays > 0 ? cents(-projectedLeft / remainingDays) : 0;
   return {
     spent,
     elapsedDays,
-    perDay,
-    remainingDays,
-    projectedSpending,
-    projectedLeft,
-    cutPerDay,
+    perDay: cents(spent / elapsedDays),
+    // Sem arredondar: somadas de volta ao longo de muitos dias, as partes
+    // arredondadas abririam centavos de diferença do total.
+    accountPerDay: account / elapsedDays,
+    cardPerDay: [...byCard].map(([cardId, total]) => ({ cardId, perDay: total / elapsedDays })),
+    remainingDays: Math.max(0, input.daysLeft - 1),
   };
 }
 
 /**
- * O mesmo ritmo levado aos ciclos seguintes: cada um gasta `perDay` todos os
- * dias, e o que sobra ou falta passa para o próximo. Devolve, por ciclo (o
- * índice é o offset), com quanto ele fecha.
+ * O que o ritmo tira de cada ciclo, gastando todo dia de `from` até o fim do
+ * último: a conta no ciclo do dia, cada cartão no ciclo em que vence a fatura
+ * da compra. A fatura que vence depois do último ciclo fica de fora. Um cartão
+ * que não está em `cards` (apagado) conta como a conta.
+ */
+export function paceSpendByCycle(
+  pace: Pick<SpendingPace, "accountPerDay" | "cardPerDay">,
+  periods: { periodStart: Date; periodEnd: Date }[],
+  cards: { id: string; closingDay: number; dueDay: number }[],
+  from: Date,
+): number[] {
+  const spend = periods.map(() => 0);
+  if (periods.length === 0) return spend;
+  const cycleOf = (day: Date) =>
+    periods.findIndex(
+      (p) => day.getTime() >= p.periodStart.getTime() && day.getTime() < p.periodEnd.getTime(),
+    );
+  const cardById = new Map(cards.map((c) => [c.id, c]));
+  const end = periods[periods.length - 1].periodEnd.getTime();
+  for (
+    let day = new Date(from.getFullYear(), from.getMonth(), from.getDate());
+    day.getTime() < end;
+    day = new Date(day.getFullYear(), day.getMonth(), day.getDate() + 1)
+  ) {
+    const today = cycleOf(day);
+    if (today < 0) continue;
+    spend[today] += pace.accountPerDay;
+    for (const { cardId, perDay } of pace.cardPerDay) {
+      const card = cardById.get(cardId);
+      const k = card ? cycleOf(cardBillDueFor(day, card.closingDay, card.dueDay)) : today;
+      if (k >= 0) spend[k] += perDay;
+    }
+  }
+  return spend.map(cents);
+}
+
+/**
+ * Com quanto cada ciclo fecha no ritmo (o índice é o offset), tirando de cada
+ * um o que `paceSpendByCycle` pôs nele; o que sobra ou falta passa para o
+ * próximo.
  *
  * A base de cada ciclo é o que a previsão já dá para ele: o livre, ou, num
  * ciclo que fecha no vermelho, a falta. A falta da previsão já chega sozinha
@@ -109,20 +148,17 @@ export function spendingPace(input: {
  * ritmo mudou; a sobra, que a previsão supunha gasta, passa inteira.
  */
 export function paceAcrossCycles(
-  pace: Pick<SpendingPace, "perDay" | "projectedLeft">,
-  periods: { offset: number; totalDays: number; freeToSpend: number; endBalance: number }[],
+  spendByCycle: number[],
+  periods: { freeToSpend: number; endBalance: number }[],
 ): number[] {
   const base = (p: (typeof periods)[number]) =>
     p.endBalance < -0.005 ? p.endBalance : p.freeToSpend;
   const result: number[] = [];
   let carry = 0;
-  for (const period of periods) {
-    const left =
-      period.offset === 0
-        ? pace.projectedLeft
-        : cents(base(period) + carry - pace.perDay * period.totalDays);
+  periods.forEach((period, k) => {
+    const left = cents(base(period) + carry - (spendByCycle[k] ?? 0));
     result.push(left);
     carry = cents(left - Math.min(0, base(period)));
-  }
+  });
   return result;
 }
