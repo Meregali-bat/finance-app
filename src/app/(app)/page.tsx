@@ -90,6 +90,21 @@ const clock = new Intl.DateTimeFormat("pt-BR", {
   minute: "2-digit",
 });
 
+/**
+ * O vencimento de um lembrete. Nos próximos três dias, em dias ("vence
+ * amanhã", "vence em 3 dias"): é a urgência que se procura de relance, e a
+ * lista destaca essas. Depois disso, a data.
+ */
+function dueText(kind: string, overdue: boolean, dueDate: Date, today: Date) {
+  if (kind === "income") return `previsto em ${formatDate(dueDate)}`;
+  if (overdue) return `venceu em ${formatDate(dueDate)}`;
+  const days = differenceInCalendarDays(dueDate, today);
+  if (days <= 0) return "vence hoje";
+  if (days === 1) return "vence amanhã";
+  if (days <= 3) return `vence em ${days} dias`;
+  return `vence em ${formatDate(dueDate)}`;
+}
+
 export default async function DashboardPage() {
   const userId = await requireUserId();
   const today = new Date();
@@ -144,9 +159,7 @@ export default async function DashboardPage() {
     <NextCycleCommitmentCard
       commitment={commitment}
       limitPercent={profile.commitmentLimitPercent ?? DEFAULT_COMMITMENT_LIMIT_PERCENT}
-      monthLabel={new Intl.DateTimeFormat("pt-BR", { month: "long" }).format(
-        commitment.periodStart,
-      )}
+      startLabel={formatDate(commitment.periodStart)}
     />
   );
   const registeredMovement = registeredMovementOf(inputs, today);
@@ -330,7 +343,7 @@ export default async function DashboardPage() {
         r.kind === "due" && r.paidSoFar > 0
           ? `falta ${formatCurrency(r.amount)} (pago ${formatCurrency(r.paidSoFar)})`
           : formatCurrency(r.amount),
-        `${r.kind === "income" ? "previsto em" : r.overdue ? "venceu em" : "vence em"} ${formatDate(r.dueDate)}`,
+        dueText(r.kind, r.overdue, r.dueDate, today),
         r.kind === "due" && r.deferredIn > 0
           ? `inclui ${formatCurrency(r.deferredIn)} adiados`
           : null,
@@ -771,10 +784,6 @@ export default async function DashboardPage() {
           da sua altura na tela (ver `rise`). */}
       <div className="flex flex-col gap-5 lg:grid lg:grid-cols-2 lg:items-start lg:gap-6 lg:[grid-template-areas:'reminders_today'_'tools_tools'_'bottom_bottom']">
         <div id="lembretes" className="rise-in flex scroll-mt-4 flex-col gap-3 lg:[grid-area:reminders]" style={rise(120)}>
-          {/* No celular, logo abaixo do número do dia: o que o cartão já tirou
-              do mês que vem é o aviso que ainda dá tempo de ouvir. No desktop
-              ele vai para a coluna do dia, que sobrava vazia. */}
-          {commitmentCard && <div className="lg:hidden">{commitmentCard}</div>}
           <HomeReminders reminders={reminders} />
         </div>
 
@@ -806,8 +815,11 @@ export default async function DashboardPage() {
             </div>
           )}
 
+          {/* O que o cartão já tirou do próximo ciclo: depois do que é de hoje
+              (pagar, lançar), no mesmo lugar no celular e no desktop, onde a
+              coluna do dia sobrava vazia. */}
           {commitmentCard && (
-            <div className="rise-in hidden lg:block" style={rise(120)}>
+            <div className="rise-in" style={rise(120)}>
               {commitmentCard}
             </div>
           )}

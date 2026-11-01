@@ -377,6 +377,8 @@ function ReminderCard({
                 className={cn(
                   part.length <= 24 && "whitespace-nowrap",
                   overdue && part.startsWith("venceu") && "text-negative",
+                  // Nos próximos três dias, a urgência em peso, sem cor de alerta.
+                  /^vence (hoje|amanhã|em \d dias)$/.test(part) && "font-semibold text-foreground",
                 )}
               >
                 {part}
