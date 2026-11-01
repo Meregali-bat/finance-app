@@ -640,26 +640,29 @@ export default async function DashboardPage() {
                     período fecha no negativo. */}
                 {paceWarn && !isOverBudget && (
                   <div className="flex flex-col gap-0.5 text-sm">
-                    {/* "Fecha no negativo", e não "faltam": o "faltam 14 dias"
-                        da régua logo abaixo é de dias. E diz de qual ciclo:
-                        quando é o próximo, o número grande (deste ciclo) segue
-                        valendo, e o alvo explica por que é menor que ele. */}
+                    {/* Primeiro o que fazer, dito contra o ciclo certo; depois,
+                        mais fraco, o porquê (o ritmo e o tamanho do buraco).
+                        "Fecha no negativo", e não "faltam": a régua usa
+                        "faltam" para dias. */}
                     <p className="flex items-start gap-1 font-medium text-(--hero-fg) text-pretty tabular-nums">
                       <CircleAlert aria-hidden="true" className="mt-[3px] size-3.5 shrink-0" />
                       <span>
-                        {/* O ritmo dito em número: sem ele, o aviso reagia a algo
-                            que a tela não mostrava. */}
-                        Gastando {formatCurrency(paceWarn.perDay)} por dia, como até agora,{" "}
-                        {paceWarn.offset === 0 ? "este ciclo" : "o próximo ciclo"} fecha {formatCurrency(-paceWarn.left)} no negativo em{" "}
-                        {formatDate(paceWarn.lastDay)}
                         {paceWarn.perDayTarget !== null
-                          ? ` Para evitar, gaste até ${formatCurrency(paceWarn.perDayTarget)} por dia até lá.`
-                          : " Mesmo sem gastar, as contas não cabem."}
+                          ? `Para ${paceWarn.offset === 0 ? "este ciclo" : "o próximo ciclo"} não fechar no negativo, fique em ${formatCurrency(paceWarn.perDayTarget)} por dia até ${formatDate(paceWarn.lastDay)}`
+                          : `${paceWarn.offset === 0 ? "Este ciclo" : "O próximo ciclo"} fecha ${formatCurrency(-paceWarn.left)} no negativo em ${formatDate(paceWarn.lastDay)}, mesmo sem gastar mais.`}
                       </span>
                     </p>
-                    <Link href={`/previsao?p=${paceWarn.offset}`} className={cn(heroLink, "-my-3 ml-[18px] inline-block w-fit py-3")}>
-                      Ver o ritmo na Previsão
-                    </Link>
+                    <p className="ml-[18px] text-(--hero-muted) text-pretty tabular-nums">
+                      {paceWarn.perDayTarget !== null
+                        ? `No ritmo de agora, ${formatCurrency(paceWarn.perDay)} por dia, ele fecha ${formatCurrency(-paceWarn.left)} no negativo · `
+                        : ""}
+                      <Link
+                        href={`/previsao?p=${paceWarn.offset}`}
+                        className={cn(heroLink, "-my-3 inline-block py-3")}
+                      >
+                        Ver na Previsão
+                      </Link>
+                    </p>
                   </div>
                 )}
                 {isOverBudget && (
@@ -750,9 +753,11 @@ export default async function DashboardPage() {
                   <p className="lg:ml-auto lg:text-right">
                     {/* Cada parte inteira: se não couber, quebra entre elas,
                         nunca no meio do valor. */}
+                    {/* No desktop, a conta ao lado já mostra o "Livre até
+                        receber": aqui fica só no celular, onde ela está fechada. */}
                     {!isOverBudget && (
                       <>
-                        <span className="whitespace-nowrap">
+                        <span className="whitespace-nowrap lg:hidden">
                           Livre até receber{" "}
                           <span
                             className={`font-semibold ${
@@ -762,7 +767,8 @@ export default async function DashboardPage() {
                             {formatCurrency(budget.periodBalance)}
                           </span>
                           {" ·"}
-                        </span>{" "}
+                        </span>
+                        <span className="lg:hidden"> </span>
                       </>
                     )}
                     <span className="whitespace-nowrap">

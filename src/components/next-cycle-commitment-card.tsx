@@ -97,7 +97,9 @@ export function NextCycleCommitmentCard({
           </div>
           <span
             className="absolute -top-1 h-4 w-0.5 rounded-full bg-foreground/70"
-            style={{ left: `calc(${limit}% - 1px)` }}
+            // No meio do vão entre as contas fixas e o excesso: o vão entre
+            // faturas e contas fixas (2px) empurra a divisa para a direita.
+            style={{ left: `calc(${limit}% + ${cardWidth > 0 && fixedWidth > 0 ? 2 : 0}px)` }}
           />
         </div>
         {/* O traço dito em palavras, embaixo dele: sem isso, o leitor tinha de
