@@ -189,7 +189,9 @@ describe("aviso do ritmo", () => {
       (a) => a.title === "No ritmo atual, vai faltar",
     );
     expect(alert).toBeDefined();
-    expect(alert!.body).toMatch(/^Faltam R\$\s[\d.,]+ em 4 de nov\. Para fechar, segure em R\$\s[\d.,]+ por dia até lá\.$/);
+    expect(alert!.body).toMatch(
+      /^Este ciclo fecha R\$\s[\d.,]+ no negativo em 4 de nov\. Para evitar, gaste até R\$\s[\d.,]+ por dia até lá\.$/,
+    );
     expect(alert!.tag).toBe(`pace-${new Date(2026, 9, 5).toISOString()}`);
   });
 
