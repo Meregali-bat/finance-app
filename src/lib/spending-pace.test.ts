@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { paceAcrossCycles, paceSpendByCycle, spendingPace } from "./spending-pace";
+import { paceAcrossCycles, paceSpendByCycle, paceWarning, spendingPace } from "./spending-pace";
 
 const utc = (m: number, d: number) => new Date(Date.UTC(2026, m - 1, d));
 // Ciclo de 15/out a 15/nov; hoje é 24/out, o 10º dia. Faltam 22 dias com hoje.
@@ -104,5 +104,34 @@ describe("paceAcrossCycles", () => {
     // O atual já fechava em −1.000 pela previsão; o ritmo leva a −1.600. O
     // próximo já herda os −1.000 no livre dele: só os −600 a mais passam.
     expect(paceAcrossCycles([600, 1500], [cycle(0, -1000), cycle(2000)])).toEqual([-1600, -100]);
+  });
+});
+
+describe("paceWarning", () => {
+  const periods = [
+    { periodStart: new Date(2026, 9, 15), periodEnd: new Date(2026, 10, 15), freeToSpend: 1000, endBalance: 0 },
+    { periodStart: new Date(2026, 10, 15), periodEnd: new Date(2026, 11, 15), freeToSpend: 3000, endBalance: 0 },
+  ];
+  const pace = { perDay: 100, accountPerDay: 100, cardPerDay: [] };
+  const tomorrow = new Date(2026, 9, 25);
+
+  it("no ritmo, o primeiro ciclo que fica no vermelho: quanto falta, quando e o alvo", () => {
+    // 21 dias a R$ 100 no atual: tira 2.100 de 1.000, faltam 1.100 em 14/11.
+    const w = paceWarning(pace, periods, [], tomorrow)!;
+    expect(w.offset).toBe(0);
+    expect(w.left).toBe(-1100);
+    expect(w.lastDay).toEqual(new Date(2026, 10, 14));
+    // Fecha gastando 1.000 em 21 dias: R$ 47,61 (para baixo, no centavo).
+    expect(w.perDayTarget).toBe(47.61);
+  });
+
+  it("dentro do ritmo, nada", () => {
+    expect(paceWarning({ ...pace, perDay: 10, accountPerDay: 10 }, periods, [], tomorrow)).toBeNull();
+  });
+
+  it("se nem sem gastar fecha, sem alvo por dia", () => {
+    const short = [{ ...periods[0], freeToSpend: 0, endBalance: -200 }, periods[1]];
+    const w = paceWarning(pace, short, [], tomorrow)!;
+    expect(w.perDayTarget).toBeNull();
   });
 });

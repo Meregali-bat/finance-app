@@ -173,3 +173,33 @@ describe("overspendAlert", () => {
     expect(overspendAlert(inputs(), today)).toBeNull();
   });
 });
+
+describe("aviso do ritmo", () => {
+  // Ciclo de 5/out a 5/nov. R$ 900 em lançamentos nos 10 primeiros dias: R$ 90
+  // por dia, que até o fim do ciclo passa dos R$ 500 que sobram.
+  const spending = inputs({
+    transactions: [
+      { id: "a", description: "Mercado", categoryId: null, createdAt: null, amount: 600, date: day("2026-10-06") },
+      { id: "b", description: "Feira", categoryId: null, createdAt: null, amount: 300, date: day("2026-10-10") },
+    ],
+  });
+
+  it("vai no 10º dia do ciclo, com quanto falta, quando e o alvo", () => {
+    const alert = dailyAlerts(spending, new Date(2026, 9, 14, 8)).find(
+      (a) => a.title === "No ritmo atual, vai faltar",
+    );
+    expect(alert).toBeDefined();
+    expect(alert!.body).toMatch(/^Faltam R\$\s[\d.,]+ em 4 de nov\. Para fechar, segure em R\$\s[\d.,]+ por dia até lá\.$/);
+    expect(alert!.tag).toBe(`pace-${new Date(2026, 9, 5).toISOString()}`);
+  });
+
+  it("não vai em outro dia, nem dentro do ritmo", () => {
+    const title = (a: { title: string }) => a.title;
+    expect(dailyAlerts(spending, new Date(2026, 9, 15, 8)).map(title)).not.toContain(
+      "No ritmo atual, vai faltar",
+    );
+    expect(dailyAlerts(inputs(), new Date(2026, 9, 14, 8)).map(title)).not.toContain(
+      "No ritmo atual, vai faltar",
+    );
+  });
+});

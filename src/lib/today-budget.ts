@@ -51,5 +51,7 @@ export function todayBudget(inputs: BudgetInputs, today: Date) {
     reservedForLater: current?.reservedForLater ?? 0,
     savings,
     nextPeriod: next as typeof next | undefined,
+    /** O ciclo corrente e o seguinte, da previsão: o ritmo da Início e do aviso mede por eles. */
+    periods: [current, next].filter(Boolean),
   };
 }
