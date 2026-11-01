@@ -19,6 +19,8 @@ export function NextCycleCommitmentCard({
   limitPercent,
   startLabel,
   reservedNow,
+  limitIsDefault,
+  paceTarget,
 }: {
   commitment: NextCycleCommitment;
   limitPercent: number;
@@ -27,6 +29,13 @@ export function NextCycleCommitmentCard({
   startLabel: string;
   /** O número de hoje já guarda dinheiro para um ciclo à frente que vai faltar. */
   reservedNow: boolean;
+  /** O teto é o padrão, não um que a pessoa escolheu. */
+  limitIsDefault: boolean;
+  /**
+   * O alvo por dia do aviso do ritmo no hero, quando ele é sobre este mesmo
+   * ciclo: o card aponta para ele, em vez de dizer que nada muda hoje.
+   */
+  paceTarget: string | null;
 }) {
   const alert = commitment.tone === "alert";
   // As larguras da barra, em % da renda: até o teto, faturas e depois contas
@@ -64,7 +73,9 @@ export function NextCycleCommitmentCard({
           </span>
           {commitment.overLimit && (
             <span className="font-medium text-muted-foreground">
-              , acima dos {limitPercent}% que você definiu
+              {limitIsDefault
+                ? `, acima do teto de ${limitPercent}%`
+                : `, acima dos ${limitPercent}% que você definiu`}
             </span>
           )}
         </p>
@@ -73,9 +84,11 @@ export function NextCycleCommitmentCard({
       {/* Logo depois do alerta, o que ele muda para o número de hoje: o
           conforto antes da barra, e não depois. */}
       <p className="text-[13px] text-pretty text-muted-foreground">
-        {reservedNow
-          ? "O número de hoje já guarda uma parte; cada compra no cartão agora aumenta o que vence lá."
-          : "O número de hoje não muda; cada compra no cartão agora aumenta o que vence lá."}
+        {paceTarget
+          ? `É o mesmo ciclo do aviso lá em cima: ficando em ${paceTarget} por dia, ele não fecha no negativo.`
+          : reservedNow
+            ? "O número de hoje já guarda uma parte; cada compra no cartão agora aumenta o que vence lá."
+            : "O número de hoje não muda; cada compra no cartão agora aumenta o que vence lá."}
       </p>
 
       {/* As faturas em tom forte, as contas fixas em tom médio (cada um com
@@ -111,7 +124,7 @@ export function NextCycleCommitmentCard({
         </div>
         {/* O traço dito em palavras, embaixo dele: sem isso, o leitor tinha de
             adivinhar o que a marca na barra queria dizer. */}
-        <div className="relative h-[18px] text-[11.5px] text-muted-foreground tabular-nums">
+        <div className="relative h-5 text-[12.5px] text-muted-foreground tabular-nums">
           <span
             className="absolute -translate-x-1/2 whitespace-nowrap"
             style={{ left: `${Math.min(92, Math.max(8, limitPercent))}%` }}
@@ -122,7 +135,7 @@ export function NextCycleCommitmentCard({
             {commitment.overLimit && (
               <span className="text-negative">
                 {" "}
-                · {Math.round(commitment.totalShare * 100) - limitPercent} pontos acima
+                · {Math.round(commitment.totalShare * 100) - limitPercent} acima
               </span>
             )}
           </span>

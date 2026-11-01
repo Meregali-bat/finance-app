@@ -165,6 +165,12 @@ export default async function DashboardPage() {
       limitPercent={profile.commitmentLimitPercent ?? DEFAULT_COMMITMENT_LIMIT_PERCENT}
       startLabel={formatDate(commitment.periodStart)}
       reservedNow={reservedForLater > 0.005}
+      limitIsDefault={profile.commitmentLimitPercent == null}
+      paceTarget={
+        paceWarn?.offset === 1 && paceWarn.perDayTarget !== null && dailyAvailable >= 0
+          ? formatCurrency(paceWarn.perDayTarget)
+          : null
+      }
     />
   );
   const registeredMovement = registeredMovementOf(inputs, today);
@@ -653,15 +659,19 @@ export default async function DashboardPage() {
                       </span>
                     </p>
                     <p className="ml-[18px] text-(--hero-muted) text-pretty tabular-nums">
-                      {paceWarn.perDayTarget !== null
-                        ? `No ritmo de agora, ${formatCurrency(paceWarn.perDay)} por dia, ele fecha ${formatCurrency(-paceWarn.left)} no negativo · `
-                        : ""}
-                      <Link
-                        href={`/previsao?p=${paceWarn.offset}`}
-                        className={cn(heroLink, "-my-3 inline-block py-3")}
-                      >
-                        Ver na Previsão
-                      </Link>
+                      {paceWarn.perDayTarget !== null &&
+                        `No ritmo de agora, ${formatCurrency(paceWarn.perDay)} por dia, ele fecha ${formatCurrency(-paceWarn.left)} no negativo `}
+                      {/* O ponto junto do link: sem isso, ele sobrava sozinho no
+                          fim da linha quando o link quebrava. */}
+                      <span className="whitespace-nowrap">
+                        {paceWarn.perDayTarget !== null && "· "}
+                        <Link
+                          href={`/previsao?p=${paceWarn.offset}`}
+                          className={cn(heroLink, "-my-3 inline-block py-3")}
+                        >
+                          Ver na Previsão
+                        </Link>
+                      </span>
                     </p>
                   </div>
                 )}
