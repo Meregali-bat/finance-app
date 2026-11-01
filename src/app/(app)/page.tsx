@@ -38,6 +38,9 @@ import { SLICES } from "@/lib/slices";
 import { HomePlanLinks } from "@/components/home-plan-links";
 import { ScrollAwayFab } from "@/components/scroll-away-fab";
 import { BudgetBreakdown } from "@/components/budget-breakdown";
+import { NextCycleCommitmentCard } from "@/components/next-cycle-commitment-card";
+import { nextCycleCommitment } from "@/lib/next-cycle-commitment";
+import { DEFAULT_COMMITMENT_LIMIT_PERCENT } from "@/lib/purchase-simulation";
 
 /** "Quinta-feira" e "16 de outubro": o cabeçalho do desktop. */
 function longHeading(date: Date) {
@@ -99,7 +102,7 @@ export default async function DashboardPage() {
     }),
     prisma.user.findUniqueOrThrow({
       where: { id: userId },
-      select: { name: true, email: true, avatar: true },
+      select: { name: true, email: true, avatar: true, commitmentLimitPercent: true },
     }),
   ]);
   const tomorrow = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
@@ -129,9 +132,13 @@ export default async function DashboardPage() {
     loadSlicesOverview(userId, today),
   ]);
 
-  const { accountBalance, budget, dailyAvailable, reservedForLater, savings } = todayBudget(
-    inputs,
-    today,
+  const { accountBalance, budget, dailyAvailable, reservedForLater, savings, nextPeriod } =
+    todayBudget(inputs, today);
+  // O cartão come o mês seguinte em silêncio: o peso das faturas sobre a
+  // renda do próximo ciclo, quando já passa de 30%.
+  const commitment = nextCycleCommitment(
+    nextPeriod,
+    profile.commitmentLimitPercent ?? DEFAULT_COMMITMENT_LIMIT_PERCENT,
   );
   const registeredMovement = registeredMovementOf(inputs, today);
   const transactions = inputs.transactions.filter((t) => !t.fromPeriodClose);
@@ -754,7 +761,18 @@ export default async function DashboardPage() {
           juntos. Cada bloco leva a própria entrada (`rise-in`), com o atraso
           da sua altura na tela (ver `rise`). */}
       <div className="flex flex-col gap-5 lg:grid lg:grid-cols-2 lg:items-start lg:gap-6 lg:[grid-template-areas:'reminders_today'_'tools_tools'_'bottom_bottom']">
-        <div id="lembretes" className="rise-in scroll-mt-4 lg:[grid-area:reminders]" style={rise(120)}>
+        <div id="lembretes" className="rise-in flex scroll-mt-4 flex-col gap-3 lg:[grid-area:reminders]" style={rise(120)}>
+          {/* Antes dos lembretes: o que o cartão já tirou do mês que vem é o
+              aviso que ainda dá tempo de ouvir. */}
+          {commitment && (
+            <NextCycleCommitmentCard
+              commitment={commitment}
+              limitPercent={profile.commitmentLimitPercent ?? DEFAULT_COMMITMENT_LIMIT_PERCENT}
+              monthLabel={new Intl.DateTimeFormat("pt-BR", { month: "long" }).format(
+                commitment.periodStart,
+              )}
+            />
+          )}
           <HomeReminders reminders={reminders} />
         </div>
 

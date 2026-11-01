@@ -20,11 +20,12 @@ import { savingReserve, type SavingReserve } from "@/lib/slices";
 export function todayBudget(inputs: BudgetInputs, today: Date) {
   const accountBalance = accountBalanceOf(inputs, today);
   const budget = calculateCurrentBudget({ ...inputs, accountBalance, today });
-  const [current] = forecastPeriods({
+  // O seguinte também: a Início mede o peso das faturas sobre a renda dele.
+  const [current, next] = forecastPeriods({
     ...inputs,
     openingBalance: budget.openingBalance,
     today,
-    count: 0,
+    count: 1,
   });
   const beforeSavings = current?.dailyAvailable ?? budget.dailyAvailable;
   const days = budget.daysRemaining;
@@ -49,5 +50,6 @@ export function todayBudget(inputs: BudgetInputs, today: Date) {
         : beforeSavings,
     reservedForLater: current?.reservedForLater ?? 0,
     savings,
+    nextPeriod: next as typeof next | undefined,
   };
 }
