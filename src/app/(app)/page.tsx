@@ -703,8 +703,11 @@ export default async function DashboardPage() {
                     isOverBudget ? "max-lg:hidden" : ""
                   }`}
                 >
-                  <p className="hidden lg:block">
-                    Gasto no período{" "}
+                  {/* No celular também: sem ele, a curva embaixo da régua não
+                      dizia o que mede. */}
+                  <p>
+                    <span className="lg:hidden">Gasto</span>
+                    <span className="hidden lg:inline">Gasto no período</span>{" "}
                     <span className="font-semibold text-(--hero-fg)">
                       {formatCurrency(spentInPeriod)}
                     </span>

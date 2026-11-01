@@ -215,7 +215,7 @@ export function HomeReminders({ reminders }: { reminders: HomeReminder[] }) {
           <p className="text-[13px] text-muted-foreground">Nenhum lembrete pendente.</p>
         </div>
       ) : (
-        <ul ref={list} className="flex flex-col">
+        <ul ref={list} id="lista-lembretes" className="flex flex-col">
           <AnimatePresence initial={false}>
             {shown.map((reminder, index) => (
               <motion.li
@@ -283,6 +283,7 @@ export function HomeReminders({ reminders }: { reminders: HomeReminder[] }) {
           type="button"
           onClick={() => setExpanded((e) => !e)}
           aria-expanded={expanded}
+          aria-controls="lista-lembretes"
           className={cn(
             "flex h-11 items-center justify-center gap-1.5 rounded-[16px] text-[13.5px] font-medium text-muted-foreground ring-1 ring-(--hairline) transition-[color,background-color,transform] duration-150 hover:bg-card-hover hover:text-foreground active:scale-[0.98]",
             // No desktop, só quando há o que esconder ali.

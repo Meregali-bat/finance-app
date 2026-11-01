@@ -33,12 +33,10 @@ export function NextCycleCommitmentCard({
   return (
     <section
       aria-label={`Comprometido no ciclo de ${startLabel}`}
-      className={homeCard(
-        cn(
-          "flex flex-col gap-3",
-          alert && "shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--negative)_30%,transparent)]",
-        ),
-      )}
+      // Sem borda vermelha: o alerta mora no ícone e na porcentagem. O card
+      // inteiro em vermelho logo abaixo do número do dia parecia dizer que o
+      // problema é hoje, e o texto diz o contrário.
+      className={homeCard("flex flex-col gap-3")}
     >
       <div className="flex items-center gap-3">
         <span
