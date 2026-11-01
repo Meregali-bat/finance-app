@@ -63,11 +63,13 @@ type Toast = {
 /** O tempo do check turquesa antes de o card começar a sair. */
 const CONFIRM_MS = 380;
 /**
- * Quantos lembretes a Início mostra antes do "Mostrar mais". Três: no
- * celular, com os botões no rodapé de cada card, o quarto já empurrava as
- * movimentações de hoje para a segunda tela.
+ * Quantos lembretes a Início mostra antes do "Mostrar mais". No celular, dois:
+ * com os botões no rodapé de cada card, o terceiro já empurrava as
+ * movimentações de hoje para a segunda tela. No desktop os botões cabem na
+ * linha do texto, e quatro ainda cabem ao lado do dia.
  */
-const COLLAPSED_COUNT = 3;
+const COLLAPSED_MOBILE = 2;
+const COLLAPSED_DESKTOP = 4;
 
 /**
  * Os lembretes da Início. Confirmar no diálogo não some com o card de
@@ -181,12 +183,11 @@ export function HomeReminders({ reminders }: { reminders: HomeReminder[] }) {
       window.removeEventListener("hashchange", reveal);
     };
   }, []);
-  // Esconder um só não vale um botão do mesmo tamanho dele: aí mostra todos.
-  const shown =
-    expanded || visible.length <= COLLAPSED_COUNT + 1
-      ? visible
-      : visible.slice(0, COLLAPSED_COUNT);
-  const hiddenCount = visible.length - shown.length;
+  // Recolhida, a lista corta no tamanho do desktop, e no celular esconde por
+  // CSS os que passam dos dois primeiros: um só render para as duas larguras.
+  const shown = expanded ? visible : visible.slice(0, COLLAPSED_DESKTOP);
+  const hiddenMobile = expanded ? 0 : Math.max(0, visible.length - COLLAPSED_MOBILE);
+  const hiddenDesktop = expanded ? 0 : Math.max(0, visible.length - COLLAPSED_DESKTOP);
 
   return (
     <div className="flex flex-col gap-3">
@@ -216,7 +217,7 @@ export function HomeReminders({ reminders }: { reminders: HomeReminder[] }) {
       ) : (
         <ul ref={list} className="flex flex-col">
           <AnimatePresence initial={false}>
-            {shown.map((reminder) => (
+            {shown.map((reminder, index) => (
               <motion.li
                 key={reminder.key}
                 data-reminder-key={reminder.key}
@@ -248,7 +249,11 @@ export function HomeReminders({ reminders }: { reminders: HomeReminder[] }) {
                 }}
                 // `@container`: o card decide pela própria largura se os botões
                 // cabem na linha do texto ou descem para a linha de baixo.
-                className="@container mb-2.5 overflow-hidden last:mb-0"
+                className={cn(
+                  "@container mb-2.5 overflow-hidden last:mb-0",
+                  hiddenMobile > 0 && index >= COLLAPSED_MOBILE && "max-lg:hidden",
+                  hiddenMobile > 0 && index === COLLAPSED_MOBILE - 1 && "max-lg:mb-0",
+                )}
               >
                 <ReminderCard
                   reminder={reminder}
@@ -273,14 +278,25 @@ export function HomeReminders({ reminders }: { reminders: HomeReminder[] }) {
         </ul>
       )}
 
-      {(hiddenCount > 0 || (expanded && visible.length > COLLAPSED_COUNT)) && (
+      {(hiddenMobile > 0 || (expanded && visible.length > COLLAPSED_MOBILE)) && (
         <button
           type="button"
           onClick={() => setExpanded((e) => !e)}
           aria-expanded={expanded}
-          className="flex h-11 items-center justify-center gap-1.5 rounded-[16px] text-[13.5px] font-medium text-muted-foreground ring-1 ring-(--hairline) transition-[color,background-color,transform] duration-150 hover:bg-card-hover hover:text-foreground active:scale-[0.98]"
+          className={cn(
+            "flex h-11 items-center justify-center gap-1.5 rounded-[16px] text-[13.5px] font-medium text-muted-foreground ring-1 ring-(--hairline) transition-[color,background-color,transform] duration-150 hover:bg-card-hover hover:text-foreground active:scale-[0.98]",
+            // No desktop, só quando há o que esconder ali.
+            (expanded ? visible.length <= COLLAPSED_DESKTOP : hiddenDesktop === 0) && "lg:hidden",
+          )}
         >
-          {expanded ? "Mostrar menos" : `Mostrar mais ${hiddenCount}`}
+          {expanded ? (
+            "Mostrar menos"
+          ) : (
+            <>
+              <span className="lg:hidden">Mostrar mais {hiddenMobile}</span>
+              <span className="hidden lg:inline">Mostrar mais {hiddenDesktop}</span>
+            </>
+          )}
           <ChevronDown
             className={cn("size-4 transition-transform duration-200", expanded && "rotate-180")}
             aria-hidden="true"
