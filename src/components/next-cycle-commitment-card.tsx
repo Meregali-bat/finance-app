@@ -62,24 +62,25 @@ export function NextCycleCommitmentCard({
         </p>
       </div>
 
-      {/* As faturas em tom forte, as contas fixas em tom fraco, e um traço no
+      {/* As faturas em tom forte, as contas fixas em tom médio (cada um com
+          3:1 do vizinho, e um fio da cor do card entre eles), e um traço no
           teto. Vermelho, só o que passa do teto: a cor de alerta marca o
           problema, e não uma categoria. */}
       <div className="flex flex-col gap-1.5">
         <div className="relative h-2 rounded-full bg-(--track)" aria-hidden="true">
-          <div className="flex h-full overflow-hidden rounded-full">
+          <div className="flex h-full gap-0.5 overflow-hidden rounded-full">
             <div
-              className="bg-foreground/65"
+              className="bg-foreground/90"
               style={{ width: `${Math.min(100, commitment.cardShare * 100)}%` }}
             />
             <div
-              className="bg-foreground/25"
+              className="bg-foreground/45"
               style={{ width: `${Math.max(0, Math.min(100 - commitment.cardShare * 100, fixedShare * 100))}%` }}
             />
           </div>
           {commitment.overLimit && (
             <div
-              className="absolute inset-y-0 rounded-r-full bg-negative"
+              className="absolute inset-y-0 rounded-r-full border-l-2 border-card bg-negative"
               style={{
                 left: `${Math.min(100, limitPercent)}%`,
                 width: `${Math.max(0, Math.min(100, commitment.totalShare * 100) - Math.min(100, limitPercent))}%`,
@@ -103,11 +104,11 @@ export function NextCycleCommitmentCard({
         </div>
         <ul className="flex flex-wrap gap-x-3 gap-y-0.5 text-[12.5px] text-muted-foreground tabular-nums">
           <li className="flex items-center gap-1.5">
-            <span aria-hidden="true" className="size-2 rounded-full bg-foreground/65" />
+            <span aria-hidden="true" className="size-2 rounded-full bg-foreground/90" />
             Faturas {formatCurrency(commitment.cardBills)} ({percent(commitment.cardShare)})
           </li>
           <li className="flex items-center gap-1.5">
-            <span aria-hidden="true" className="size-2 rounded-full bg-foreground/25" />
+            <span aria-hidden="true" className="size-2 rounded-full bg-foreground/45" />
             Contas fixas {formatCurrency(commitment.fixed)} ({percent(fixedShare)})
           </li>
           {commitment.overLimit && (

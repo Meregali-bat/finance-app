@@ -5,12 +5,14 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import {
   AlertTriangle,
   ArrowDownLeft,
-  CalendarClock,
   Check,
   CircleCheck,
   Clock,
   ChevronDown,
+  CreditCard,
+  ReceiptText,
 } from "lucide-react";
+import { formatCurrency } from "@/lib/format";
 import { SectionLabel } from "@/components/page-header";
 import { UndoToast } from "@/components/undo-toast";
 import { ConfirmPaymentDialog } from "@/components/confirm-payment-dialog";
@@ -39,6 +41,8 @@ type Base = {
 export type HomeReminder =
   | (Base & {
       kind: "due";
+      /** Fatura de cartão ou conta fixa: o ícone diz qual, de relance. */
+      source: "card" | "fixed";
       payAction: (formData: FormData) => Promise<{ paymentId: string }>;
       cards?: { id: string; name: string }[];
       defer: {
@@ -188,6 +192,12 @@ export function HomeReminders({ reminders }: { reminders: HomeReminder[] }) {
   const shown = expanded ? visible : visible.slice(0, COLLAPSED_DESKTOP);
   const hiddenMobile = expanded ? 0 : Math.max(0, visible.length - COLLAPSED_MOBILE);
   const hiddenDesktop = expanded ? 0 : Math.max(0, visible.length - COLLAPSED_DESKTOP);
+  // O que fica escondido também em dinheiro: o aluguel pode ser o terceiro.
+  const hiddenTotal = (from: number) =>
+    visible
+      .slice(from)
+      .filter((r) => r.kind === "due")
+      .reduce((sum, r) => sum + r.amount, 0);
 
   return (
     <div className="flex flex-col gap-3">
@@ -294,8 +304,14 @@ export function HomeReminders({ reminders }: { reminders: HomeReminder[] }) {
             "Mostrar menos"
           ) : (
             <>
-              <span className="lg:hidden">Mostrar mais {hiddenMobile}</span>
-              <span className="hidden lg:inline">Mostrar mais {hiddenDesktop}</span>
+              <span className="lg:hidden tabular-nums">
+                Mostrar mais {hiddenMobile}
+                {hiddenTotal(COLLAPSED_MOBILE) > 0 && ` · ${formatCurrency(hiddenTotal(COLLAPSED_MOBILE))}`}
+              </span>
+              <span className="hidden tabular-nums lg:inline">
+                Mostrar mais {hiddenDesktop}
+                {hiddenTotal(COLLAPSED_DESKTOP) > 0 && ` · ${formatCurrency(hiddenTotal(COLLAPSED_DESKTOP))}`}
+              </span>
             </>
           )}
           <ChevronDown
@@ -377,8 +393,10 @@ function ReminderCard({
           <ArrowDownLeft className="size-[18px]" aria-hidden="true" />
         ) : overdue ? (
           <AlertTriangle className="size-[18px]" aria-hidden="true" />
+        ) : reminder.source === "card" ? (
+          <CreditCard className="size-[18px]" aria-hidden="true" />
         ) : (
-          <CalendarClock className="size-[18px]" aria-hidden="true" />
+          <ReceiptText className="size-[18px]" aria-hidden="true" />
         )}
       </div>
       <div className="min-w-0 flex-1">

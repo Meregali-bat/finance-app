@@ -294,6 +294,7 @@ export default async function DashboardPage() {
   const reminders: HomeReminder[] = [
     ...budget.cardBillReminders.map((bill) => ({
       kind: "due" as const,
+      source: "card" as const,
       key: `card-${bill.cardId}-${bill.dueDate.toISOString()}`,
       label: `Fatura do ${cardNameById.get(bill.cardId) ?? "cartão"}`,
       amount: bill.amount,
@@ -308,6 +309,7 @@ export default async function DashboardPage() {
     })),
     ...budget.fixedExpenseReminders.map((exp) => ({
       kind: "due" as const,
+      source: "fixed" as const,
       key: `expense-${exp.expenseId}-${exp.dueDate.toISOString()}`,
       label: expenseLabelById.get(exp.expenseId) ?? "Despesa fixa",
       amount: exp.amount,
