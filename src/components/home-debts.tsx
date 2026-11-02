@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState, useTransition } from "react";
+import Link from "next/link";
 import { Check, ChevronDown, HandCoins } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -57,11 +58,20 @@ export function HomeDebts({ debts }: { debts: DebtView[] }) {
         className="-mx-1 flex items-baseline justify-between gap-2 rounded-lg px-1 outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <SectionLabel>A receber</SectionLabel>
-        {debts.length > 1 && (
-          <span className="text-xs font-semibold text-muted-foreground tabular-nums">
-            {formatCurrency(total)}
-          </span>
-        )}
+        <span className="flex items-baseline gap-3">
+          {debts.length > 1 && (
+            <span className="text-xs font-semibold text-muted-foreground tabular-nums">
+              {formatCurrency(total)}
+            </span>
+          )}
+          {/* O histórico todo, inclusive quem já pagou e o que foi perdido. */}
+          <Link
+            href="/historico/emprestimos"
+            className="-my-3 py-3 text-xs font-medium text-primary underline-offset-4 hover:underline"
+          >
+            Ver relatório
+          </Link>
+        </span>
       </div>
       {/* Com a faixa toda do desktop (sem os avisos ao lado), duas colunas:
           uma linha de 980px deixava o "Recebi" longe do nome. */}

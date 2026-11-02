@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { loanSchedule, summarizeDebts } from "./loans";
+import { loanReport, loanSchedule, summarizeDebts } from "./loans";
 
 const today = new Date(2026, 9, 18);
 
@@ -133,5 +133,45 @@ describe("loanSchedule", () => {
 
   it("sem data combinada não há parcelas", () => {
     expect(loanSchedule({ amount: 100, installments: 3 })).toEqual([]);
+  });
+});
+
+describe("loanReport", () => {
+  it("por pessoa, inclusive quem já quitou: emprestado, voltou, perdido e em aberto", () => {
+    const report = loanReport({
+      loans: [
+        { id: "a", personId: "ana", amount: 300, date: new Date(2026, 8, 1), installments: 1 },
+        {
+          id: "b",
+          personId: "ana",
+          amount: 200,
+          date: new Date(2026, 9, 1),
+          installments: 1,
+          forgiven: 50,
+        },
+        { id: "c", personId: "joao", amount: 80, date: new Date(2026, 9, 5), installments: 1 },
+      ],
+      repayments: [
+        { personId: "ana", amount: 350, date: new Date(2026, 9, 10) },
+        { personId: "joao", amount: 80, date: new Date(2026, 9, 6) },
+      ],
+    });
+    expect(report.total).toEqual({ lent: 580, repaid: 430, forgiven: 50, open: 100 });
+    expect(report.people.map((p) => p.personId)).toEqual(["ana", "joao"]);
+    const ana = report.people[0];
+    expect(ana).toMatchObject({ lent: 500, repaid: 350, forgiven: 50, open: 100 });
+    expect(ana.loans).toEqual([
+      { id: "a", amount: 300, repaid: 300, forgiven: 0, open: 0 },
+      { id: "b", amount: 200, repaid: 50, forgiven: 50, open: 100 },
+    ]);
+    expect(report.people[1]).toMatchObject({ lent: 80, repaid: 80, open: 0 });
+  });
+
+  it("quem devolveu a mais não fica com aberto negativo", () => {
+    const report = loanReport({
+      loans: [{ id: "a", personId: "mae", amount: 133.49, date: today, installments: 1 }],
+      repayments: [{ personId: "mae", amount: 134, date: today }],
+    });
+    expect(report.people[0]).toMatchObject({ repaid: 134, open: 0 });
   });
 });
