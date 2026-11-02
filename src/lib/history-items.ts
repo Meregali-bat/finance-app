@@ -8,9 +8,15 @@ import { lentNames, type HistoryItem } from "@/lib/history-item";
  * parcela (a compra de R$ 300 em 3x, metade emprestada, empresta R$ 50 por
  * parcela). Nunca passa do valor da linha.
  */
-function lentShare(loans: { amount: unknown }[], line: number, purchase: number) {
+function lentShare(
+  loans: { amount: unknown; forgiven?: unknown }[],
+  line: number,
+  purchase: number,
+) {
   if (loans.length === 0 || line <= 0 || purchase <= 0) return undefined;
-  const total = loans.reduce((sum, l) => sum + Number(l.amount), 0);
+  // O dado como perdido não volta: é gasto seu, não emprestado.
+  const total = loans.reduce((sum, l) => sum + Number(l.amount) - Number(l.forgiven ?? 0), 0);
+  if (total <= 0.005) return undefined;
   return Math.min(line, (total * line) / purchase);
 }
 
@@ -38,7 +44,7 @@ export async function loadHistoryItems(
         include: {
           category: { select: { id: true, name: true } },
           loans: {
-            select: { amount: true, person: { select: { name: true } } },
+            select: { amount: true, forgiven: true, person: { select: { name: true } } },
             orderBy: { createdAt: "asc" },
           },
           loanRepayment: { select: { id: true } },
@@ -79,7 +85,7 @@ export async function loadHistoryItems(
             include: {
               category: { select: { id: true, name: true } },
               loans: {
-                select: { amount: true, person: { select: { name: true } } },
+                select: { amount: true, forgiven: true, person: { select: { name: true } } },
                 orderBy: { createdAt: "asc" },
               },
             },

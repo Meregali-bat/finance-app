@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "Loan" ADD COLUMN "forgiven" DECIMAL(65,30) NOT NULL DEFAULT 0;
+ALTER TABLE "Loan" ADD COLUMN "forgivenAt" TIMESTAMP(3);

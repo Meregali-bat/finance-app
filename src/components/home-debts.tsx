@@ -18,7 +18,8 @@ import { SectionLabel } from "@/components/page-header";
 import { UndoToast, type UndoToastState } from "@/components/undo-toast";
 import { iconButton } from "@/components/ui/icon-button";
 import { homeCard } from "@/components/home-card";
-import { receiveLoanPayment } from "@/lib/actions/loan";
+import { forgiveLoans, receiveLoanPayment, unforgiveLoans } from "@/lib/actions/loan";
+import { unwrap } from "@/lib/action-result";
 import { deleteTransaction } from "@/lib/actions/transaction";
 import { formatCurrency, todayInputValue } from "@/lib/format";
 import type { DebtView } from "@/lib/loans-data";
@@ -31,7 +32,11 @@ import { errorMessage } from "@/lib/error-message";
  * do mais antigo para o mais novo e oferece "Desfazer".
  */
 export function HomeDebts({ debts }: { debts: DebtView[] }) {
-  const [toast, setToast] = useState<(UndoToastState & { transactionId: string }) | null>(null);
+  // O "Desfazer" de cada ação: apagar a receita do recebimento, ou devolver o
+  // que foi dado como perdido.
+  const [toast, setToast] = useState<(UndoToastState & { undo: () => Promise<unknown> }) | null>(
+    null,
+  )
   const [undoing, startUndo] = useTransition();
   const seq = useRef(0);
   const heading = useRef<HTMLDivElement>(null);
@@ -69,9 +74,19 @@ export function HomeDebts({ debts }: { debts: DebtView[] }) {
                 lastPerson.current = debt.personId;
                 setToast({
                   id: ++seq.current,
-                  transactionId,
+                  // Apagar a receita apaga o recebimento junto, e a dívida volta.
+                  undo: () => deleteTransaction(transactionId),
                   hasUndo: true,
                   text: `${formatCurrency(amount)} recebidos de ${debt.name}`,
+                });
+              }}
+              onForgiven={(loanIds, amount) => {
+                lastPerson.current = debt.personId;
+                setToast({
+                  id: ++seq.current,
+                  undo: () => unforgiveLoans({ loanIds }),
+                  hasUndo: true,
+                  text: `${formatCurrency(amount)} de ${debt.name} dados como perdidos`,
                 });
               }}
             />
@@ -90,10 +105,11 @@ export function HomeDebts({ debts }: { debts: DebtView[] }) {
         }
         onUndo={() => {
           if (!toast) return;
-          const { transactionId } = toast;
+          const { undo } = toast;
           setToast(null);
-          // Apagar a receita apaga o recebimento junto, e a dívida volta.
-          startUndo(() => deleteTransaction(transactionId));
+          startUndo(async () => {
+            await undo();
+          });
         }}
       />
     </div>
@@ -103,9 +119,11 @@ export function HomeDebts({ debts }: { debts: DebtView[] }) {
 function DebtCard({
   debt,
   onReceived,
+  onForgiven,
 }: {
   debt: DebtView;
   onReceived: (transactionId: string, amount: number) => void;
+  onForgiven: (loanIds: string[], amount: number) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   return (
@@ -155,14 +173,19 @@ function DebtCard({
         </div>
       </div>
       {expanded && (
-        <ul className="flex flex-col gap-2 border-t border-border/60 pt-2.5 pl-[50px] text-[13px]">
-          {debt.loans.map((loan) => (
-            <li key={loan.id} className={cn("flex flex-col", loan.settled && "opacity-50")}>
-              <span className="truncate font-medium">{loan.label}</span>
-              <span className="text-muted-foreground tabular-nums">{loan.detail}</span>
-            </li>
-          ))}
-        </ul>
+        <div className="flex flex-col gap-2 border-t border-border/60 pt-2.5 pl-[50px]">
+          <ul className="flex flex-col gap-2 text-[13px]">
+            {debt.loans.map((loan) => (
+              <li key={loan.id} className={cn("flex flex-col", loan.settled && "opacity-50")}>
+                <span className="truncate font-medium">{loan.label}</span>
+                <span className="text-muted-foreground tabular-nums">{loan.detail}</span>
+              </li>
+            ))}
+          </ul>
+          {/* Dentro dos empréstimos, e não ao lado do "Recebi": é uma decisão
+              rara, sobre títulos específicos, e não deve competir com ele. */}
+          <ForgiveDialog debt={debt} onForgiven={onForgiven} />
+        </div>
       )}
     </div>
   );
@@ -250,6 +273,128 @@ function ReceiveDialog({
             </Button>
           </DialogFooter>
         </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/**
+ * "Não vai pagar": escolher quais empréstimos da pessoa dar como perdidos. O
+ * que falta deles sai do que ela deve e passa a contar como gasto seu.
+ */
+function ForgiveDialog({
+  debt,
+  onForgiven,
+}: {
+  debt: DebtView;
+  onForgiven: (loanIds: string[], amount: number) => void;
+}) {
+  const open = debt.loans.filter((l) => l.remaining > 0.005);
+  const [isOpen, setIsOpen] = useState(false);
+  const [chosen, setChosen] = useState<Set<string>>(new Set());
+  const [error, setError] = useState<string | null>(null);
+  const [pending, start] = useTransition();
+  if (open.length === 0) return null;
+
+  const total = open.filter((l) => chosen.has(l.id)).reduce((sum, l) => sum + l.remaining, 0);
+
+  function toggle(id: string) {
+    setChosen((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  return (
+    <Dialog
+      open={isOpen}
+      onOpenChange={(next) => {
+        setIsOpen(next);
+        if (next) {
+          // Com um empréstimo só, ele já vem marcado; com vários, a pessoa escolhe.
+          setChosen(new Set(open.length === 1 ? [open[0].id] : []));
+          setError(null);
+        }
+      }}
+    >
+      <DialogTrigger
+        render={
+          <button
+            type="button"
+            className="-my-2 flex min-h-11 w-fit items-center text-[13px] font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+          />
+        }
+      >
+        {debt.name} não vai pagar…
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>O que {debt.name} não vai pagar</DialogTitle>
+        </DialogHeader>
+        <div className="flex flex-col gap-4">
+          <p className="text-sm text-muted-foreground">
+            Escolha os empréstimos. O que falta deles sai do que {debt.name} te deve e passa a
+            contar como gasto seu.
+          </p>
+          <ul className="flex max-h-72 flex-col gap-1 overflow-y-auto">
+            {open.map((loan) => {
+              const on = chosen.has(loan.id);
+              return (
+                <li key={loan.id}>
+                  <button
+                    type="button"
+                    role="checkbox"
+                    aria-checked={on}
+                    onClick={() => toggle(loan.id)}
+                    className={cn(
+                      "flex w-full items-center justify-between gap-3 rounded-lg border px-3 py-2 text-left text-sm transition-colors",
+                      on ? "border-primary bg-primary/5" : "border-border hover:bg-muted",
+                    )}
+                  >
+                    <span className="min-w-0">
+                      <span className="block truncate font-medium">{loan.label}</span>
+                      <span className="block text-xs text-muted-foreground tabular-nums">
+                        {loan.detail}
+                      </span>
+                    </span>
+                    <span className="shrink-0 tabular-nums">{formatCurrency(loan.remaining)}</span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+          {error && (
+            <p role="alert" className="text-sm text-negative">
+              {error}
+            </p>
+          )}
+          <DialogFooter>
+            <Button
+              type="button"
+              disabled={pending || chosen.size === 0}
+              onClick={() =>
+                start(async () => {
+                  try {
+                    setError(null);
+                    const result = unwrap(await forgiveLoans(debt.personId, { loanIds: [...chosen] }));
+                    setIsOpen(false);
+                    onForgiven(result.loanIds, result.amount);
+                  } catch (e) {
+                    setError(errorMessage(e, "Não deu para salvar. Tente de novo."));
+                  }
+                })
+              }
+            >
+              {pending
+                ? "Salvando..."
+                : chosen.size === 0
+                  ? "Escolha os empréstimos"
+                  : `Dar ${formatCurrency(total)} como perdido`}
+            </Button>
+          </DialogFooter>
+        </div>
       </DialogContent>
     </Dialog>
   );

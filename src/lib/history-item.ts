@@ -130,6 +130,12 @@ export function itemDayKey(item: HistoryItem): string {
 const names = new Intl.ListFormat("pt-BR", { type: "conjunction" });
 
 /** "Ana", "Ana e Bruno", "Ana, Bruno e Carla"; nada quando não foi emprestada. */
-export function lentNames(loans: { person: { name: string } }[]): string | undefined {
-  return loans.length > 0 ? names.format(loans.map((l) => l.person.name)) : undefined;
+export function lentNames(
+  loans: { person: { name: string }; amount?: unknown; forgiven?: unknown }[],
+): string | undefined {
+  // Quem não vai devolver nada já não é "emprestado para": é gasto seu.
+  const open = loans.filter(
+    (l) => l.amount == null || Number(l.amount) - Number(l.forgiven ?? 0) > 0.005,
+  );
+  return open.length > 0 ? names.format(open.map((l) => l.person.name)) : undefined;
 }

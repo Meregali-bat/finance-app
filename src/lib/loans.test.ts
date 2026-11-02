@@ -22,6 +22,36 @@ describe("summarizeDebts", () => {
     expect(joao.since).toEqual(new Date(2026, 9, 10));
   });
 
+  it("o dado como perdido sai do que a pessoa deve, e o pago continua abatendo o mais antigo", () => {
+    const [joao] = summarizeDebts({
+      loans: [
+        { id: "a", personId: "joao", amount: 60, date: new Date(2026, 9, 3), installments: 1 },
+        {
+          id: "b",
+          personId: "joao",
+          amount: 200,
+          date: new Date(2026, 9, 10),
+          installments: 1,
+          forgiven: 160,
+        },
+        { id: "c", personId: "joao", amount: 50, date: new Date(2026, 9, 12), installments: 1 },
+      ],
+      repayments: [{ personId: "joao", amount: 100 }],
+      today,
+    });
+    expect(joao).toMatchObject({ owed: 150, paid: 100, remaining: 50 });
+    expect(joao.loans[1]).toEqual({ id: "b", amount: 40, paid: 40, remaining: 0, forgiven: 160 });
+  });
+
+  it("some quem não vai pagar nada do que deve", () => {
+    const debts = summarizeDebts({
+      loans: [{ id: "a", personId: "ana", amount: 50, date: today, installments: 1, forgiven: 50 }],
+      repayments: [],
+      today,
+    });
+    expect(debts).toEqual([]);
+  });
+
   it("some quem devolveu mais do que devia, sem sobra negativa nos empréstimos", () => {
     const debts = summarizeDebts({
       loans: [{ id: "a", personId: "mae", amount: 133.49, date: today, installments: 1 }],
