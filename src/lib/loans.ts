@@ -182,3 +182,79 @@ export function summarizeDebts(input: {
     return ka - kb;
   });
 }
+
+export interface LoanReportRow {
+  id: string;
+  /** O valor do empréstimo, com o perdido. */
+  amount: number;
+  repaid: number;
+  forgiven: number;
+  open: number;
+}
+
+export interface PersonLoanReport {
+  personId: string;
+  lent: number;
+  repaid: number;
+  forgiven: number;
+  open: number;
+  /** Do mais antigo para o mais novo. */
+  loans: LoanReportRow[];
+  repayments: { amount: number; date: Date }[];
+}
+
+/**
+ * O relatório de empréstimos: todo o histórico de cada pessoa, inclusive quem
+ * já quitou. O que ela devolveu abate os empréstimos do mais antigo para o
+ * mais novo, como no "A receber"; o dado como perdido não é abatido, só sai do
+ * que ela deve. Quem devolveu a mais fica com zero em aberto, e o "voltou"
+ * mostra o que de fato voltou.
+ */
+export function loanReport(input: {
+  loans: LoanInput[];
+  repayments: (RepaymentInput & { date: Date })[];
+}): {
+  total: { lent: number; repaid: number; forgiven: number; open: number };
+  people: PersonLoanReport[];
+} {
+  const ids = [...new Set(input.loans.map((l) => l.personId))];
+  const people = ids.map((personId): PersonLoanReport => {
+    const loans = input.loans
+      .filter((l) => l.personId === personId)
+      .sort((a, b) => a.date.getTime() - b.date.getTime());
+    const repayments = input.repayments
+      .filter((r) => r.personId === personId)
+      .sort((a, b) => a.date.getTime() - b.date.getTime());
+    const repaid = round2(repayments.reduce((sum, r) => sum + r.amount, 0));
+    let pool = repaid;
+    const rows = loans.map((loan): LoanReportRow => {
+      const forgiven = round2(loan.forgiven ?? 0);
+      const due = round2(loan.amount - forgiven);
+      const applied = round2(Math.min(due, Math.max(0, pool)));
+      pool = round2(pool - applied);
+      return { id: loan.id, amount: loan.amount, repaid: applied, forgiven, open: round2(due - applied) };
+    });
+    const sum = (pick: (r: LoanReportRow) => number) => round2(rows.reduce((s, r) => s + pick(r), 0));
+    return {
+      personId,
+      lent: sum((r) => r.amount),
+      repaid,
+      forgiven: sum((r) => r.forgiven),
+      open: sum((r) => r.open),
+      loans: rows,
+      repayments: repayments.map((r) => ({ amount: r.amount, date: r.date })),
+    };
+  });
+  people.sort((a, b) => b.open - a.open || b.lent - a.lent);
+  const total = (pick: (p: PersonLoanReport) => number) =>
+    round2(people.reduce((s, p) => s + pick(p), 0));
+  return {
+    total: {
+      lent: total((p) => p.lent),
+      repaid: total((p) => p.repaid),
+      forgiven: total((p) => p.forgiven),
+      open: total((p) => p.open),
+    },
+    people,
+  };
+}

@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { storedDay } from "@/lib/period";
-import { summarizeDebts } from "@/lib/loans";
+import { loanReport, summarizeDebts } from "@/lib/loans";
 import { formatCurrency, formatDate } from "@/lib/format";
 
 /** Uma pessoa que te deve, pronta para a tela (textos já formatados). */
@@ -116,4 +116,83 @@ export async function loadDebts(userId: string, today: Date): Promise<DebtView[]
       }),
     };
   });
+}
+
+
+export interface LoanReportView {
+  total: { lent: number; repaid: number; forgiven: number; open: number };
+  people: {
+    personId: string;
+    name: string;
+    lent: number;
+    repaid: number;
+    forgiven: number;
+    open: number;
+    loans: {
+      id: string;
+      label: string;
+      date: string;
+      amount: number;
+      repaid: number;
+      forgiven: number;
+      open: number;
+    }[];
+    repayments: { date: string; amount: number }[];
+  }[];
+}
+
+/** O relatório de empréstimos: todo o histórico, de cada pessoa, com os textos prontos. */
+export async function loadLoanReport(userId: string): Promise<LoanReportView> {
+  const people = await prisma.person.findMany({
+    where: { userId },
+    include: {
+      loans: {
+        include: {
+          transaction: { select: { description: true, date: true } },
+          cardPurchase: { select: { description: true, date: true } },
+        },
+      },
+      repayments: { include: { transaction: { select: { amount: true, date: true } } } },
+    },
+  });
+  const info = new Map<string, { label: string; date: Date }>();
+  const report = loanReport({
+    loans: people.flatMap((person) =>
+      person.loans.map((loan) => {
+        const source = loan.transaction ?? loan.cardPurchase;
+        const date = source ? storedDay(source.date) : loan.createdAt;
+        info.set(loan.id, { label: source?.description ?? "Empréstimo", date });
+        return {
+          id: loan.id,
+          personId: person.id,
+          amount: Number(loan.amount),
+          date,
+          installments: loan.installments,
+          forgiven: Number(loan.forgiven),
+        };
+      }),
+    ),
+    repayments: people.flatMap((person) =>
+      person.repayments.map((r) => ({
+        personId: person.id,
+        // Receita é negativa no banco.
+        amount: -Number(r.transaction.amount),
+        date: storedDay(r.transaction.date),
+      })),
+    ),
+  });
+  const nameById = new Map(people.map((p) => [p.id, p.name]));
+  return {
+    total: report.total,
+    people: report.people.map((p) => ({
+      ...p,
+      name: nameById.get(p.personId) ?? "Alguém",
+      loans: p.loans.map((l) => ({
+        ...l,
+        label: info.get(l.id)!.label,
+        date: formatDate(info.get(l.id)!.date),
+      })),
+      repayments: p.repayments.map((r) => ({ amount: r.amount, date: formatDate(r.date) })),
+    })),
+  };
 }

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { FileUp } from "lucide-react";
+import { FileUp, HandCoins } from "lucide-react";
 import { iconButton } from "@/components/ui/icon-button";
 import { requireUserId } from "@/lib/auth-helpers";
 import { resolveRange, type CycleOf, type RangeParams } from "@/lib/date-range";
@@ -221,14 +221,24 @@ export default async function HistoryPage({
         <PageHeader
           title="Histórico"
           action={
-            <Link
-              href="/historico/importar"
-              title="Importar extrato"
-              className={iconButton({ tone: "outline", size: "pill" })}
-            >
-              <FileUp aria-hidden="true" />
-              Importar
-            </Link>
+            <div className="flex gap-2">
+              <Link
+                href="/historico/emprestimos"
+                title="Relatório de empréstimos"
+                className={iconButton({ tone: "outline", size: "pill" })}
+              >
+                <HandCoins aria-hidden="true" />
+                Empréstimos
+              </Link>
+              <Link
+                href="/historico/importar"
+                title="Importar extrato"
+                className={iconButton({ tone: "outline", size: "pill" })}
+              >
+                <FileUp aria-hidden="true" />
+                Importar
+              </Link>
+            </div>
           }
         />
 
