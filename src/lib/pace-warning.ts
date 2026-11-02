@@ -14,6 +14,8 @@ export function paceWarningFor(
   inputs: BudgetInputs,
   periods: PeriodForecast[],
   today: Date,
+  /** O número do dia: o alvo nunca passa dele. */
+  dailyAvailable = Infinity,
 ): (PaceWarning & { elapsedDays: number; periodStart: Date; perDay: number }) | null {
   const current = periods[0];
   if (!current) return null;
@@ -31,7 +33,7 @@ export function paceWarningFor(
     dueDay: c.dueDay,
   }));
   const tomorrow = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
-  const warning = paceWarning(pace, periods, cards, tomorrow);
+  const warning = paceWarning(pace, periods, cards, tomorrow, dailyAvailable);
   return (
     warning && {
       ...warning,

@@ -152,7 +152,7 @@ export default async function DashboardPage() {
     todayBudget(inputs, today);
   // "Se continuar gastando assim, vai faltar": o aviso da Previsão, aqui, onde
   // quem precisa dele olha. O mesmo cálculo do aviso no celular do dia 10.
-  const paceWarn = paceWarningFor(inputs, periods, today);
+  const paceWarn = paceWarningFor(inputs, periods, today, dailyAvailable);
   // O cartão come o mês seguinte em silêncio: o peso das faturas sobre a
   // renda do próximo ciclo, quando já passa de 30%.
   const commitment = nextCycleCommitment(
