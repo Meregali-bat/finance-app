@@ -20,6 +20,7 @@ import { CardFormDialog } from "@/components/forms/card-form-dialog";
 import { CardPurchaseFormDialog } from "@/components/forms/card-purchase-form-dialog";
 import { CardBillEstimateDialog } from "@/components/forms/card-bill-estimate-dialog";
 import { CardBillProjection } from "@/components/card-bill-projection";
+import { BillAiCheck } from "@/components/bill-ai-check";
 import { CardScreenshotCheck } from "@/components/card-screenshot-check";
 import { MovementRow } from "@/components/movement-row";
 import { toMovementValues } from "@/lib/history-item";
@@ -358,13 +359,17 @@ export default async function CardDetailPage({ params }: { params: Promise<{ id:
       )}
 
       <div className="grid items-start gap-6 xl:grid-cols-2">
-        <CardBillProjection
-          cardId={card.id}
-          bills={projectedBills}
-          estimates={listedEstimates}
-          payAction={markCardBillPaid.bind(null, card.id)}
-          cardName={card.name}
-        />
+        <div className="flex flex-col gap-4">
+          <CardBillProjection
+            cardId={card.id}
+            bills={projectedBills}
+            estimates={listedEstimates}
+            payAction={markCardBillPaid.bind(null, card.id)}
+            cardName={card.name}
+          />
+          {/* Logo abaixo das faturas: é delas que a pessoa desconfia. */}
+          {nextBill && <BillAiCheck cardId={card.id} />}
+        </div>
 
         <div className="flex flex-col gap-2 xl:pt-0">
           <SectionLabel>Compras</SectionLabel>
