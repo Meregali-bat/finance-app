@@ -20,6 +20,8 @@ export interface LoanInput {
   installments: number;
   /** Vencimento da primeira parcela; as outras, mês a mês. Ausente = sem data. */
   firstDueDate?: Date;
+  /** O que foi dado como perdido: a pessoa não vai pagar. Sai do que ela deve. */
+  forgiven?: number;
 }
 
 export interface RepaymentInput {
@@ -29,9 +31,12 @@ export interface RepaymentInput {
 
 export interface LoanStatus {
   id: string;
+  /** O que a pessoa deve por ele, já sem o dado como perdido. */
   amount: number;
   paid: number;
   remaining: number;
+  /** O dado como perdido, quando houver. */
+  forgiven?: number;
 }
 
 export interface NextInstallment {
@@ -107,7 +112,9 @@ export function summarizeDebts(input: {
 }): PersonDebt[] {
   const todayStart = startOfDay(input.today);
   const people = new Map<string, LoanInput[]>();
-  for (const loan of input.loans) {
+  for (const original of input.loans) {
+    // O dado como perdido não é mais dívida: a conta segue com o resto.
+    const loan = { ...original, amount: round2(original.amount - (original.forgiven ?? 0)) };
     const list = people.get(loan.personId) ?? [];
     list.push(loan);
     people.set(loan.personId, list);
@@ -131,6 +138,7 @@ export function summarizeDebts(input: {
         amount: loan.amount,
         paid: round2(applied),
         remaining: round2(loan.amount - applied),
+        ...(loan.forgiven ? { forgiven: loan.forgiven } : {}),
       };
     });
 

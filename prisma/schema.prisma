@@ -499,6 +499,11 @@ model Loan {
   installments   Int           @default(1)
   /// Quando vence a primeira parcela (as outras, mês a mês). Nulo = sem data.
   firstDueDate   DateTime?
+  /// O que a pessoa não vai pagar: dado como perdido. Sai do que ela deve e
+  /// passa a contar como gasto seu (deixa de ser "emprestado").
+  forgiven       Decimal       @default(0)
+  /// Quando foi dado como perdido; nulo enquanto ela ainda deve tudo.
+  forgivenAt     DateTime?
   transactionId  String?
   cardPurchaseId String?
   createdAt      DateTime      @default(now())

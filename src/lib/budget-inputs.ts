@@ -99,12 +99,12 @@ export async function loadBudgetInputs(userId: string): Promise<BudgetInputs> {
     }),
     prisma.creditCard.findMany({
       where: { userId },
-      include: { purchases: { include: { loans: { select: { amount: true } } } } },
+      include: { purchases: { include: { loans: { select: { amount: true, forgiven: true } } } } },
     }),
     prisma.transaction.findMany({
       where: { userId },
       orderBy: { date: "desc" },
-      include: { loans: { select: { amount: true } } },
+      include: { loans: { select: { amount: true, forgiven: true } } },
     }),
     prisma.expensePayment.findMany({
       where: { userId },
@@ -260,9 +260,13 @@ export async function loadBudgetInputs(userId: string): Promise<BudgetInputs> {
   };
 }
 
-/** A soma dos empréstimos de uma despesa; nada quando não foi emprestada. */
-function lentTotal(loans: { amount: unknown }[]): number | undefined {
-  return loans.length > 0 ? loans.reduce((sum, l) => sum + Number(l.amount), 0) : undefined;
+/**
+ * A soma dos empréstimos de uma despesa; nada quando não foi emprestada. O
+ * dado como perdido não conta: a pessoa não vai devolver, e ele é gasto seu.
+ */
+function lentTotal(loans: { amount: unknown; forgiven?: unknown }[]): number | undefined {
+  const total = loans.reduce((sum, l) => sum + Number(l.amount) - Number(l.forgiven ?? 0), 0);
+  return total > 0.005 ? total : undefined;
 }
 
 /**

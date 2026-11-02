@@ -13,7 +13,14 @@ export interface DebtView {
   overdue: boolean;
   /** O valor sugerido no "Recebi": a parcela em aberto, ou o total. */
   suggested: number;
-  loans: { id: string; label: string; detail: string; settled: boolean }[];
+  loans: {
+    id: string;
+    label: string;
+    detail: string;
+    settled: boolean;
+    /** O que falta deste empréstimo: o que dá para dar como perdido. */
+    remaining: number;
+  }[];
 }
 
 /**
@@ -49,6 +56,7 @@ export async function loadDebts(userId: string, today: Date): Promise<DebtView[]
         date,
         installments: loan.installments,
         ...(loan.firstDueDate ? { firstDueDate: storedDay(loan.firstDueDate) } : {}),
+        forgiven: Number(loan.forgiven),
       };
     }),
   );
@@ -89,9 +97,13 @@ export async function loadDebts(userId: string, today: Date): Promise<DebtView[]
           label: info.description,
           detail: [
             formatDate(info.date),
-            formatCurrency(status.amount),
+            // O valor do empréstimo, e não o que sobrou depois do perdido.
+            formatCurrency(status.amount + (status.forgiven ?? 0)),
+            status.forgiven ? `${formatCurrency(status.forgiven)} não vai ser pago` : null,
             status.remaining <= 0.005
-              ? "pago"
+              ? status.forgiven
+                ? null
+                : "pago"
               : status.paid > 0
                 ? `falta ${formatCurrency(status.remaining)}`
                 : null,
@@ -99,6 +111,7 @@ export async function loadDebts(userId: string, today: Date): Promise<DebtView[]
             .filter(Boolean)
             .join(" · "),
           settled: status.remaining <= 0.005,
+          remaining: status.remaining,
         };
       }),
     };

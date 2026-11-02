@@ -5,6 +5,9 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/auth-helpers";
 import { dateOnlyInputValue } from "@/lib/format";
+import { Refusal, refusing } from "@/lib/action-result";
+import { summarizeDebts } from "@/lib/loans";
+import { storedDay } from "@/lib/period";
 
 /**
  * O que o formulário de despesa precisa para o "Emprestado para alguém": as
@@ -87,4 +90,88 @@ export async function receiveLoanPayment(personId: string, formData: FormData) {
   revalidatePath("/");
   revalidatePath("/historico");
   return { transactionId: transaction.id };
+}
+
+const forgiveSchema = z.object({ loanIds: z.array(z.string().min(1)).min(1).max(200) });
+
+/**
+ * Dá como perdido o que falta dos empréstimos escolhidos de uma pessoa: ela
+ * não vai pagar. Sai do "A receber" e passa a contar como gasto seu (deixa de
+ * ser emprestado). O que falta é o de agora, com os pagamentos dela já
+ * abatidos do mais antigo para o mais novo. Devolve os ids para o "Desfazer".
+ */
+export async function forgiveLoans(personId: string, input: unknown) {
+  return refusing(async () => {
+    const userId = await requireUserId();
+    const { loanIds } = forgiveSchema.parse(input);
+    const person = await prisma.person.findFirst({
+      where: { id: personId, userId },
+      include: {
+        loans: {
+          include: {
+            transaction: { select: { date: true } },
+            cardPurchase: { select: { date: true } },
+          },
+        },
+        repayments: { include: { transaction: { select: { amount: true } } } },
+      },
+    });
+    if (!person) throw new Refusal("Pessoa não encontrada.");
+
+    const [debt] = summarizeDebts({
+      loans: person.loans.map((loan) => ({
+        id: loan.id,
+        personId,
+        amount: Number(loan.amount),
+        // A mesma ordem do "A receber" (loans-data): o dia da despesa.
+        date: (() => {
+          const source = loan.transaction ?? loan.cardPurchase;
+          return source ? storedDay(source.date) : loan.createdAt;
+        })(),
+        installments: loan.installments,
+        forgiven: Number(loan.forgiven),
+      })),
+      repayments: person.repayments.map((r) => ({
+        personId,
+        amount: -Number(r.transaction.amount),
+      })),
+      today: new Date(),
+    });
+    const wanted = new Set(loanIds);
+    const open = (debt?.loans ?? []).filter((l) => wanted.has(l.id) && l.remaining > 0.005);
+    if (open.length === 0) throw new Refusal("Esses empréstimos já não têm nada em aberto.");
+
+    const now = new Date();
+    const byId = new Map(person.loans.map((l) => [l.id, l]));
+    await prisma.$transaction(
+      open.map((l) =>
+        prisma.loan.update({
+          where: { id: l.id },
+          data: {
+            forgiven: Number(byId.get(l.id)!.forgiven) + l.remaining,
+            forgivenAt: now,
+          },
+        }),
+      ),
+    );
+    revalidatePath("/", "layout");
+    return {
+      loanIds: open.map((l) => l.id),
+      amount: Math.round(open.reduce((sum, l) => sum + l.remaining, 0) * 100) / 100,
+    };
+  });
+}
+
+/** Desfaz o "não vai pagar": os empréstimos voltam a ser devidos por inteiro. */
+export async function unforgiveLoans(input: unknown) {
+  return refusing(async () => {
+    const userId = await requireUserId();
+    const { loanIds } = forgiveSchema.parse(input);
+    await prisma.loan.updateMany({
+      where: { userId, id: { in: loanIds } },
+      data: { forgiven: 0, forgivenAt: null },
+    });
+    revalidatePath("/", "layout");
+    return { ok: true as const };
+  });
 }
