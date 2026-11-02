@@ -319,7 +319,7 @@ export default async function CardDetailPage({ params }: { params: Promise<{ id:
               </p>
               {/* À vista, e não num `title`: no toque, o `title` não existe. */}
               <p className="text-[11px] text-muted-foreground">
-                Faturas em aberto e parcelas que ainda vão cair.
+                Faturas em aberto, e as parcelas e previsões que ainda vão cair.
               </p>
               {limitUsage.overdueBillCount > 0 && (
                 <p className="text-[11px] text-muted-foreground">

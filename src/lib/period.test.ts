@@ -956,10 +956,13 @@ describe("getCardLimitUsage", () => {
     expect(usage.used).toBe(34.9);
   });
 
-  it("não conta previsão manual de uma fatura futura", () => {
+  it("conta a previsão manual de uma fatura futura, como uma parcela", () => {
+    // A previsão é um ajuste que a pessoa lança na fatura (uma parcela de
+    // algo comprado fora do app, um valor que o banco já segura): ocupa o
+    // limite como as parcelas, ao contrário da assinatura de um mês futuro.
     const estimates = [{ cardId: "c1", dueDate: day(2026, 5, 27), amount: 600 }];
     const usage = getCardLimitUsage({ card, purchases: [], billEstimates: estimates, today })!;
-    expect(usage.used).toBe(0);
+    expect(usage.used).toBe(600);
   });
 });
 
