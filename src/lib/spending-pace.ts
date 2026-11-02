@@ -183,7 +183,7 @@ export interface PaceWarning {
  * o próximo, que fecha no vermelho no ritmo de hoje (o cartão no ciclo da
  * fatura, como na Previsão). O alvo escala o ritmo inteiro: gastar X por dia
  * tira de cada trecho `X / perDay` do que o ritmo tira, e fecha quando o que
- * sobra em cada trecho até o ciclo do aviso zera. É a mesma conta do card da
+ * sobra nos dois ciclos zera — e nunca passa do número do dia. É a mesma conta do card da
  * Previsão, para a Início e o aviso no celular dizerem o mesmo número.
  */
 export function paceWarning(
@@ -191,6 +191,8 @@ export function paceWarning(
   periods: { periodStart: Date; periodEnd: Date; freeToSpend: number; endBalance: number }[],
   cards: { id: string; closingDay: number; dueDay: number }[],
   from: Date,
+  /** O número do dia: o alvo nunca manda gastar mais do que ele. */
+  maxPerDay = Infinity,
 ): PaceWarning | null {
   const window = periods.slice(0, 2);
   if (window.length === 0 || pace.perDay <= 0) return null;
@@ -205,14 +207,17 @@ export function paceWarning(
   );
   const floorCents = (n: number) => Math.max(0, Math.floor(n * 100 + 1e-6) / 100);
   let perDayTarget: number | null = null;
-  if (noSpend.slice(0, offset + 1).every((l) => l >= -0.005)) {
+  // O alvo olha os dois ciclos, e não só o que avisa: o cartão de agora vence
+  // no próximo, e um alvo que salvasse este empurraria a fatura para lá.
+  if (noSpend.every((l) => l >= -0.005)) {
     let spent = 0;
     const targets: number[] = [];
-    for (let k = 0; k <= offset; k++) {
+    for (let k = 0; k < window.length; k++) {
       spent += spend[k];
       if (spent > 0.005) targets.push(floorCents(pace.perDay + (left[k] * pace.perDay) / spent));
     }
-    perDayTarget = targets.length > 0 ? Math.min(...targets) : null;
+    perDayTarget =
+      targets.length > 0 ? Math.min(floorCents(maxPerDay), ...targets) : null;
   }
   const end = window[offset].periodEnd;
   return {

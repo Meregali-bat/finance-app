@@ -406,7 +406,10 @@ export default async function ForecastPage({
   const paceTarget =
     pace && spendNow && paceByCycle && paceDays > 0
       ? Math.min(
-          ...Array.from({ length: offset + 1 }, (_, k) => {
+          // Até o ciclo da tela e, no mínimo, o seguinte: o cartão de agora
+          // vence na fatura do próximo, e um alvo que só olhasse este ciclo
+          // empurraria o vermelho para lá (como o aviso da Início).
+          ...Array.from({ length: Math.min(periods.length, Math.max(offset + 1, 2)) }, (_, k) => {
             const spent = upTo(spendNow, k);
             return spent > 0.005
               ? floorCents(pace.perDay + (paceByCycle[k] * pace.perDay) / spent)

@@ -129,6 +129,23 @@ describe("paceWarning", () => {
     expect(paceWarning({ ...pace, perDay: 10, accountPerDay: 10 }, periods, [], tomorrow)).toBeNull();
   });
 
+  it("o alvo vale para os dois ciclos: o cartão de agora pesa na fatura do próximo", () => {
+    // R$ 10 na conta e R$ 90 no cartão por dia; a fatura fecha dia 1 e vence
+    // dia 10, então quase todo o cartão cai no próximo ciclo. Só pelo ciclo
+    // atual (que mal passa do livre), o alvo seria R$ 96,77; com o próximo,
+    // que recebe as faturas, é R$ 61,06.
+    const cardPace = { perDay: 100, accountPerDay: 10, cardPerDay: [{ cardId: "nu", perDay: 90 }] };
+    const tight = [{ ...periods[0], freeToSpend: 900 }, { ...periods[1], freeToSpend: 1500 }];
+    const w = paceWarning(cardPace, tight, [{ id: "nu", closingDay: 1, dueDay: 10 }], tomorrow)!;
+    expect(w.offset).toBe(0);
+    expect(w.perDayTarget).toBe(61.06);
+  });
+
+  it("o alvo nunca passa do número do dia", () => {
+    const w = paceWarning(pace, periods, [], tomorrow, 20)!;
+    expect(w.perDayTarget).toBe(20);
+  });
+
   it("se nem sem gastar fecha, sem alvo por dia", () => {
     const short = [{ ...periods[0], freeToSpend: 0, endBalance: -200 }, periods[1]];
     const w = paceWarning(pace, short, [], tomorrow)!;

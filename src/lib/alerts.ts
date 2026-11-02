@@ -68,11 +68,11 @@ export function dailyAlerts(inputs: BudgetInputs, today: Date): Alert[] {
     });
   }
 
-  const { budget, periods } = todayBudget(inputs, today);
+  const { budget, periods, dailyAvailable } = todayBudget(inputs, today);
 
   // No meio do ciclo, se o ritmo leva ao vermelho: quem precisa do aviso da
   // Previsão é quem não abre a Previsão. Uma vez por ciclo, no dia 10.
-  const pace = paceWarningFor(inputs, periods, today);
+  const pace = paceWarningFor(inputs, periods, today, dailyAvailable);
   if (pace && pace.elapsedDays === PACE_ALERT_DAY) {
     alerts.push({
       title: "No ritmo atual, vai faltar",
