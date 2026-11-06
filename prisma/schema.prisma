@@ -68,6 +68,7 @@ model User {
   budgetSlices           Json?
   jarWithdrawalPlans     JarWithdrawalPlan[]
   aiUsages               AiUsage[]
+  consents               Consent[]
 }
 
 model Category {
@@ -627,4 +628,21 @@ model AuthAttempt {
 
   @@index([keyHash, createdAt])
   @@index([createdAt])
+}
+
+/// Aceites que a LGPD pede, guardados para provar quando e qual versão a
+/// pessoa aceitou (art. 8º, § 2º). "terms" = termos de uso + política de
+/// privacidade, no cadastro ou em /aceite; "ai" = envio dos dados à Anthropic
+/// (EUA) nas análises com IA (art. 33, VIII). Revogar marca `revokedAt` e não
+/// apaga a linha; aceitar de novo cria outra. Versões em src/lib/legal.ts.
+model Consent {
+  id        String    @id @default(cuid())
+  userId    String
+  kind      String
+  version   String
+  createdAt DateTime  @default(now())
+  revokedAt DateTime?
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, kind, createdAt])
 }

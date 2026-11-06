@@ -36,10 +36,11 @@ vi.mock("@/auth", async () => {
 const { signUp } = await import("@/lib/actions/signup");
 const { TooManyAttempts } = await import("@/auth");
 
-function form(email: string, password = "senhaboa123") {
+function form(email: string, password = "senhaboa123", accept: string | null = "on") {
   const data = new FormData();
   data.set("email", email);
   data.set("password", password);
+  if (accept !== null) data.set("accept", accept);
   return data;
 }
 
@@ -81,5 +82,28 @@ describe("signUp com limite", () => {
     mocks.signIn.mockRejectedValue(new Error("NEXT_REDIRECT"));
     await expect(signUp(null, form("ana@x.com"))).rejects.toThrow("NEXT_REDIRECT");
     expect(mocks.redirect).not.toHaveBeenCalled();
+  });
+});
+
+describe("signUp com aceite dos termos", () => {
+  it("sem marcar o aceite, recusa no campo do aceite e não gasta tentativa", async () => {
+    const state = await signUp(null, form("ana@x.com", "senhaboa123", null));
+    expect(state).toMatchObject({ field: "accept", email: "ana@x.com" });
+    expect(state?.error).toContain("aceite os termos");
+    expect(mocks.reserve).not.toHaveBeenCalled();
+    expect(mocks.create).not.toHaveBeenCalled();
+  });
+
+  it("valor diferente de 'on' também não vale", async () => {
+    const state = await signUp(null, form("ana@x.com", "senhaboa123", "true"));
+    expect(state).toMatchObject({ field: "accept" });
+    expect(mocks.create).not.toHaveBeenCalled();
+  });
+
+  it("grava quando e qual versão foi aceita junto com a conta", async () => {
+    const { LEGAL_VERSION } = await import("@/lib/legal");
+    await signUp(null, form("ana@x.com"));
+    const data = mocks.create.mock.calls[0][0].data;
+    expect(data.consents).toEqual({ create: { kind: "terms", version: LEGAL_VERSION } });
   });
 });
