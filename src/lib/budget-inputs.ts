@@ -99,7 +99,7 @@ export async function loadBudgetInputs(userId: string): Promise<BudgetInputs> {
     }),
     prisma.creditCard.findMany({
       where: { userId },
-      include: { purchases: { include: { loans: { select: { amount: true, forgiven: true } } } } },
+      include: { purchases: { where: { userId }, include: { loans: { select: { amount: true, forgiven: true } } } } },
     }),
     prisma.transaction.findMany({
       where: { userId },

@@ -3,6 +3,7 @@
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/auth-helpers";
+import { withUserAiQuota } from "@/lib/ai-quota-store";
 import { Refusal, refusing } from "@/lib/action-result";
 import { toFixedExpenseInput } from "@/lib/budget-inputs";
 import {
@@ -49,7 +50,7 @@ export async function checkBillWithAi(cardId: string, prints: unknown) {
     const card = await prisma.creditCard.findUnique({
       where: { id: cardId, userId, deletedAt: null },
       include: {
-        purchases: true,
+        purchases: { where: { userId } },
         fixedExpenses: { include: { pauses: true } },
         billEstimates: true,
         payments: true,
@@ -121,23 +122,27 @@ export async function checkBillWithAi(cardId: string, prints: unknown) {
         createdAt: e.createdAt.toISOString(),
       }));
 
-    const ai = await askBillCheck({
-      card: { name: card.name, closingDay: card.closingDay, dueDay: card.dueDay },
-      today: localIso(today),
-      bill: {
-        dueDate: localIso(bill.dueDate),
-        cycleStart: localIso(bill.cycleStart),
-        cycleEnd: localIso(bill.cycleEnd),
-        total: Math.round(bill.amount * 100) / 100,
-        purchases: Math.round(bill.purchaseAmount * 100) / 100,
-        subscriptions: Math.round(bill.fixedExpenseAmount * 100) / 100,
-        estimates: Math.round(bill.estimateAmount * 100) / 100,
-      },
-      purchases: inBill,
-      subscriptions,
-      estimates,
-      prints: printsSchema.parse(prints ?? null),
-    });
+    // Antes da cota: um pedido malformado não pode gastar uma chamada.
+    const parsedPrints = printsSchema.parse(prints ?? null);
+    const ai = await withUserAiQuota(userId, "bill", () =>
+      askBillCheck({
+        card: { name: card.name, closingDay: card.closingDay, dueDay: card.dueDay },
+        today: localIso(today),
+        bill: {
+          dueDate: localIso(bill.dueDate),
+          cycleStart: localIso(bill.cycleStart),
+          cycleEnd: localIso(bill.cycleEnd),
+          total: Math.round(bill.amount * 100) / 100,
+          purchases: Math.round(bill.purchaseAmount * 100) / 100,
+          subscriptions: Math.round(bill.fixedExpenseAmount * 100) / 100,
+          estimates: Math.round(bill.estimateAmount * 100) / 100,
+        },
+        purchases: inBill,
+        subscriptions,
+        estimates,
+        prints: parsedPrints,
+      }),
+    );
 
     // Só correções que apontam para algo que existe: o resto vira comentário.
     const estimateById = new Map(estimates.map((e) => [e.id, e]));

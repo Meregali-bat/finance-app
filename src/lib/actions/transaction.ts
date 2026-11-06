@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/auth-helpers";
 import { parseLoanFields, syncLoan } from "@/lib/loan-sync";
+import { ownCategoryIdOrNull } from "@/lib/ownership";
 
 const transactionSchema = z.object({
   description: z.string().trim().min(1, "Informe uma descrição").max(120),
@@ -30,13 +31,16 @@ export async function createTransaction(formData: FormData) {
   // Só despesa se empresta; uma receita nunca leva empréstimo.
   const loan = data.type === "expense" && !transfer ? parseLoanFields(formData) : null;
 
+  // A categoria vem do navegador: só vale se for da pessoa.
+  const categoryId = transfer ? null : await ownCategoryIdOrNull(prisma, userId, data.categoryId);
+
   await prisma.$transaction(async (tx) => {
     const created = await tx.transaction.create({
       data: {
         userId,
         description: data.description,
         amount: data.type === "income" ? -data.amount : data.amount,
-        categoryId: transfer ? null : data.categoryId || null,
+        categoryId,
         transfer,
         ...(data.date ? { date: data.date } : {}),
       },
@@ -61,13 +65,16 @@ export async function updateTransaction(id: string, formData: FormData) {
 
   const loan = data.type === "expense" && !transfer ? parseLoanFields(formData) : null;
 
+  // A categoria vem do navegador: só vale se for da pessoa.
+  const categoryId = transfer ? null : await ownCategoryIdOrNull(prisma, userId, data.categoryId);
+
   await prisma.$transaction(async (tx) => {
     await tx.transaction.update({
       where: { id, userId },
       data: {
         description: data.description,
         amount: data.type === "income" ? -data.amount : data.amount,
-        categoryId: transfer ? null : data.categoryId || null,
+        categoryId,
         transfer,
         ...(data.date ? { date: data.date } : {}),
       },

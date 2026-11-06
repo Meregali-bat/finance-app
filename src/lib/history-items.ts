@@ -82,6 +82,7 @@ export async function loadHistoryItems(
         orderBy: { name: "asc" },
         include: {
           purchases: {
+            where: { userId },
             include: {
               category: { select: { id: true, name: true } },
               loans: {

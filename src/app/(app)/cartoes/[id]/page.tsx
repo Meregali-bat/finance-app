@@ -35,7 +35,7 @@ export default async function CardDetailPage({ params }: { params: Promise<{ id:
     prisma.creditCard.findUnique({
       where: { id, userId, deletedAt: null },
       include: {
-        purchases: { orderBy: { date: "desc" } },
+        purchases: { where: { userId }, orderBy: { date: "desc" } },
         // Todas, e não só as ativas: são as datas (cadastro, pausas, encerramento)
         // que dizem em quais faturas a assinatura entra — a mesma regra da Início.
         fixedExpenses: { include: { pauses: true } },

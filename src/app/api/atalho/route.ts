@@ -113,7 +113,7 @@ export async function POST(request: Request) {
       if (categoryId) {
         const [overview, category] = await Promise.all([
           loadSlicesOverview(userId, new Date()),
-          prisma.category.findUnique({ where: { id: categoryId } }),
+          prisma.category.findFirst({ where: { id: categoryId, userId } }),
         ]);
         const key = category ? sliceOfCategory(category) : null;
         const usage = overview.usage.find((u) => u.key === key);

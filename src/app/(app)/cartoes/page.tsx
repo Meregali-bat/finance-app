@@ -21,7 +21,7 @@ export default async function CardsPage() {
     where: { userId, deletedAt: null },
     orderBy: { name: "asc" },
     include: {
-      purchases: true,
+      purchases: { where: { userId } },
       // Todas, e não só as ativas: são as datas (cadastro, pausas, encerramento)
       // que dizem em quais faturas a assinatura entra — a mesma regra da Início.
       fixedExpenses: { include: { pauses: true } },

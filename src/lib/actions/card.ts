@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/auth-helpers";
 import { isCardStyle } from "@/lib/card-look";
 import { parseLoanFields, syncLoan } from "@/lib/loan-sync";
+import { ownCard, ownCategoryIdOrNull } from "@/lib/ownership";
 
 const cardSchema = z.object({
   name: z.string().trim().min(1, "Informe um nome").max(80),
@@ -115,10 +116,14 @@ export async function createCardPurchase(cardId: string, formData: FormData) {
     categoryId: formData.get("categoryId"),
   });
 
+  // O cartão e a categoria vêm do navegador: só valem se forem da pessoa.
+  await ownCard(prisma, userId, cardId);
+  const ownCategoryId = await ownCategoryIdOrNull(prisma, userId, categoryId);
+
   const loan = parseLoanFields(formData);
   await prisma.$transaction(async (tx) => {
     const purchase = await tx.cardPurchase.create({
-      data: { ...data, categoryId: categoryId || null, cardId, userId },
+      data: { ...data, categoryId: ownCategoryId, cardId, userId },
       select: { id: true },
     });
     // Comprado para alguém: a pessoa deve o total, mesmo parcelado no cartão.
@@ -142,11 +147,13 @@ export async function updateCardPurchase(id: string, cardId: string, formData: F
     categoryId: formData.get("categoryId"),
   });
 
+  const ownCategoryId = await ownCategoryIdOrNull(prisma, userId, categoryId);
+
   const loan = parseLoanFields(formData);
   await prisma.$transaction(async (tx) => {
     await tx.cardPurchase.update({
       where: { id, userId },
-      data: { ...data, categoryId: categoryId || null },
+      data: { ...data, categoryId: ownCategoryId },
     });
     await syncLoan(tx, userId, { cardPurchaseId: id }, loan, data.amount);
   });
