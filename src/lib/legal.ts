@@ -78,7 +78,7 @@ export function hasCurrentConsent(records: ConsentRecord[], kind: ConsentKind): 
 }
 
 /** Rotas que qualquer pessoa abre, com ou sem conta. */
-export const PUBLIC_PATHS = ["/privacidade", "/termos"] as const;
+export const PUBLIC_PATHS = ["/conheca", "/privacidade", "/termos"] as const;
 
 export function isPublicPath(pathname: string): boolean {
   return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
