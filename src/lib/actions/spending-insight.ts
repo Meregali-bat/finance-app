@@ -4,6 +4,7 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/auth-helpers";
+import { withUserAiQuota } from "@/lib/ai-quota-store";
 import { Refusal, refusing } from "@/lib/action-result";
 import { loadBudgetInputs } from "@/lib/budget-inputs";
 import { loadHistoryItems } from "@/lib/history-items";
@@ -136,18 +137,20 @@ export async function analyzeSpending() {
     const saved = [...savedBySlice].map(([slice, total]) => ({ slice, total }));
     const current = user.budgetSlices as Record<SliceKey, number> | null;
 
-    const ai = await askSpendingInsight({
-      periods,
-      income: Math.round((income / periods) * 100) / 100,
-      categories: categoryRows
-        .filter((c) => c.active)
-        .map((c) => ({ name: c.name, slice: categoriesById.get(c.id)!.slice })),
-      current,
-      byCategory: categoryTotals(spend, categoriesById),
-      groups: groups.map((g) => ({ group: g.key, description: g.description, count: g.count, total: g.total })),
-      smallTotal,
-      saved,
-    });
+    const ai = await withUserAiQuota(userId, "spending", () =>
+      askSpendingInsight({
+        periods,
+        income: Math.round((income / periods) * 100) / 100,
+        categories: categoryRows
+          .filter((c) => c.active)
+          .map((c) => ({ name: c.name, slice: categoriesById.get(c.id)!.slice })),
+        current,
+        byCategory: categoryTotals(spend, categoriesById),
+        groups: groups.map((g) => ({ group: g.key, description: g.description, count: g.count, total: g.total })),
+        smallTotal,
+        saved,
+      }),
+    );
 
     // Só vale categoria que existe ou que a IA criou; o resto fica sem sugestão.
     const existing = new Map(categoryRows.map((c) => [normalizeName(c.name), categoriesById.get(c.id)!]));

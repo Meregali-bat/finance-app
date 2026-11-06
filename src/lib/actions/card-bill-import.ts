@@ -73,9 +73,9 @@ export async function analyzeCardBill(
     cards[0].id;
 
   const card = await prisma.creditCard.findUniqueOrThrow({
-    where: { id: cardId },
+    where: { id: cardId, userId },
     include: {
-      purchases: true,
+      purchases: { where: { userId } },
       fixedExpenses: { include: { pauses: true } },
       billEstimates: true,
       payments: true,

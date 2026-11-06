@@ -67,6 +67,7 @@ model User {
   /// não configuradas, e o número do dia não reserva nada para guardar.
   budgetSlices           Json?
   jarWithdrawalPlans     JarWithdrawalPlan[]
+  aiUsages               AiUsage[]
 }
 
 model Category {
@@ -599,4 +600,18 @@ model JarWithdrawalPlan {
 
   @@index([jarId])
   @@index([userId])
+}
+
+/// Uma chamada à IA, para a cota por pessoa (src/lib/ai-quota.ts). A linha é
+/// gravada antes da chamada, dentro de um lock da pessoa: duas abas ao mesmo
+/// tempo não passam juntas da cota. Se a API nem respondeu, a linha sai.
+model AiUsage {
+  id        String   @id @default(cuid())
+  userId    String
+  /// Qual das análises: "spending", "statement", "bill", "screenshots".
+  feature   String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
 }

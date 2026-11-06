@@ -4,6 +4,7 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/auth-helpers";
+import { withUserAiQuota } from "@/lib/ai-quota-store";
 import { Refusal, refusing } from "@/lib/action-result";
 import { pdfTextItems } from "@/lib/statement/pdf";
 import { parseStatement } from "@/lib/statement/parse";
@@ -60,11 +61,13 @@ export async function reviewStatementWithAi(formData: FormData) {
       amount: Number(t.amount),
     }));
 
-    const raw = await askStatementReview({
-      pdfBase64: Buffer.from(bytes).toString("base64"),
-      records,
-      hint,
-    });
+    const raw = await withUserAiQuota(userId, "statement", () =>
+      askStatementReview({
+        pdfBase64: Buffer.from(bytes).toString("base64"),
+        records,
+        hint,
+      }),
+    );
     const issues = reviewFixes(raw, records);
     // Para o dev: o leitor deste banco deixou passar algo. Aparece nos logs da Vercel.
     if (issues.length > 0) {

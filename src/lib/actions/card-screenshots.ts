@@ -4,8 +4,10 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/auth-helpers";
+import { withUserAiQuota } from "@/lib/ai-quota-store";
 import { Refusal, refusing } from "@/lib/action-result";
 import { categoryFromHistory } from "@/lib/category-from-history";
+import { ownCard } from "@/lib/ownership";
 import {
   keepFingerprint,
   linkedAmount,
@@ -44,15 +46,6 @@ function revalidateCard(cardId: string) {
   revalidatePath("/historico");
 }
 
-async function ownCard(userId: string, cardId: string) {
-  const card = await prisma.creditCard.findFirst({
-    where: { id: cardId, userId, deletedAt: null },
-    select: { id: true },
-  });
-  if (!card) throw new Refusal("Cartão não encontrado.");
-  return card.id;
-}
-
 /**
  * Lê as prints da tela de lançamentos do banco e concilia com as compras do
  * cartão. Não grava nada: cada diferença é resolvida por uma action abaixo.
@@ -60,7 +53,7 @@ async function ownCard(userId: string, cardId: string) {
 export async function analyzeCardScreenshots(cardId: string, formData: FormData) {
   return refusing(async (): Promise<ShotAnalysis> => {
     const userId = await requireUserId();
-    await ownCard(userId, cardId);
+    await ownCard(prisma, userId, cardId);
     if (!process.env.ANTHROPIC_API_KEY) {
       throw new Refusal("A leitura de prints não está configurada (falta ANTHROPIC_API_KEY).");
     }
@@ -76,7 +69,11 @@ export async function analyzeCardScreenshots(cardId: string, formData: FormData)
       });
     }
 
-    const { lines, skipped } = prepareShotLines(await readCardScreenshots(images), cardId, new Date());
+    const { lines, skipped } = prepareShotLines(
+      await withUserAiQuota(userId, "screenshots", () => readCardScreenshots(images)),
+      cardId,
+      new Date(),
+    );
     if (lines.length === 0) throw new Refusal("Não achei compras nessas prints.");
     return conciliate(userId, cardId, lines, skipped);
   });
@@ -106,7 +103,7 @@ const savedSchema = z.object({
 export async function reconcileSavedShots(cardId: string, input: unknown) {
   return refusing(async (): Promise<ShotAnalysis> => {
     const userId = await requireUserId();
-    await ownCard(userId, cardId);
+    await ownCard(prisma, userId, cardId);
     const { lines, skipped } = savedSchema.parse(input);
     // Só as linhas lidas para este cartão.
     const own = lines.filter((l) => l.fingerprint.startsWith(`shot|${cardId}|`));
@@ -187,7 +184,7 @@ const lineSchema = z.object({
 export async function addShotPurchase(cardId: string, input: unknown) {
   return refusing(async () => {
     const userId = await requireUserId();
-    await ownCard(userId, cardId);
+    await ownCard(prisma, userId, cardId);
     const line = lineSchema.parse(input);
     const category = line.categoryId
       ? await prisma.category.findFirst({ where: { id: line.categoryId, userId }, select: { id: true } })

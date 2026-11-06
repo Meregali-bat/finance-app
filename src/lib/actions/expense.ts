@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/auth-helpers";
 import { Refusal, refusing } from "@/lib/action-result";
 import { toFixedExpenseInput } from "@/lib/budget-inputs";
+import { ownCard, ownCategoryIdOrNull } from "@/lib/ownership";
 import {
   deferralTargetDate,
   installmentSpan,
@@ -47,13 +48,14 @@ export async function createFixedExpense(formData: FormData) {
       installmentCount: formData.get("installmentCount"),
     });
 
+    // O cartão e a categoria vêm do navegador: só valem se forem da pessoa.
+    const card = cardId ? await ownCard(prisma, userId, cardId) : null;
+    const ownCategoryId = await ownCategoryIdOrNull(prisma, userId, categoryId);
+
     // A cobrança deste mês já foi lançada à mão: a despesa começa na seguinte,
     // para não contar duas vezes (ver startAfterCurrentCharge).
     let createdAt: Date | undefined;
     if (formData.get("skipCurrent") === "1") {
-      const card = cardId
-        ? await prisma.creditCard.findFirst({ where: { id: cardId, userId } })
-        : null;
       createdAt = startAfterCurrentCharge(
         card ? { closingDay: card.closingDay } : { dueDay: dueDay ?? null },
         new Date(),
@@ -68,8 +70,8 @@ export async function createFixedExpense(formData: FormData) {
         // No cartão o parcelamento é da compra, não da despesa.
         installmentCount: cardId ? null : (installmentCount ?? null),
         installmentsFrom: installmentsFromFor(cardId, dueDay, installmentCount, createdAt),
-        cardId: cardId || null,
-        categoryId: categoryId || null,
+        cardId: card?.id ?? null,
+        categoryId: ownCategoryId,
         userId,
       },
     });
@@ -107,6 +109,10 @@ export async function updateFixedExpense(id: string, formData: FormData) {
       installmentCount: formData.get("installmentCount"),
     });
 
+    // O cartão e a categoria vêm do navegador: só valem se forem da pessoa.
+    const card = cardId ? await ownCard(prisma, userId, cardId) : null;
+    const ownCategoryId = await ownCategoryIdOrNull(prisma, userId, categoryId);
+
     // A parcela deste mês paga adiantada não conta entre as que faltam.
     const paid = await prisma.expensePayment.findMany({
       where: {
@@ -143,8 +149,8 @@ export async function updateFixedExpense(id: string, formData: FormData) {
               ? null
               : (installmentCount ?? null),
         installmentsFrom,
-        cardId: cardId || null,
-        categoryId: categoryId || null,
+        cardId: card?.id ?? null,
+        categoryId: ownCategoryId,
       },
     });
     revalidatePath("/rendas");
