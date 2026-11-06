@@ -9,10 +9,11 @@ import { prisma } from "@/lib/prisma";
 import { DEFAULT_CATEGORIES } from "@/lib/default-categories";
 import { clientIp, rateLimitMessage, reserveAttempt, signupRules } from "@/lib/auth-rate-limit";
 import { prismaAttemptStore } from "@/lib/auth-rate-limit-store";
+import { LEGAL_VERSION } from "@/lib/legal";
 
 export type SignUpState = {
   error?: string;
-  field?: "email" | "password";
+  field?: "email" | "password" | "accept";
   /** Devolvido para o campo não esvaziar a cada erro. */
   email?: string;
 } | null;
@@ -25,6 +26,9 @@ const signUpSchema = z.object({
     .string()
     .min(MIN_PASSWORD, `A senha precisa de pelo menos ${MIN_PASSWORD} caracteres.`)
     .max(200),
+  // O aceite dos termos e da política: sem ele, não há conta. O servidor
+  // confere, porque o `required` do navegador se contorna com um POST direto.
+  accept: z.literal("on", "Para criar a conta, aceite os termos de uso e a política de privacidade."),
 });
 
 /**
@@ -36,13 +40,14 @@ export async function signUp(_prev: SignUpState, formData: FormData): Promise<Si
   const parsed = signUpSchema.safeParse({
     email: formData.get("email") ?? "",
     password: formData.get("password") ?? "",
+    accept: formData.get("accept") ?? "",
   });
   const email = String(formData.get("email") ?? "");
   if (!parsed.success) {
     const issue = parsed.error.issues[0];
     return {
       error: issue.message,
-      field: issue.path[0] === "password" ? "password" : "email",
+      field: issue.path[0] === "password" ? "password" : issue.path[0] === "accept" ? "accept" : "email",
       email,
     };
   }
@@ -67,6 +72,8 @@ export async function signUp(_prev: SignUpState, formData: FormData): Promise<Si
       email: parsed.data.email,
       passwordHash,
       categories: { create: DEFAULT_CATEGORIES.map((name) => ({ name })) },
+      // Quando e qual versão foi aceita, na mesma escrita da conta.
+      consents: { create: { kind: "terms", version: LEGAL_VERSION } },
     },
   });
 

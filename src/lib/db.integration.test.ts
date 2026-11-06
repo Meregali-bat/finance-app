@@ -25,6 +25,8 @@ describe.skipIf(!enabled)("banco de verdade", async () => {
     "@/lib/auth-rate-limit"
   );
 
+  const consentStore = await import("@/lib/consent-store");
+  const legal = await import("@/lib/legal");
   const tag = `it-${Date.now()}`;
   let ana: string;
   let bia: string;
@@ -128,5 +130,21 @@ describe.skipIf(!enabled)("banco de verdade", async () => {
       ),
     );
     expect(results.filter((r) => r.ok)).toHaveLength(AUTH_LIMITS.signupEmail.limit);
+  });
+
+  it("consentimento da IA: grava, revoga sem apagar e aceita de novo", async () => {
+    await consentStore.recordConsent(ana, "ai");
+    expect(legal.hasCurrentConsent(await consentStore.loadConsents(ana), "ai")).toBe(true);
+    await consentStore.revokeConsent(ana, "ai");
+    const revoked = await consentStore.loadConsents(ana);
+    expect(legal.hasCurrentConsent(revoked, "ai")).toBe(false);
+    expect(revoked.filter((c) => c.kind === "ai")).toHaveLength(1);
+    await new Promise((r) => setTimeout(r, 5));
+    await consentStore.recordConsent(ana, "ai");
+    const again = await consentStore.loadConsents(ana);
+    expect(legal.hasCurrentConsent(again, "ai")).toBe(true);
+    expect(again.filter((c) => c.kind === "ai")).toHaveLength(2);
+    // O de bia não muda.
+    expect(legal.hasCurrentConsent(await consentStore.loadConsents(bia), "ai")).toBe(false);
   });
 });

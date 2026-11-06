@@ -3,6 +3,7 @@
 import { useEffect, useState, useTransition } from "react";
 import { CircleCheck, ImageUp, Link2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useAiConsent } from "@/components/ai-consent";
 import { homeCard } from "@/components/home-card";
 import { SectionLabel } from "@/components/page-header";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -86,6 +87,7 @@ export function CardScreenshotCheck({ cardId }: { cardId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [reading, startReading] = useTransition();
   const [saving, startSaving] = useTransition();
+  const ensureAiConsent = useAiConsent();
 
   // Voltando à tela: a leitura guardada, conciliada com o app de agora.
   useEffect(() => {
@@ -108,7 +110,9 @@ export function CardScreenshotCheck({ cardId }: { cardId: string }) {
     setLinking(null);
   }
 
-  function read(files: File[]) {
+  async function read(files: File[]) {
+    // Antes do "carregando": o pedido de autorização aparece com a tela parada.
+    if (!(await ensureAiConsent())) return;
     setError(null);
     setLinking(null);
     startReading(async () => {

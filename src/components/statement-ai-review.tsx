@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { CircleCheck, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useAiConsent } from "@/components/ai-consent";
 import { Input } from "@/components/ui/input";
 import { homeCard } from "@/components/home-card";
 import { SectionLabel } from "@/components/page-header";
@@ -40,8 +41,11 @@ export function StatementAiReview({ file }: { file: File }) {
   const [error, setError] = useState<string | null>(null);
   const [reviewing, startReviewing] = useTransition();
   const [saving, startSaving] = useTransition();
+  const ensureAiConsent = useAiConsent();
 
-  function review() {
+  async function review() {
+    // Antes do "carregando": o pedido de autorização aparece com a tela parada.
+    if (!(await ensureAiConsent())) return;
     setError(null);
     const data = new FormData();
     data.set("file", file);

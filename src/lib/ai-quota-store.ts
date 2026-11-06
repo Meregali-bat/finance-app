@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { withAiQuota, type AiFeature, type AiUsageStore } from "@/lib/ai-quota";
+import { requireAiConsent } from "@/lib/consent-store";
 
 /**
  * A cota de IA gravada no banco (tabela AiUsage).
@@ -27,7 +28,12 @@ export const prismaAiUsageStore: AiUsageStore = {
   },
 };
 
-/** `withAiQuota` com o banco de verdade: o que as actions chamam. */
-export function withUserAiQuota<T>(userId: string, feature: AiFeature, call: () => Promise<T>) {
+/**
+ * `withAiQuota` com o banco de verdade: o que as actions chamam. Antes da
+ * cota, confere o consentimento para mandar os dados à Anthropic: sem ele,
+ * recusa sem gastar chamada e sem enviar nada.
+ */
+export async function withUserAiQuota<T>(userId: string, feature: AiFeature, call: () => Promise<T>) {
+  await requireAiConsent(userId);
   return withAiQuota(prismaAiUsageStore, userId, feature, call);
 }
