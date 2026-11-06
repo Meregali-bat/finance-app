@@ -1,10 +1,13 @@
 "use server";
 
 import bcrypt from "bcryptjs";
+import { headers } from "next/headers";
 import { z } from "zod";
 import { signIn } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { DEFAULT_CATEGORIES } from "@/lib/default-categories";
+import { clientIp, rateLimitMessage, reserveAttempt, signupRules } from "@/lib/auth-rate-limit";
+import { prismaAttemptStore } from "@/lib/auth-rate-limit-store";
 
 export type SignUpState = {
   error?: string;
@@ -42,6 +45,12 @@ export async function signUp(_prev: SignUpState, formData: FormData): Promise<Si
       email,
     };
   }
+
+  // Conta toda tentativa que passou da validação, deu certo ou não: o limite
+  // é para criar contas em lote e para testar quais e-mails já têm conta.
+  const ip = clientIp(await headers());
+  const attempt = await reserveAttempt(prismaAttemptStore, signupRules(parsed.data.email, ip));
+  if (!attempt.ok) return { error: rateLimitMessage(attempt.minutes), field: "email", email };
 
   const existing = await prisma.user.findFirst({
     where: { email: { equals: parsed.data.email, mode: "insensitive" } },

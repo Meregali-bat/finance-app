@@ -615,3 +615,16 @@ model AiUsage {
 
   @@index([userId, createdAt])
 }
+
+/// Tentativas de login (senha errada) e de cadastro, para o limite em
+/// src/lib/auth-rate-limit.ts. A chave (e-mail ou IP) fica só como hash.
+/// Linhas mais velhas que a maior janela são apagadas a cada tentativa.
+model AuthAttempt {
+  id        String   @id @default(cuid())
+  /// sha256 de "login:email:…", "login:ip:…", "signup:email:…" ou "signup:ip:…".
+  keyHash   String
+  createdAt DateTime @default(now())
+
+  @@index([keyHash, createdAt])
+  @@index([createdAt])
+}

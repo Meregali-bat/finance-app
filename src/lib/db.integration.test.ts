@@ -20,6 +20,10 @@ describe.skipIf(!enabled)("banco de verdade", async () => {
   const { withAiQuota } = await import("@/lib/ai-quota");
   const { createCardPurchase } = await import("@/lib/actions/card");
   const { createTransaction } = await import("@/lib/actions/transaction");
+  const { prismaAttemptStore } = await import("@/lib/auth-rate-limit-store");
+  const { AUTH_LIMITS, guardLogin, hashKey, loginRules, reserveAttempt, signupRules } = await import(
+    "@/lib/auth-rate-limit"
+  );
 
   const tag = `it-${Date.now()}`;
   let ana: string;
@@ -38,6 +42,12 @@ describe.skipIf(!enabled)("banco de verdade", async () => {
 
   afterAll(async () => {
     await prisma.user.deleteMany({ where: { id: { in: [ana, bia] } } });
+    const keys = [
+      ...loginRules(`alvo-${tag}@x.test`, `ip-${tag}`),
+      ...loginRules(`certa-${tag}@x.test`, null),
+      ...signupRules(`novo-${tag}@x.test`, `ip2-${tag}`),
+    ].map((r) => hashKey(r.key));
+    await prisma.authAttempt.deleteMany({ where: { keyHash: { in: keys } } });
     await prisma.$disconnect();
   });
 
@@ -91,5 +101,32 @@ describe.skipIf(!enabled)("banco de verdade", async () => {
       }),
     ).rejects.toBeInstanceOf(APIConnectionError);
     expect(await prisma.aiUsage.count({ where: { userId: ana } })).toBe(before);
+  });
+
+  it("o limite de login segura senhas erradas em paralelo", async () => {
+    const wrong = () => new Promise<null>((r) => setTimeout(() => r(null), 20));
+    const results = await Promise.all(
+      Array.from({ length: 12 }, () => guardLogin(prismaAttemptStore, `alvo-${tag}@x.test`, `ip-${tag}`, wrong)),
+    );
+    expect(results.filter((r) => !r.limited)).toHaveLength(AUTH_LIMITS.loginEmail.limit);
+    const emailKey = hashKey(loginRules(`alvo-${tag}@x.test`, null)[0].key);
+    expect(await prisma.authAttempt.count({ where: { keyHash: emailKey } })).toBe(AUTH_LIMITS.loginEmail.limit);
+  });
+
+  it("login certo apaga a própria tentativa e as erradas da conta", async () => {
+    const email = `certa-${tag}@x.test`;
+    await guardLogin(prismaAttemptStore, email, null, async () => null);
+    await guardLogin(prismaAttemptStore, email, null, async () => ({ id: "x" }));
+    const key = hashKey(loginRules(email, null)[0].key);
+    expect(await prisma.authAttempt.count({ where: { keyHash: key } })).toBe(0);
+  });
+
+  it("o limite de cadastro segura pedidos em paralelo", async () => {
+    const results = await Promise.all(
+      Array.from({ length: 8 }, () =>
+        reserveAttempt(prismaAttemptStore, signupRules(`novo-${tag}@x.test`, `ip2-${tag}`)),
+      ),
+    );
+    expect(results.filter((r) => r.ok)).toHaveLength(AUTH_LIMITS.signupEmail.limit);
   });
 });

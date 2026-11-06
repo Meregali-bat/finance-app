@@ -2,20 +2,21 @@ import { AuthError } from "next-auth";
 import { Check } from "lucide-react";
 import { Logo } from "@/components/logo";
 import { redirect } from "next/navigation";
-import { signIn } from "@/auth";
+import { signIn, TooManyAttempts } from "@/auth";
 import Link from "next/link";
 import { SubmitButton } from "./submit-button";
 import { FIELD } from "./field";
 import { PasswordInput } from "./password-input";
 import { SignUpForm } from "./sign-up-form";
 import { cn } from "@/lib/utils";
+import { rateLimitMessage } from "@/lib/auth-rate-limit";
 
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; modo?: string }>;
+  searchParams: Promise<{ error?: string; modo?: string; min?: string }>;
 }) {
-  const { error, modo } = await searchParams;
+  const { error, modo, min } = await searchParams;
   const creating = modo === "criar";
 
   async function authenticate(formData: FormData) {
@@ -27,6 +28,9 @@ export default async function LoginPage({
         redirectTo: "/",
       });
     } catch (err) {
+      if (err instanceof TooManyAttempts) {
+        redirect(`/login?error=limite&min=${err.minutes}`);
+      }
       if (err instanceof AuthError) {
         redirect("/login?error=1");
       }
@@ -120,7 +124,7 @@ export default async function LoginPage({
               </label>
               {error && (
                 <p role="alert" className="text-sm text-negative">
-                  Email ou senha não conferem.
+                  {error === "limite" ? rateLimitMessage(min ? Number(min) : null) : "Email ou senha não conferem."}
                 </p>
               )}
               <SubmitButton />
