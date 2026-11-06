@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { CircleCheck, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useAiConsent } from "@/components/ai-consent";
 import { homeCard } from "@/components/home-card";
 import { checkBillWithAi, type BillCheckResult } from "@/lib/actions/bill-check";
 import { deleteCardBillEstimate } from "@/lib/actions/card-bill-estimate";
@@ -49,7 +50,11 @@ export function BillAiCheck({ cardId }: { cardId: string }) {
   const [checking, startChecking] = useTransition();
   const [saving, startSaving] = useTransition();
 
-  function check() {
+  const ensureAiConsent = useAiConsent();
+
+  async function check() {
+    // Antes do "carregando": o pedido de autorização aparece com a tela parada.
+    if (!(await ensureAiConsent())) return;
     setError(null);
     startChecking(async () => {
       try {

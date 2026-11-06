@@ -4,6 +4,7 @@ import { startTransition, useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Check, Lightbulb, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useAiConsent } from "@/components/ai-consent";
 import { homeCard } from "@/components/home-card";
 import { SectionLabel } from "@/components/page-header";
 import {
@@ -54,6 +55,7 @@ export function SpendingInsight() {
   const [error, setError] = useState<string | null>(null);
   const [analyzing, startAnalyzing] = useTransition();
   const [saving, startSaving] = useTransition();
+  const ensureAiConsent = useAiConsent();
 
   // Lido depois de montar: no servidor não existe localStorage.
   useEffect(() => {
@@ -66,7 +68,9 @@ export function SpendingInsight() {
     store(next);
   }
 
-  function analyze() {
+  async function analyze() {
+    // Antes do "carregando": o pedido de autorização aparece com a tela parada.
+    if (!(await ensureAiConsent())) return;
     setError(null);
     startAnalyzing(async () => {
       try {

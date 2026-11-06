@@ -1,11 +1,6 @@
 import type { NextAuthConfig } from "next-auth";
 import { NextResponse } from "next/server";
-
-/**
- * Páginas que qualquer pessoa abre sem conta: a landing e as páginas legais,
- * que a landing e o cadastro linkam.
- */
-const PUBLIC_PATHS = new Set(["/conheca", "/privacidade", "/termos"]);
+import { isPublicPath } from "@/lib/legal";
 
 export const authConfig = {
   pages: { signIn: "/login" },
@@ -15,7 +10,8 @@ export const authConfig = {
       const isLoggedIn = !!auth?.user;
       const { pathname } = nextUrl;
 
-      if (PUBLIC_PATHS.has(pathname)) return true;
+      // Landing, termos e política abrem sem conta: quem vai se cadastrar lê antes.
+      if (isPublicPath(pathname)) return true;
 
       // Quem chega sem conta pelo endereço do app vê a landing, no mesmo
       // endereço; logado, o "/" continua sendo a tela inicial do app.

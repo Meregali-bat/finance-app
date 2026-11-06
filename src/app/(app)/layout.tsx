@@ -3,6 +3,9 @@ import { SidebarNav } from "@/components/sidebar-nav";
 import { redirect } from "next/navigation";
 import { requireUserId } from "@/lib/auth-helpers";
 import { prisma } from "@/lib/prisma";
+import { hasCurrentConsent } from "@/lib/legal";
+import { loadConsents } from "@/lib/consent-store";
+import { AiConsentProvider } from "@/components/ai-consent";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const userId = await requireUserId();
@@ -13,6 +16,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // Conta nova, que ainda não terminou o primeiro uso: sem renda não existe
   // "quanto posso gastar hoje", então o app começa pelo passo a passo.
   if (!user?.onboardedAt) redirect("/comecar");
+  // Conta de antes dos termos, ou termos que mudaram: aceita antes de seguir.
+  const consents = await loadConsents(userId);
+  if (!hasCurrentConsent(consents, "terms")) redirect("/aceite");
+  const aiConsented = hasCurrentConsent(consents, "ai");
   return (
     <div className="flex min-h-screen flex-col lg:flex-row">
       <div aria-hidden="true" className="app-backdrop" />
@@ -21,7 +28,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           lado da barra lateral, o `max-w-*` limita e as margens automáticas
           centralizam a coluna dentro desse espaço. */}
       <main className="mx-auto w-full max-w-lg flex-1 px-4 pb-24 pt-[max(1.5rem,calc(env(safe-area-inset-top)+0.75rem))] lg:max-w-[68rem] lg:px-8 lg:py-10 2xl:max-w-[96rem]">
-        {children}
+        <AiConsentProvider initial={aiConsented}>{children}</AiConsentProvider>
       </main>
       <BottomNav />
     </div>
