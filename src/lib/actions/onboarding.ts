@@ -18,3 +18,30 @@ export async function finishOnboarding() {
   revalidatePath("/", "layout");
   redirect("/comecar/pronto");
 }
+
+/**
+ * Tirar uma renda ou conta no meio do primeiro uso: um engano de digitação, não
+ * um encerramento. Apaga de verdade, e com ela o recebimento ou o pagamento que
+ * o "já caiu"/"já paguei" do passo gravou — o apagar comum mantém a linha e
+ * deixaria esse dinheiro no Histórico e no período, por uma renda ou conta que
+ * nunca existiu. Só antes de terminar o primeiro uso; depois, valem os de
+ * sempre.
+ */
+async function stillOnboarding(userId: string): Promise<boolean> {
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { onboardedAt: true } });
+  return user != null && user.onboardedAt == null;
+}
+
+export async function discardOnboardingIncome(id: string) {
+  const userId = await requireUserId();
+  if (!(await stillOnboarding(userId))) throw new Error("O primeiro uso já terminou");
+  await prisma.income.deleteMany({ where: { id, userId } });
+  revalidatePath("/comecar");
+}
+
+export async function discardOnboardingExpense(id: string) {
+  const userId = await requireUserId();
+  if (!(await stillOnboarding(userId))) throw new Error("O primeiro uso já terminou");
+  await prisma.fixedExpense.deleteMany({ where: { id, userId } });
+  revalidatePath("/comecar");
+}

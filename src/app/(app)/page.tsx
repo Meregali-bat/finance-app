@@ -301,6 +301,11 @@ export default async function DashboardPage() {
   const categoryNameById = new Map(categories.map((c) => [c.id, c.name]));
   const heading = longHeading(today);
 
+  // Quando o saldo foi informado pela última vez: o "Pagar" oferece dizer que a
+  // conta já tinha saído dele, para não sair de novo.
+  const readingAt = inputs.account.adjustment?.createdAt ?? null;
+  const readingLabel = readingAt ? formatDate(readingAt) : null;
+
   const reminders: HomeReminder[] = [
     ...budget.cardBillReminders.map((bill) => ({
       kind: "due" as const,
@@ -316,6 +321,7 @@ export default async function DashboardPage() {
       deferredIn: 0,
       allowPartial: true,
       paidSoFar: bill.paidSoFar ?? 0,
+      readingLabel,
     })),
     ...budget.fixedExpenseReminders.map((exp) => ({
       kind: "due" as const,
@@ -333,6 +339,7 @@ export default async function DashboardPage() {
       deferredIn: exp.deferredIn ?? 0,
       allowPartial: true,
       paidSoFar: exp.paidSoFar ?? 0,
+      readingLabel,
     })),
     ...budget.incomeReminders.map((inc) => ({
       kind: "income" as const,

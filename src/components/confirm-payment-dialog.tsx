@@ -34,6 +34,7 @@ export function ConfirmPaymentDialog({
   cards,
   allowPartial = false,
   paidSoFar = 0,
+  readingLabel,
   trigger,
   triggerText,
   onDone,
@@ -52,6 +53,12 @@ export function ConfirmPaymentDialog({
   allowPartial?: boolean;
   /** O que os parciais anteriores já pagaram; `amount` é só o que falta. */
   paidSoFar?: number;
+  /**
+   * O dia da última leitura do saldo, "7 de nov.". Com ele, o diálogo deixa
+   * dizer que o pagamento já tinha saído do saldo informado — o caso de quem
+   * começa no meio do mês com as contas pagas —, e ele não sai de novo.
+   */
+  readingLabel?: string;
   trigger?: IconTrigger;
   /** O texto do botão padrão, quando "Marcar como paga" não diz qual. */
   triggerText?: string;
@@ -63,6 +70,7 @@ export function ConfirmPaymentDialog({
 }) {
   const [open, setOpen] = useState(false);
   const [cardId, setCardId] = useState(ACCOUNT);
+  const [inReading, setInReading] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   // Qual dos dois botões enviou o form. Um ref, e não estado: o clique roda
@@ -177,6 +185,24 @@ export function ConfirmPaymentDialog({
                 </SelectContent>
               </Select>
             </div>
+          )}
+          {/* Pago no cartão o dinheiro mora na compra, e o saldo nem entra. */}
+          {readingLabel && cardId === ACCOUNT && (
+            <label className="flex items-start gap-2.5 rounded-2xl bg-muted/60 p-3 text-sm">
+              <input type="hidden" name="inReading" value={inReading ? "1" : ""} />
+              <input
+                type="checkbox"
+                checked={inReading}
+                onChange={(e) => setInReading(e.target.checked)}
+                className="mt-0.5 size-4 shrink-0 accent-(--primary)"
+              />
+              <span className="flex flex-col gap-0.5">
+                <span className="font-medium">Já tinha saído do saldo que informei</span>
+                <span className="text-xs text-muted-foreground">
+                  Paguei antes de informar o saldo em {readingLabel}: não tirar dele de novo.
+                </span>
+              </span>
+            </label>
           )}
           {error && (
             <p role="alert" className="text-sm text-negative">

@@ -727,6 +727,30 @@ function isPaydayAskable(occurrence: Date, createdAt: Date | undefined): boolean
   return diffCalendarDays(startOfDay(createdAt), occurrence) <= PRE_REGISTRATION_GRACE_DAYS;
 }
 
+/**
+ * O dia de pagamento que o lembrete "Recebeu?" perguntaria logo depois de a
+ * renda ser cadastrada — e, por isso, o que o primeiro uso confirma quando a
+ * pessoa diz que o deste mês já caiu. Nulo quando o lembrete não perguntaria
+ * nada (o pagamento é longe demais antes do cadastro): confirmar ali poria no
+ * período um dinheiro de antes de o app existir.
+ */
+export function arrivedPaydayToConfirm(income: IncomeInput, today: Date): Date | null {
+  const occurrence = latestPaydayOnOrBefore(income, today);
+  return isPaydayAskable(occurrence, income.createdAt) ? occurrence : null;
+}
+
+/**
+ * O vencimento deste mês de uma conta recém-cadastrada, quando ele ainda vai
+ * ser cobrado — hoje ou mais adiante. Um vencimento que já passou não é: a
+ * ocorrência fica antes do cadastro e nunca contou (ver `isOccurrenceValid`),
+ * então "já paguei a deste mês" não tem o que quitar.
+ */
+export function thisMonthDueStillAhead(dueDay: number, today: Date): Date | null {
+  const todayStart = startOfDay(today);
+  const due = dateForDayInMonth(todayStart.getFullYear(), todayStart.getMonth(), dueDay);
+  return due.getTime() >= todayStart.getTime() ? due : null;
+}
+
 /** Whether the user has confirmed receiving a specific payday. */
 function isPaydayConfirmed(
   receipts: IncomeReceiptInput[],
