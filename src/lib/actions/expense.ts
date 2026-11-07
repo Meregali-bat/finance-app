@@ -12,7 +12,9 @@ import {
   installmentSpan,
   installmentsStart,
   startAfterCurrentCharge,
+  thisMonthDueStillAhead,
 } from "@/lib/period";
+import { placeBeforeLatestReading } from "@/lib/latest-reading";
 
 const expenseSchema = z
   .object({
@@ -62,7 +64,7 @@ export async function createFixedExpense(formData: FormData) {
       );
     }
 
-    await prisma.fixedExpense.create({
+    const expense = await prisma.fixedExpense.create({
       data: {
         ...data,
         ...(createdAt ? { createdAt } : {}),
@@ -75,6 +77,23 @@ export async function createFixedExpense(formData: FormData) {
         userId,
       },
     });
+
+    // "Já paguei a deste mês" (o primeiro uso pergunta): quem começa no meio
+    // do mês informou o saldo já sem esta conta. Quita o vencimento deste mês
+    // com o valor dela, dentro da leitura do saldo — sem isso ela ficava nos
+    // lembretes e saía do saldo uma segunda vez. Um vencimento que já passou
+    // nunca contou, e não há o que quitar.
+    const due =
+      formData.get("paidThisMonth") === "1" && !card && dueDay != null && !createdAt
+        ? thisMonthDueStillAhead(dueDay, expense.createdAt)
+        : null;
+    if (due) {
+      const dates = await placeBeforeLatestReading(userId, new Date());
+      await prisma.expensePayment.create({
+        data: { userId, fixedExpenseId: expense.id, dueDate: due, amount: data.amount, ...dates },
+      });
+    }
+
     revalidatePath("/rendas");
     revalidatePath("/");
     revalidatePath("/historico");

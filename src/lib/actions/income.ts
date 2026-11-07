@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/auth-helpers";
 import { refusing } from "@/lib/action-result";
+import { arrivedPaydayToConfirm } from "@/lib/period";
 
 const incomeSchema = z.object({
   label: z.string().trim().min(1, "Informe um nome").max(80),
@@ -21,7 +22,23 @@ export async function createIncome(formData: FormData) {
       dayOfMonth: formData.get("dayOfMonth"),
     });
 
-    await prisma.income.create({ data: { ...data, userId } });
+    const income = await prisma.income.create({ data: { ...data, userId } });
+
+    // "Já caiu o deste mês" (o primeiro uso pergunta): confirma o pagamento
+    // que o lembrete "Recebeu?" perguntaria. O saldo em conta não o soma de
+    // novo — um recebimento de um dia até o da leitura já estava nela.
+    const payday =
+      formData.get("receivedThisMonth") === "1"
+        ? arrivedPaydayToConfirm(
+            { id: income.id, amount: data.amount, dayOfMonth: data.dayOfMonth, createdAt: income.createdAt },
+            income.createdAt,
+          )
+        : null;
+    if (payday) {
+      await prisma.incomeReceipt.create({
+        data: { incomeId: income.id, userId, occurrenceDate: payday, amount: data.amount },
+      });
+    }
     revalidatePath("/rendas");
     revalidatePath("/");
     revalidatePath("/previsao");

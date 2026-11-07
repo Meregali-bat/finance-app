@@ -9,11 +9,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CurrencyInput } from "@/components/currency-input";
 import { listRowSurface } from "@/components/list-row";
-import { createIncome, deleteIncome } from "@/lib/actions/income";
+import { createIncome } from "@/lib/actions/income";
 import { setAccountBalance } from "@/lib/actions/account-balance";
-import { createFixedExpense, deleteFixedExpense } from "@/lib/actions/expense";
+import { createFixedExpense } from "@/lib/actions/expense";
 import { createCreditCard, deleteCreditCard } from "@/lib/actions/card";
-import { finishOnboarding } from "@/lib/actions/onboarding";
+import {
+  discardOnboardingExpense,
+  discardOnboardingIncome,
+  finishOnboarding,
+} from "@/lib/actions/onboarding";
 import { errorMessage } from "@/lib/error-message";
 import { formatCurrency } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -130,7 +134,17 @@ function AddedRow({
 }
 
 /** O dia do mês, com o teclado numérico no celular. */
-function DayInput({ id, name, defaultValue }: { id: string; name: string; defaultValue?: number }) {
+function DayInput({
+  id,
+  name,
+  defaultValue,
+  onDayChange,
+}: {
+  id: string;
+  name: string;
+  defaultValue?: number;
+  onDayChange?: (day: number | null) => void;
+}) {
   return (
     <Input
       id={id}
@@ -141,14 +155,67 @@ function DayInput({ id, name, defaultValue }: { id: string; name: string; defaul
       max={31}
       placeholder="1 a 31"
       defaultValue={defaultValue}
+      onChange={
+        onDayChange &&
+        ((e) => {
+          const day = Number(e.target.value);
+          onDayChange(Number.isInteger(day) && day >= 1 && day <= 31 ? day : null);
+        })
+      }
       required
     />
   );
 }
 
+/**
+ * "Já caiu o deste mês?" / "Já paguei a deste mês?": quem começa no meio do
+ * mês e informa o saldo do banco já tem esse dinheiro dentro dele. Sem dizer,
+ * a renda e a conta ficavam nos lembretes como pendentes, e a conta saía do
+ * saldo uma segunda vez. Só aparece quando o dia faz a pergunta ter sentido —
+ * o servidor confere de novo.
+ */
+function AlreadyThisMonth({
+  name,
+  label,
+  hint,
+}: {
+  name: string;
+  label: string;
+  hint: string;
+}) {
+  const [checked, setChecked] = useState(false);
+  return (
+    <label className="flex items-start gap-2.5 rounded-[14px] bg-muted/60 p-3 text-sm">
+      <input type="hidden" name={name} value={checked ? "1" : ""} />
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => setChecked(e.target.checked)}
+        className="mt-0.5 size-4 shrink-0 accent-(--primary)"
+      />
+      <span className="flex flex-col gap-0.5">
+        <span className="font-medium">{label}</span>
+        <span className="text-[12.5px] text-muted-foreground">{hint}</span>
+      </span>
+    </label>
+  );
+}
+
+/** O dia de hoje no mês, para saber se um dia digitado já passou. */
+function todayOfMonth(): number {
+  return new Date().getDate();
+}
+
 // ── Passo 1: renda ────────────────────────────────────────────────────────
 
-type IncomeView = { id: string; label: string; amount: number; dayOfMonth: number };
+type IncomeView = {
+  id: string;
+  label: string;
+  amount: number;
+  dayOfMonth: number;
+  /** O "já caiu o deste mês" confirmou um recebimento. */
+  received: boolean;
+};
 
 export function IncomeStep({ incomes }: { incomes: IncomeView[] }) {
   const router = useRouter();
@@ -156,6 +223,7 @@ export function IncomeStep({ incomes }: { incomes: IncomeView[] }) {
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [removingId, setRemovingId] = useState<string | null>(null);
+  const [day, setDay] = useState<number | null>(null);
 
   function save(formData: FormData) {
     setError(null);
@@ -167,6 +235,7 @@ export function IncomeStep({ incomes }: { incomes: IncomeView[] }) {
           router.push(stepHref(2));
         } else {
           setAdding(false);
+          setDay(null);
           router.refresh();
         }
       } catch (e) {
@@ -188,12 +257,14 @@ export function IncomeStep({ incomes }: { incomes: IncomeView[] }) {
             <AddedRow
               key={income.id}
               title={income.label}
-              detail={`${formatCurrency(income.amount)} · todo dia ${income.dayOfMonth}`}
+              detail={`${formatCurrency(income.amount)} · todo dia ${income.dayOfMonth}${
+                income.received ? " · já caiu" : ""
+              }`}
               removing={removingId === income.id}
               onRemove={() => {
                 setRemovingId(income.id);
                 startTransition(async () => {
-                  await deleteIncome(income.id);
+                  await discardOnboardingIncome(income.id);
                   router.refresh();
                   setRemovingId(null);
                 });
@@ -223,9 +294,16 @@ export function IncomeStep({ incomes }: { incomes: IncomeView[] }) {
             </div>
             <div className="flex flex-col gap-2">
               <Label htmlFor="income-day">Dia</Label>
-              <DayInput id="income-day" name="dayOfMonth" />
+              <DayInput id="income-day" name="dayOfMonth" onDayChange={setDay} />
             </div>
           </div>
+          {day != null && day <= todayOfMonth() && (
+            <AlreadyThisMonth
+              name="receivedThisMonth"
+              label="O deste mês já caiu na conta"
+              hint="Ele já está no saldo que você vai informar, e não fica pendente."
+            />
+          )}
           <ErrorText error={error} />
           <div className="flex justify-end gap-2">
             {incomes.length > 0 && (
@@ -326,7 +404,14 @@ export function BalanceStep({ current }: { current: number | null }) {
 
 const SUGGESTIONS = ["Aluguel", "Condomínio", "Internet", "Luz", "Água", "Celular", "Academia"];
 
-type ExpenseView = { id: string; label: string; amount: number; dueDay: number | null };
+type ExpenseView = {
+  id: string;
+  label: string;
+  amount: number;
+  dueDay: number | null;
+  /** O "já paguei a deste mês" quitou o vencimento. */
+  paid: boolean;
+};
 
 export function ExpensesStep({ expenses }: { expenses: ExpenseView[] }) {
   const router = useRouter();
@@ -336,6 +421,7 @@ export function ExpensesStep({ expenses }: { expenses: ExpenseView[] }) {
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [removingId, setRemovingId] = useState<string | null>(null);
+  const [day, setDay] = useState<number | null>(null);
   const added = new Set(expenses.map((e) => e.label.toLowerCase()));
 
   function save(formData: FormData) {
@@ -345,6 +431,7 @@ export function ExpensesStep({ expenses }: { expenses: ExpenseView[] }) {
       try {
         unwrap(await createFixedExpense(formData));
         setLabel("");
+        setDay(null);
         setFormKey((k) => k + 1);
         router.refresh();
       } catch (e) {
@@ -368,12 +455,12 @@ export function ExpensesStep({ expenses }: { expenses: ExpenseView[] }) {
               title={expense.label}
               detail={`${formatCurrency(expense.amount)}${
                 expense.dueDay ? ` · vence dia ${expense.dueDay}` : ""
-              }`}
+              }${expense.paid ? " · já paga" : ""}`}
               removing={removingId === expense.id}
               onRemove={() => {
                 setRemovingId(expense.id);
                 startTransition(async () => {
-                  await deleteFixedExpense(expense.id);
+                  await discardOnboardingExpense(expense.id);
                   router.refresh();
                   setRemovingId(null);
                 });
@@ -420,9 +507,16 @@ export function ExpensesStep({ expenses }: { expenses: ExpenseView[] }) {
           </div>
           <div className="flex flex-col gap-2">
             <Label htmlFor="expense-day">Vence dia</Label>
-            <DayInput id="expense-day" name="dueDay" />
+            <DayInput id="expense-day" name="dueDay" onDayChange={setDay} />
           </div>
         </div>
+        {day != null && day >= todayOfMonth() && (
+          <AlreadyThisMonth
+            name="paidThisMonth"
+            label="Já paguei a deste mês"
+            hint="Ela já saiu do saldo que você informou: não fica pendente nem sai de novo."
+          />
+        )}
         <ErrorText error={error} />
         <button
           type="submit"

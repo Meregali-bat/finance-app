@@ -21,11 +21,13 @@ export default async function OnboardingPage({
     prisma.income.findMany({
       where: { userId, deletedAt: null },
       orderBy: { createdAt: "asc" },
+      include: { receipts: { select: { id: true }, take: 1 } },
     }),
     prisma.balanceAdjustment.findFirst({ where: { userId }, orderBy: { createdAt: "desc" } }),
     prisma.fixedExpense.findMany({
       where: { userId, deletedAt: null, cardId: null },
       orderBy: { createdAt: "asc" },
+      include: { payments: { select: { id: true }, take: 1 } },
     }),
     prisma.creditCard.findMany({
       where: { userId, deletedAt: null },
@@ -55,6 +57,7 @@ export default async function OnboardingPage({
             label: i.label,
             amount: Number(i.amount),
             dayOfMonth: i.dayOfMonth,
+            received: i.receipts.length > 0,
           }))}
         />
       )}
@@ -66,6 +69,7 @@ export default async function OnboardingPage({
             label: e.label,
             amount: Number(e.amount),
             dueDay: e.dueDay,
+            paid: e.payments.length > 0,
           }))}
         />
       )}

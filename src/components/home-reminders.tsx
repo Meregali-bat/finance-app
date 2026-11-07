@@ -54,6 +54,8 @@ export type HomeReminder =
       /** Despesa fixa e fatura: libera o "Pagar parcial". */
       allowPartial: boolean;
       paidSoFar: number;
+      /** O dia da última leitura do saldo, "7 de nov."; nulo sem nenhuma. */
+      readingLabel: string | null;
     })
   | (Base & { kind: "income"; incomeId: string });
 
@@ -474,6 +476,7 @@ function ReminderCard({
             amount={reminder.amount}
             allowPartial={reminder.allowPartial}
             paidSoFar={reminder.paidSoFar}
+            readingLabel={reminder.readingLabel ?? undefined}
             trigger={payTrigger}
             onDone={({ paymentId, settled }) =>
               (settled ? onPaid : onPartial)(() => unmarkExpensePayment(paymentId))

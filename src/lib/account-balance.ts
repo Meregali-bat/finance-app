@@ -224,3 +224,28 @@ export function balanceAtDay(input: {
     .reduce((sum, m) => sum + m.amount, 0);
   return { balance: after.balance - credited + debited, from: after };
 }
+
+/**
+ * As datas de um pagamento que já tinha saído quando o saldo foi informado.
+ *
+ * O caso é o de quem começa no meio do mês: pagou o aluguel, informou o saldo
+ * já sem ele, e só depois marca o aluguel como pago. Registrado depois da
+ * leitura e com o dinheiro saindo no mesmo dia dela, o pagamento sairia do
+ * saldo de novo — é o lado seguro de `alreadyInReading`, que não tem como
+ * saber a ordem dos dois naquele dia. Aqui a pessoa diz a ordem.
+ *
+ * `createdAt` vai para um instante antes da leitura: é o marco que diz o que
+ * ela já continha, e o pagamento entra nela como se tivesse sido marcado na
+ * hora. `paidAt` não pode ser depois da leitura — o que já estava no extrato
+ * saiu antes dele —, então um "hoje" vira o instante da leitura; uma data
+ * anterior que a pessoa escolheu fica como está.
+ */
+export function paidBeforeReading(
+  paidAt: Date,
+  readingAt: Date,
+): { paidAt: Date; createdAt: Date } {
+  return {
+    paidAt: paidAt.getTime() > readingAt.getTime() ? readingAt : paidAt,
+    createdAt: new Date(readingAt.getTime() - 1),
+  };
+}

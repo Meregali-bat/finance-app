@@ -4,6 +4,7 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/auth-helpers";
+import { placeBeforeLatestReading } from "@/lib/latest-reading";
 
 const paymentSchema = z.object({
   dueDate: z.coerce.date(),
@@ -60,6 +61,17 @@ function parsePayment(formData: FormData) {
 }
 
 /**
+ * Quando e com que marco gravar um pagamento da conta. Com "já estava fora do
+ * saldo que informei" marcado (`inReading` = "1"), ele entra na leitura mais
+ * recente e não sai do saldo de novo — o caso de quem começa no meio do mês
+ * com as contas já pagas. Sem a marca, como sempre.
+ */
+async function accountPaymentDates(userId: string, paidAt: Date, formData: FormData) {
+  if (formData.get("inReading") !== "1") return { paidAt };
+  return placeBeforeLatestReading(userId, paidAt);
+}
+
+/**
  * Registra um pagamento de uma ocorrência de despesa fixa. Com `settle` = "0"
  * é parcial: abate do valor, e o lembrete continua com o que falta até um
  * pagamento quitá-la. Cada parcial é uma linha própria, com o dia em que o
@@ -80,8 +92,9 @@ export async function markFixedExpensePaid(expenseId: string, formData: FormData
   const cardId = String(formData.get("cardId") ?? "");
   let paymentId: string;
   if (!cardId) {
+    const dates = await accountPaymentDates(userId, paidAt, formData);
     ({ id: paymentId } = await prisma.expensePayment.create({
-      data: { userId, fixedExpenseId: expenseId, dueDate, amount, paidAt, settled },
+      data: { userId, fixedExpenseId: expenseId, dueDate, amount, settled, ...dates },
       select: { id: true },
     }));
   } else {
@@ -146,8 +159,9 @@ export async function markCardBillPaid(cardId: string, formData: FormData) {
   if (!card) throw new Error("Cartão não encontrado");
   if (card.payments.length > 0) throw new Error("Esta fatura já foi paga");
 
+  const dates = await accountPaymentDates(userId, paidAt, formData);
   const payment = await prisma.expensePayment.create({
-    data: { userId, cardId, dueDate, amount, paidAt, settled },
+    data: { userId, cardId, dueDate, amount, settled, ...dates },
     select: { id: true },
   });
   revalidatePath("/");
