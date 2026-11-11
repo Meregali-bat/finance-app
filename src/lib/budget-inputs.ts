@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { jarReturns } from "@/lib/jar-plans";
 import { prisma } from "@/lib/prisma";
 import { parseSlices, type SlicePercents } from "@/lib/slices";
@@ -77,7 +78,16 @@ export interface BudgetInputs {
  * cartão desativado continua devendo as parcelas que já tinha. Filtrar aqui
  * fazia a Início e o fechamento enxergarem meses diferentes.
  */
-export async function loadBudgetInputs(userId: string): Promise<BudgetInputs> {
+export const loadBudgetInputs = cache(loadBudgetInputsUncached);
+
+/**
+ * Num mesmo render, o `cache` do React devolve o mesmo resultado a quem pedir
+ * de novo: a Início chamava isto três vezes (a página, as fatias e o fechamento
+ * do período), cada uma com 11 consultas sem filtro de data. Quem recebe o
+ * objeto não pode mudá-lo — ele é compartilhado. Fora de um render (rotas de
+ * API, server actions) o `cache` não memoiza e cada chamada consulta de novo.
+ */
+async function loadBudgetInputsUncached(userId: string): Promise<BudgetInputs> {
   const [
     incomes,
     incomeReceipts,
