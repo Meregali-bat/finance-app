@@ -9,15 +9,19 @@ import { AiConsentProvider } from "@/components/ai-consent";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const userId = await requireUserId();
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { onboardedAt: true, name: true, email: true, avatar: true },
-  });
+  // Duas idas ao banco que não dependem uma da outra: juntas, a troca de tela
+  // paga uma latência e não duas.
+  const [user, consents] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: userId },
+      select: { onboardedAt: true, name: true, email: true, avatar: true },
+    }),
+    loadConsents(userId),
+  ]);
   // Conta nova, que ainda não terminou o primeiro uso: sem renda não existe
   // "quanto posso gastar hoje", então o app começa pelo passo a passo.
   if (!user?.onboardedAt) redirect("/comecar");
   // Conta de antes dos termos, ou termos que mudaram: aceita antes de seguir.
-  const consents = await loadConsents(userId);
   if (!hasCurrentConsent(consents, "terms")) redirect("/aceite");
   const aiConsented = hasCurrentConsent(consents, "ai");
   return (
