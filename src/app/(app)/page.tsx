@@ -1,4 +1,5 @@
 import { differenceInCalendarDays } from "date-fns";
+import { Suspense } from "react";
 import Link from "next/link";
 import { ChevronRight, CircleAlert, CreditCard, Receipt, TriangleAlert } from "lucide-react";
 import { staleAdjustmentDays } from "@/lib/account-balance";
@@ -110,44 +111,48 @@ export default async function DashboardPage() {
   const userId = await requireUserId();
   const today = new Date();
 
-  const [inputs, categories, profile] = await Promise.all([
-    loadBudgetInputs(userId),
-    prisma.category.findMany({
-      where: { userId, active: true },
-      orderBy: { name: "asc" },
-    }),
-    prisma.user.findUniqueOrThrow({
-      where: { id: userId },
-      select: { name: true, email: true, avatar: true, commitmentLimitPercent: true },
-    }),
-  ]);
-  const tomorrow = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
-  // As compras no cartão de hoje e de amanhã, com o que a lista precisa
-  // mostrar (as entradas do orçamento só guardam valor e data). Datas de
-  // calendário ficam em meia-noite UTC: a janela vai de hoje a depois de amanhã.
+  // Tudo o que a tela pede sai junto, numa onda só. As fatias e o fechamento
+  // do período chamam `loadBudgetInputs` por dentro, mas o `cache` do React
+  // entrega a elas o mesmo resultado desta chamada, e as consultas que só
+  // dependem do usuário (dívidas, compras de hoje) não precisam esperar por ele.
+  // Datas de calendário ficam em meia-noite UTC: a janela das compras no cartão
+  // de hoje e de amanhã vai de hoje a depois de amanhã.
   const todayUtc = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate());
-  const [debts, recentCardPurchases, slicesOverview] = await Promise.all([
-    loadDebts(userId, today),
-    prisma.cardPurchase.findMany({
-      where: {
-        userId,
-        card: { deletedAt: null },
-        date: { gte: new Date(todayUtc), lt: new Date(todayUtc + 2 * 86_400_000) },
-      },
-      select: {
-        id: true,
-        description: true,
-        amount: true,
-        date: true,
-        createdAt: true,
-        installments: true,
-        categoryId: true,
-        cardId: true,
-      },
-    }),
-    loadSlicesOverview(userId, today),
-  ]);
+  const [inputs, categories, profile, debts, recentCardPurchases, slicesOverview] =
+    await Promise.all([
+      loadBudgetInputs(userId),
+      prisma.category.findMany({
+        where: { userId, active: true },
+        orderBy: { name: "asc" },
+      }),
+      prisma.user.findUniqueOrThrow({
+        where: { id: userId },
+        select: { name: true, email: true, avatar: true, commitmentLimitPercent: true },
+      }),
+      loadDebts(userId, today),
+      // As compras no cartão de hoje e de amanhã, com o que a lista precisa
+      // mostrar (as entradas do orçamento só guardam valor e data).
+      prisma.cardPurchase.findMany({
+        where: {
+          userId,
+          card: { deletedAt: null },
+          date: { gte: new Date(todayUtc), lt: new Date(todayUtc + 2 * 86_400_000) },
+        },
+        select: {
+          id: true,
+          description: true,
+          amount: true,
+          date: true,
+          createdAt: true,
+          installments: true,
+          categoryId: true,
+          cardId: true,
+        },
+      }),
+      loadSlicesOverview(userId, today),
+    ]);
 
+  const tomorrow = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
   const { accountBalance, budget, dailyAvailable, reservedForLater, savings, nextPeriod, periods } =
     todayBudget(inputs, today);
   // "Se continuar gastando assim, vai faltar": o aviso da Previsão, aqui, onde
@@ -460,7 +465,10 @@ export default async function DashboardPage() {
     // 58px a 74px da base) não pode cobrir o "Pagar" nem o "Recebi" do último
     // card, que ficam na mesma borda direita.
     <div className="relative flex flex-col gap-5 pb-[calc(env(safe-area-inset-bottom)+3rem)] lg:gap-6 lg:pb-0">
-      <PeriodCloseCheck />
+      {/* Um modal que só abre quando há fechamento: não segura o resto da tela. */}
+      <Suspense fallback={null}>
+        <PeriodCloseCheck />
+      </Suspense>
 
       {/* Celular: o logo no topo, já que a barra lateral não existe ali. */}
       <header className="rise-in flex items-center justify-between gap-4 lg:hidden" style={rise(0)}>
