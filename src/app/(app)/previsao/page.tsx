@@ -3,10 +3,16 @@ import {
   AlertTriangle,
   ArrowDownLeft,
   ArrowUpRight,
+  BarChart3,
   ChevronDown,
   ChevronRight,
   CalendarClock,
+  CreditCard,
   Gauge,
+  ListOrdered,
+  PiggyBank,
+  Receipt,
+  TrendingUp,
   TriangleAlert,
   Wallet,
 } from "lucide-react";
@@ -105,6 +111,26 @@ function groupLabel(kind: ForecastEntryKind, label: string, offset: number) {
   // Não "Entradas": é o nome do chip do hero, que soma também as caixinhas.
   if (kind === "income") return "Rendas e recebimentos";
   return label;
+}
+
+/**
+ * O ícone de cada linha diz o que ela é (renda, conta, fatura, caixinha); a
+ * cor do quadrado diz o lado — entra ou sai.
+ */
+function entryIcon(entry: ForecastEntry, inflow: boolean) {
+  switch (entry.kind) {
+    case "income":
+      return <Wallet />;
+    case "fixedExpense":
+      return <Receipt />;
+    case "cardBill":
+      return <CreditCard />;
+    case "jar":
+    case "jarReturn":
+      return <PiggyBank />;
+    case "scheduled":
+      return inflow ? <ArrowDownLeft /> : <ArrowUpRight />;
+  }
 }
 
 /** Onde cada linha é editada: a previsão lê, e a linha leva até quem decide. */
@@ -271,8 +297,9 @@ function EntryRow({
         className="group/entry block rounded-[18px] transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring [&>div]:transition-colors [&>div]:duration-150 hover:[&>div]:bg-card-hover"
       >
         <ListRow
-          icon={inflow ? <ArrowDownLeft /> : <ArrowUpRight />}
+          icon={entryIcon(entry, inflow)}
           tone={inflow ? "positive" : "negative"}
+          className="lg:rounded-[14px] lg:bg-transparent lg:px-2 lg:py-3 lg:shadow-none"
           title={rowTitle(entry)}
           subtitle={<span className="tabular-nums">{detail}</span>}
           value={`${inflow ? "+" : "−"}${formatCurrency(Math.abs(entry.amount))}`}
@@ -624,10 +651,12 @@ export default async function ForecastPage({
           ? // O número de cima parte daqui: sem dizer que supõe parar de
             // gastar agora, ele promete mais do que o ritmo entrega.
             "Falta do ciclo atual, sem gastar mais"
-          : "Guardado do ciclo atual"
+          : // "Guardado" é o que fica fora do livre (a reserva para os
+            // ciclos à frente); esta sobra entra na conta.
+            "Sobra do ciclo atual"
         : period.inherited < -0.005
           ? "Faltou nos ciclos anteriores"
-          : "Guardado dos ciclos anteriores"
+          : "Sobra dos ciclos anteriores"
       : budget.openingSource === "account"
         ? period.inherited < -0.005
           ? "Faltava na conta"
@@ -666,10 +695,109 @@ export default async function ForecastPage({
         </div>
       )}
       {(Math.abs(period.inherited) >= 0.005 || period.reservedForLater > 0.005) && (
-        <div className="mt-1 flex justify-between gap-3 border-t border-border pt-2 font-semibold">
+        <div
+          className={cn(
+            "mt-1.5 flex justify-between gap-3 rounded-xl px-3 py-2.5 font-semibold",
+            isNegative
+              ? "bg-negative/10 text-negative"
+              : period.freeToSpend >= 0.005
+                ? "bg-positive/10 text-positive"
+                : "bg-muted",
+          )}
+        >
           <dt>{isNegative ? "Vai faltar" : "Livre para gastar"}</dt>
-          <dd className={isNegative ? "text-negative" : undefined}>
+          <dd>
             {formatCurrency(isNegative ? Math.abs(period.endBalance) : period.freeToSpend)}
+          </dd>
+        </div>
+      )}
+    </dl>
+  );
+
+  // A conta por trás do número grande, como uma fita: o que este ciclo
+  // movimenta, mais o que veio de antes, menos o que ele guarda para a frente.
+  // Sem ela, um mês com renda maior que as contas aparecer negativo — ou menor
+  // do que parece — parece erro. No celular ela fica dentro do hero; no
+  // desktop, num card próprio ao lado.
+  const fitaRows = (
+    <>
+      {/* Sem nada vindo de antes, a linha some: um "R$ 0,00" guardado depois
+          de um ciclo que fechou positivo parece erro (a previsão conta a sobra
+          como gasta). O saldo do ciclo primeiro, depois o que veio de antes: a
+          mesma ordem do resumo embaixo das listas. */}
+      <div className="flex items-baseline justify-between gap-3">
+        <dt className="text-(--hero-muted)">Saldo do ciclo</dt>
+        <dd className="font-medium">{formatCurrency(period.periodResult)}</dd>
+      </div>
+      {Math.abs(period.inherited) >= 0.005 && (
+        <div className="flex items-baseline justify-between gap-3">
+          <dt className="text-(--hero-muted)">{inheritedLabel}</dt>
+          <dd className="font-medium">{formatCurrency(period.inherited)}</dd>
+        </div>
+      )}
+      {period.reservedForLater > 0.005 && (
+        <div className="flex items-baseline justify-between gap-3">
+          <dt className="text-(--hero-muted)">Guardado para cobrir ciclos à frente</dt>
+          <dd className="font-medium">−{formatCurrency(period.reservedForLater)}</dd>
+        </div>
+      )}
+      <div className="mt-1 flex items-baseline justify-between gap-3 border-t border-(--hero-line) pt-3">
+        <dt className="font-semibold">{isNegative ? "Vai faltar" : "Livre para gastar"}</dt>
+        <dd
+          className={cn(
+            "font-heading text-lg font-bold tracking-[-0.02em]",
+            isNegative && "lg:text-negative",
+          )}
+        >
+          {formatCurrency(isNegative ? Math.abs(period.endBalance) : period.freeToSpend)}
+        </dd>
+      </div>
+    </>
+  );
+  const heroTone = isNegative ? "negative" : isTight ? "tight" : undefined;
+
+  // A conta do ritmo num ciclo à frente, em partes. Só vira barra quando
+  // todas são falta: com uma sobra no meio, os pedaços não somam o total.
+  const paceBase = isNegative ? period.endBalance : period.freeToSpend;
+  const paceSpend = spendNow?.[offset] ?? 0;
+  const paceParts =
+    offset > 0 && paceLeft !== null && paceLeft < -0.005 && paceBase <= 0.005 && carryIn <= 0.005
+      ? [
+          { label: "Contas que não cabem", value: Math.abs(Math.min(0, paceBase)), className: "bg-negative" },
+          { label: "Seu dia a dia, no ritmo de agora", value: paceSpend, className: "bg-negative/55" },
+          {
+            label: offset === 1 ? "Falta a mais do ciclo atual" : "Falta a mais dos ciclos anteriores",
+            value: Math.abs(Math.min(0, carryIn)),
+            className: "bg-negative/25",
+          },
+        ].filter((part) => part.value >= 0.005)
+      : null;
+  const paceLedger = (
+    <dl className="flex flex-col gap-1.5 text-[13.5px] tabular-nums">
+      <div className="flex justify-between gap-3">
+        <dt className="text-muted-foreground">{isNegative ? "Vai faltar, sem gastar" : "Livre para gastar"}</dt>
+        <dd className="shrink-0">{formatCurrency(paceBase)}</dd>
+      </div>
+      <div className="flex justify-between gap-3">
+        <dt className="text-muted-foreground">No seu ritmo</dt>
+        <dd className="shrink-0">−{formatCurrency(paceSpend)}</dd>
+      </div>
+      {Math.abs(carryIn) >= 0.005 && (
+        <div className="flex justify-between gap-3">
+          <dt className="text-muted-foreground">
+            {carryIn < 0 ? "Falta a mais" : "Sobra"} {offset === 1 ? "do ciclo atual" : "dos ciclos anteriores"}
+          </dt>
+          <dd className="shrink-0">
+            {carryIn < 0 ? "−" : "+"}
+            {formatCurrency(Math.abs(carryIn))}
+          </dd>
+        </div>
+      )}
+      {paceLeft !== null && (
+        <div className="mt-0.5 flex justify-between gap-3 border-t border-border pt-1.5 font-semibold">
+          <dt>{paceLeft < -0.005 ? "Faltando" : "Sobrando"}</dt>
+          <dd className={cn("shrink-0", paceLeft < -0.005 && "text-negative")}>
+            {formatCurrency(Math.abs(paceLeft))}
           </dd>
         </div>
       )}
@@ -678,169 +806,230 @@ export default async function ForecastPage({
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader
-        title="Previsão"
-        subtitle="Quanto cada ciclo pode gastar"
-      />
-
-      <ForecastNav
-        label={periodLabel(period, currentYear)}
-        caption={offsetCaption(period.offset)}
-        previousHref={offset > 0 ? forecastHref(offset - 1) : null}
-        nextHref={offset < MAX_FORECAST_OFFSET ? forecastHref(offset + 1) : null}
-        currentHref={offset >= 2 ? forecastHref(0) : null}
-      />
-
-      <section
-        aria-label="Este ciclo"
-        className="hero-surface rise-in relative overflow-hidden rounded-[26px] lg:rounded-[28px]"
-        data-tone={isNegative ? "negative" : isTight ? "tight" : undefined}
-        style={{ "--rise-delay": "80ms" } as React.CSSProperties}
-      >
-        <div className="relative z-10 p-1 lg:px-4 lg:py-3">
-          <div className="grid grid-cols-[repeat(auto-fit,minmax(min(300px,100%),1fr))] overflow-hidden">
-            <div className="flex flex-col gap-4 p-[18px] lg:p-5">
-              <div className="flex flex-col gap-1.5">
-                {/* Um título: navegando por títulos, o leitor de tela chega ao
-                    número principal, e não só a "Ciclo a ciclo". */}
-                <h2 className="flex items-center gap-1.5 text-sm font-medium text-(--hero-muted)">
-                  {/* A cor não pode ser o único sinal do vermelho; o texto diz o resto. */}
-                  {isNegative && (
-                    <TriangleAlert aria-hidden className="size-4 shrink-0 text-negative" />
-                  )}
-                  {isNegative
-                    ? `Vai faltar ${inCycle(period, currentYear)}`
-                    : isTight
-                      ? `Pouco livre para gastar ${inCycle(period, currentYear)}`
-                      : `Livre para gastar ${inCycle(period, currentYear)}`}
-                </h2>
-                {/* Mesmo elemento entre um ciclo e outro (trocar a query não
-                    remonta a tela), então o valor conta do anterior até o novo.
-                    A falta vai sem sinal, como no ritmo e no aviso: o rótulo e
-                    o coral já dizem que é falta. */}
-                <CountUpCurrency
-                  value={isNegative ? Math.abs(period.endBalance) : period.freeToSpend}
-                  className={cn(
-                    "font-heading text-[44px] leading-none font-bold tracking-[-0.04em] tabular-nums lg:text-[52px]",
-                    isNegative ? "text-negative" : "text-(--hero-fg)",
-                  )}
-                />
-              </div>
-              <p className="text-sm text-(--hero-muted) tabular-nums">
-                {/* Num ciclo negativo `dailyAvailable` é o estouro por dia, e
-                    "−R$ 40 por dia" não é um valor que dê para gastar. */}
-                {isNegative ? (
-                  <span className="font-semibold text-(--hero-fg)">Nada livre para gastar</span>
-                ) : (
-                  <>
-                    {/* No centavo de baixo: arredondado para cima, os dias
-                        somados passariam do livre por alguns centavos. */}
-                    <span className="font-semibold text-(--hero-fg)">
-                      {formatCurrency(floorCents(period.dailyAvailable))}
-                    </span>{" "}
-                    por dia
-                  </>
-                )}{" "}
-                ·{" "}
-                {period.offset === 0
-                  ? `${period.daysLeft} ${period.daysLeft === 1 ? "dia restante" : "dias restantes"}, com hoje`
-                  : `${period.totalDays} ${period.totalDays === 1 ? "dia" : "dias"} de ciclo`}
-              </p>
-              {/* Um ciclo comprido (o pagamento atrasou, o mês virou duas
-                  vezes) pega a mesma conta duas vezes: é a causa mais comum
-                  de um ciclo que falta, e sem a frase parece erro. */}
-              {doubledBills.length > 0 && (
-                <p className="text-[13px] text-(--hero-muted)">
-                  Ciclo de {period.totalDays} dias: {listJoin(doubledBills)}{" "}
-                  {doubledBills.length === 1 ? "cai" : "caem"} duas vezes.
-                </p>
-              )}
-              {/* O ciclo atual no vermelho: as saídas aqui mesmo, no hero. */}
-              {heroExits && exitLinks(heroExits)}
-              {/* Uma coluna nos celulares estreitos: são os números a conferir,
-                  e cortados não se conferem. */}
-              <div className="grid grid-cols-1 gap-2 min-[400px]:grid-cols-2">
-                {[
-                  {
-                    label: "Entradas",
-                    value: incomingTotal,
-                    icon: (
-                      <ArrowDownLeft className="size-4 shrink-0 text-positive" aria-hidden="true" />
-                    ),
-                  },
-                  {
-                    label: "Saídas",
-                    value: outgoingTotal,
-                    icon: (
-                      <ArrowUpRight className="size-4 shrink-0 text-negative" aria-hidden="true" />
-                    ),
-                  },
-                ].map((chip) => (
-                  <div
-                    key={chip.label}
-                    className="flex min-w-0 items-center gap-2.5 rounded-2xl bg-(--hero-chip) px-3.5 py-2.5 ring-1 ring-(--hero-line)"
-                  >
-                    {chip.icon}
-                    <div className="flex min-w-0 flex-col gap-0.5">
-                      <span className="truncate text-[12.5px] font-medium text-(--hero-muted)">
-                        {chip.label}
-                      </span>
-                      <span className="truncate text-[15px] font-semibold tabular-nums">
-                        {formatCurrency(chip.value)}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              {/* Guardar e resgatar no mesmo ciclo passa pelos dois chips: a
-                  soma está certa, mas "entrou 15 mil" com renda de 10 assusta
-                  sem a nota. */}
-              {jarRoundTrip > 0.005 && (
-                <p className="text-[12.5px] text-(--hero-muted) tabular-nums">
-                  Os dois incluem {formatCurrency(jarRoundTrip)} que vão e voltam das caixinhas neste ciclo.
-                </p>
-              )}
-            </div>
-
-            {/* A conta por trás do número grande, como uma fita: o que veio de
-                antes, mais o que este ciclo movimenta, menos o que ele guarda
-                para a frente. Sem ela, um mês com renda maior que as contas
-                aparecer negativo — ou menor do que parece — parece erro. O
-                divisor é a mesma sombra de 1px do hero da Início. */}
-            <dl className="flex flex-col gap-2.5 p-[18px] text-[13.5px] tabular-nums shadow-[-1px_-1px_0_0_var(--hero-line)] lg:p-5">
-              {/* Sem nada vindo de antes, a linha some: um "R$ 0,00" guardado
-                  depois de um ciclo que fechou positivo parece erro (a
-                  previsão conta a sobra como gasta). */}
-              {/* O saldo do ciclo primeiro, depois o que veio de antes: a
-                  mesma ordem do resumo embaixo das listas. */}
-              <div className="flex items-baseline justify-between gap-3">
-                <dt className="text-(--hero-muted)">Saldo do ciclo</dt>
-                <dd className="font-medium">{formatCurrency(period.periodResult)}</dd>
-              </div>
-              {Math.abs(period.inherited) >= 0.005 && (
-                <div className="flex items-baseline justify-between gap-3">
-                  <dt className="text-(--hero-muted)">{inheritedLabel}</dt>
-                  <dd className="font-medium">{formatCurrency(period.inherited)}</dd>
-                </div>
-              )}
-              {period.reservedForLater > 0.005 && (
-                <div className="flex items-baseline justify-between gap-3">
-                  <dt className="text-(--hero-muted)">Guardado para cobrir ciclos à frente</dt>
-                  <dd className="font-medium">−{formatCurrency(period.reservedForLater)}</dd>
-                </div>
-              )}
-              <div className="mt-1 flex items-baseline justify-between gap-3 border-t border-(--hero-line) pt-3">
-                <dt className="font-semibold">
-                  {isNegative ? "Vai faltar" : "Livre para gastar"}
-                </dt>
-                <dd className="font-heading text-lg font-bold tracking-[-0.02em]">
-                  {formatCurrency(isNegative ? Math.abs(period.endBalance) : period.freeToSpend)}
-                </dd>
-              </div>
-            </dl>
-          </div>
+      {/* No desktop, a navegação entre ciclos sobe para a linha do título,
+          como o seletor de período do Histórico; no celular, fica embaixo. */}
+      <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+        <div className="min-w-0 lg:flex-1">
+          <PageHeader
+            title="Previsão"
+            icon={TrendingUp}
+            subtitle="Quanto você pode gastar nos próximos ciclos"
+          />
         </div>
-      </section>
+        <ForecastNav
+          label={periodLabel(period, currentYear)}
+          caption={offsetCaption(period.offset)}
+          previousHref={offset > 0 ? forecastHref(offset - 1) : null}
+          nextHref={offset < MAX_FORECAST_OFFSET ? forecastHref(offset + 1) : null}
+          currentHref={offset >= 2 ? forecastHref(0) : null}
+          className="lg:self-center"
+        />
+      </div>
+
+      <div className="flex flex-col gap-5 lg:grid lg:grid-cols-[1.2fr_1fr]">
+        <section
+          aria-label="Este ciclo"
+          className="hero-surface rise-in relative overflow-hidden rounded-[26px] lg:rounded-[24px]"
+          data-tone={heroTone}
+          style={{ "--rise-delay": "80ms" } as React.CSSProperties}
+        >
+          <div className="relative z-10 p-1 lg:p-0">
+            <div className="grid grid-cols-[repeat(auto-fit,minmax(min(300px,100%),1fr))] overflow-hidden lg:block">
+              <div className="flex flex-col gap-4 p-[18px] lg:gap-5 lg:p-6">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between lg:gap-6">
+                  <div className="flex min-w-0 flex-col gap-1.5 lg:gap-2.5">
+                    {/* Um título: navegando por títulos, o leitor de tela chega ao
+                        número principal, e não só a "Ciclo a ciclo". */}
+                    <h2 className="flex items-center gap-1.5 text-sm font-medium text-(--hero-muted) lg:gap-2.5">
+                      {/* A cor não pode ser o único sinal do vermelho; o texto diz o resto. */}
+                      {isNegative ? (
+                        <span className="flex lg:size-9 lg:items-center lg:justify-center lg:rounded-[11px] lg:bg-negative/15">
+                          <TriangleAlert aria-hidden className="size-4 shrink-0 text-negative lg:size-[18px]" />
+                        </span>
+                      ) : (
+                        <span className="hidden size-9 items-center justify-center rounded-[11px] bg-(--hero-chip) ring-1 ring-(--hero-line) lg:flex">
+                          <Wallet aria-hidden className="size-[18px]" />
+                        </span>
+                      )}
+                      {isNegative
+                        ? `Vai faltar ${inCycle(period, currentYear)}`
+                        : isTight
+                          ? `Pouco livre para gastar ${inCycle(period, currentYear)}`
+                          : `Livre para gastar ${inCycle(period, currentYear)}`}
+                    </h2>
+                    {/* Mesmo elemento entre um ciclo e outro (trocar a query não
+                        remonta a tela), então o valor conta do anterior até o novo.
+                        A falta vai sem sinal, como no ritmo e no aviso: o rótulo e
+                        o coral já dizem que é falta. */}
+                    <CountUpCurrency
+                      value={isNegative ? Math.abs(period.endBalance) : period.freeToSpend}
+                      className={cn(
+                        "font-heading text-[44px] leading-none font-bold tracking-[-0.04em] tabular-nums lg:text-[54px]",
+                        isNegative ? "text-negative" : "text-(--hero-fg)",
+                      )}
+                    />
+                    <p className="text-sm text-(--hero-muted) tabular-nums">
+                      {/* Num ciclo negativo `dailyAvailable` é o estouro por dia, e
+                          "−R$ 40 por dia" não é um valor que dê para gastar. */}
+                      {isNegative ? (
+                        <span className="font-semibold text-(--hero-fg)">Nada livre para gastar</span>
+                      ) : (
+                        <>
+                          {/* No centavo de baixo: arredondado para cima, os dias
+                              somados passariam do livre por alguns centavos. */}
+                          <span className="font-semibold text-(--hero-fg)">
+                            {formatCurrency(floorCents(period.dailyAvailable))}
+                          </span>{" "}
+                          por dia
+                        </>
+                      )}{" "}
+                      ·{" "}
+                      {period.offset === 0
+                        ? `${period.daysLeft} ${period.daysLeft === 1 ? "dia restante" : "dias restantes"}, com hoje`
+                        : `${period.totalDays} ${period.totalDays === 1 ? "dia" : "dias"} de ciclo`}
+                    </p>
+                  </div>
+                  {/* Uma coluna nos celulares estreitos: são os números a conferir,
+                      e cortados não se conferem. No desktop, empilhados ao lado
+                      do número, atrás de um fio. */}
+                  <div className="grid grid-cols-1 gap-2 min-[400px]:grid-cols-2 lg:flex lg:shrink-0 lg:flex-col lg:gap-4 lg:border-l lg:border-(--hero-line) lg:pl-6">
+                    {[
+                      {
+                        label: "Entradas",
+                        value: incomingTotal,
+                        icon: (
+                          <ArrowDownLeft className="size-4 shrink-0 text-positive" aria-hidden="true" />
+                        ),
+                      },
+                      {
+                        label: "Saídas",
+                        value: outgoingTotal,
+                        icon: (
+                          <ArrowUpRight className="size-4 shrink-0 text-negative" aria-hidden="true" />
+                        ),
+                      },
+                    ].map((chip) => (
+                      <div
+                        key={chip.label}
+                        className="flex min-w-0 items-center gap-2.5 rounded-2xl bg-(--hero-chip) px-3.5 py-2.5 ring-1 ring-(--hero-line) lg:items-start lg:bg-transparent lg:p-0 lg:ring-0"
+                      >
+                        {chip.icon}
+                        <div className="flex min-w-0 flex-col gap-0.5">
+                          <span className="truncate text-[12.5px] font-medium text-(--hero-muted)">
+                            {chip.label}
+                          </span>
+                          <span className="truncate text-[15px] font-semibold tabular-nums lg:text-base">
+                            {formatCurrency(chip.value)}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                {/* Um ciclo comprido (o pagamento atrasou, o mês virou duas
+                    vezes) pega a mesma conta duas vezes: é a causa mais comum
+                    de um ciclo que falta, e sem a frase parece erro. */}
+                {doubledBills.length > 0 && (
+                  <p className="text-[13px] text-(--hero-muted)">
+                    Ciclo de {period.totalDays} dias: {listJoin(doubledBills)}{" "}
+                    {doubledBills.length === 1 ? "cai" : "caem"} duas vezes.
+                  </p>
+                )}
+                {/* O ciclo atual no vermelho: as saídas aqui mesmo, no hero. */}
+                {heroExits && exitLinks(heroExits)}
+                {/* Guardar e resgatar no mesmo ciclo passa pelos dois chips: a
+                    soma está certa, mas "entrou 15 mil" com renda de 10 assusta
+                    sem a nota. */}
+                {jarRoundTrip > 0.005 && (
+                  <p className="text-[12.5px] text-(--hero-muted) tabular-nums">
+                    Os dois incluem {formatCurrency(jarRoundTrip)} que vão e voltam das caixinhas neste ciclo.
+                  </p>
+                )}
+                {/* No desktop, os três dinheiros que se confundem, lado a lado:
+                    o livre, a falta e o que está guardado para depois — que
+                    está na conta, mas não é para gastar. */}
+                <dl className="hidden grid-cols-3 border-t border-(--hero-line) pt-5 tabular-nums lg:grid">
+                  {[
+                    {
+                      label: "Livre para gastar",
+                      value: isNegative ? 0 : period.freeToSpend,
+                      hint: "o que sobra depois das contas",
+                      tone: !isNegative && period.freeToSpend > 0.005 ? "text-(--hero-fg)" : "text-(--hero-muted)",
+                    },
+                    {
+                      label: "Vai faltar",
+                      value: isNegative ? Math.abs(period.endBalance) : 0,
+                      hint: "mesmo sem gastar mais nada",
+                      tone: isNegative ? "text-negative" : "text-(--hero-muted)",
+                    },
+                    {
+                      label: "Guardado para depois",
+                      value: period.reservedForLater,
+                      hint: "para cobrir ciclos à frente",
+                      tone: period.reservedForLater > 0.005 ? "text-(--hero-fg)" : "text-(--hero-muted)",
+                    },
+                  ].map((item) => (
+                    <div
+                      key={item.label}
+                      className="flex min-w-0 flex-col gap-1 border-l border-(--hero-line) px-4 first:border-l-0 first:pl-0 last:pr-0"
+                    >
+                      <dt className="truncate text-[12.5px] text-(--hero-muted)">{item.label}</dt>
+                      <dd className={cn("font-heading text-xl font-bold tracking-[-0.02em]", item.tone)}>
+                        {formatCurrency(item.value)}
+                      </dd>
+                      <dd className="text-[11.5px] leading-snug text-(--hero-faint)">{item.hint}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
+
+              {/* A fita, no celular: o divisor é a mesma sombra de 1px do hero
+                  da Início. */}
+              <dl className="flex flex-col gap-2.5 p-[18px] text-[13.5px] tabular-nums shadow-[-1px_-1px_0_0_var(--hero-line)] lg:hidden">
+                {fitaRows}
+              </dl>
+            </div>
+          </div>
+        </section>
+
+        {/* No desktop, a fita ganha o seu card, com o ritmo embaixo: de onde
+            vem o número e quanto o dia a dia tem tirado. */}
+        <section
+          aria-label="Como chega a esse número"
+          className="hero-surface rise-in relative hidden overflow-hidden rounded-[24px] lg:block"
+          data-tone={heroTone}
+          style={{ "--rise-delay": "110ms" } as React.CSSProperties}
+        >
+          <div className="relative z-10 flex h-full flex-col justify-between gap-6 p-6">
+            <div className="flex flex-col gap-4">
+              <h2 className="flex items-center gap-2.5 text-sm font-medium text-(--hero-muted)">
+                <span className="flex size-9 items-center justify-center rounded-[11px] bg-(--hero-chip) ring-1 ring-(--hero-line)">
+                  <ListOrdered aria-hidden className="size-[18px]" />
+                </span>
+                Como chega a esse número
+              </h2>
+              <dl className="flex flex-col gap-3 text-sm tabular-nums">{fitaRows}</dl>
+            </div>
+            {pace && (
+              <div className="flex items-center gap-3 border-t border-(--hero-line) pt-4 tabular-nums">
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-[11px] bg-(--hero-chip) ring-1 ring-(--hero-line)">
+                  <Gauge aria-hidden className="size-[18px]" />
+                </span>
+                <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <span className="text-[12.5px] text-(--hero-muted)">Seu ritmo no ciclo atual</span>
+                  <span className="font-semibold">{formatCurrency(pace.perDay)} por dia</span>
+                </div>
+                <div className="flex flex-col items-end gap-0.5">
+                  <span className="text-[12.5px] text-(--hero-muted)">
+                    em {pace.elapsedDays} {pace.elapsedDays === 1 ? "dia" : "dias"}
+                  </span>
+                  <span className="font-semibold">{formatCurrency(pace.spent)}</span>
+                </div>
+              </div>
+            )}
+          </div>
+        </section>
+      </div>
 
       {/* O aviso vem antes do ritmo: é fato (as contas não cabem), e o
           ritmo é uma projeção. */}
@@ -885,13 +1074,13 @@ export default async function ForecastPage({
       {pace && paceLeft !== null && (
         <section
           aria-label="No seu ritmo"
-          className={homeCard("rise-in flex items-start gap-3")}
+          className={homeCard("rise-in flex items-start gap-3 lg:gap-4")}
           style={{ "--rise-delay": "160ms" } as React.CSSProperties}
         >
           <IconSquare tone={paceLeft < -0.005 || redOnWay ? "negative" : "positive"}>
             <Gauge />
           </IconSquare>
-          <div className="flex min-w-0 flex-col gap-1.5 pt-0.5">
+          <div className="flex min-w-0 flex-1 flex-col gap-1.5 pt-0.5">
             {/* Condicional, e com o ritmo no título: é um "e se", subordinado
                 ao número de cima, e não um segundo número da tela. */}
             <p className="text-[13px] font-medium text-muted-foreground tabular-nums">
@@ -905,7 +1094,7 @@ export default async function ForecastPage({
                 número da tela é o de cima. O coral fica na palavra que diz o
                 lado, não no valor: um segundo número vermelho competiria com o
                 hero. */}
-            <p className="font-heading text-[20px] leading-none font-bold tracking-[-0.025em] tabular-nums">
+            <p className="font-heading text-[20px] leading-none font-bold tracking-[-0.025em] tabular-nums lg:text-[22px]">
               {formatCurrency(Math.abs(paceLeft))}{" "}
               <span className="text-[15px] font-semibold tracking-normal text-muted-foreground">
                 <span className={paceLeft < -0.005 ? "text-negative" : undefined}>
@@ -932,7 +1121,7 @@ export default async function ForecastPage({
                 frase só, eram três valores e um parêntese para refazer de
                 cabeça. */}
             {period.offset > 0 && (
-              <dl className="flex max-w-sm flex-col gap-1 text-[13.5px] tabular-nums">
+              <dl className="flex max-w-sm flex-col gap-1 text-[13.5px] tabular-nums lg:hidden">
                 <div className="flex justify-between gap-3">
                   <dt className="text-muted-foreground">
                     {isNegative ? "Vai faltar, sem gastar" : "Livre para gastar"}
@@ -996,6 +1185,45 @@ export default async function ForecastPage({
               </p>
             )}
           </div>
+          {/* No desktop, a conta do ritmo vai para a direita. Quando tudo
+              nela é falta, vira uma barra: o tamanho de cada pedaço diz se o
+              problema são as contas ou o dia a dia. */}
+          {period.offset > 0 && (
+            <div className="hidden w-[min(24rem,42%)] shrink-0 flex-col gap-3 self-stretch border-l border-(--hairline-strong) pl-6 tabular-nums lg:flex">
+              <p className="text-[13px] font-medium text-muted-foreground">
+                {paceLeft < -0.005 ? "De onde vem a falta" : "Como chega à sobra"}
+              </p>
+              {paceParts ? (
+                <>
+                  <p className="font-heading text-[26px] leading-none font-bold tracking-[-0.03em] text-negative">
+                    {formatCurrency(Math.abs(paceLeft))}
+                  </p>
+                  <div aria-hidden="true" className="mt-1 flex h-3 gap-0.5 overflow-hidden rounded-full bg-muted">
+                    {paceParts.map((part) => (
+                      <span
+                        key={part.label}
+                        className={part.className}
+                        style={{ width: `${(part.value / Math.abs(paceLeft)) * 100}%` }}
+                      />
+                    ))}
+                  </div>
+                  <dl className="mt-1 flex flex-col gap-2 text-[13px]">
+                    {paceParts.map((part) => (
+                      <div key={part.label} className="flex items-center justify-between gap-3">
+                        <dt className="flex items-center gap-2 text-muted-foreground">
+                          <span aria-hidden="true" className={cn("size-2.5 shrink-0 rounded-[3px]", part.className)} />
+                          {part.label}
+                        </dt>
+                        <dd className="shrink-0 font-semibold">{formatCurrency(part.value)}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                </>
+              ) : (
+                paceLedger
+              )}
+            </div>
+          )}
         </section>
       )}
 
@@ -1009,7 +1237,10 @@ export default async function ForecastPage({
       >
         <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
           <div className="flex flex-col gap-1.5">
-            <SectionLabel>Ciclo a ciclo</SectionLabel>
+            <div className="flex items-center gap-2.5">
+              <BarChart3 aria-hidden="true" className="hidden size-6 shrink-0 text-primary lg:block" />
+              <SectionLabel>Ciclo a ciclo</SectionLabel>
+            </div>
             <p className="text-[13.5px] text-muted-foreground tabular-nums">
               {timelineShort.length > 0 ? (
                 <>
@@ -1117,11 +1348,27 @@ export default async function ForecastPage({
               {groupLists
                 .filter((group) => group.incoming === side)
                 .map((group) => (
-                  <div key={group.key} className="flex flex-col gap-3">
+                  <div
+                    key={group.key}
+                    // No desktop, cada grupo é um card, e as linhas dentro dele
+                    // são planas, separadas por fios.
+                    className="flex flex-col gap-3 lg:gap-1 lg:rounded-[20px] lg:bg-card lg:px-5 lg:pt-5 lg:pb-3 lg:shadow-(--shadow-card)"
+                  >
                     {/* No celular, o subtotal desce para baixo do título em vez
                         de partir os dois. */}
-                    <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
-                      <SectionLabel>{groupLabel(group.kind, group.label, period.offset)}</SectionLabel>
+                    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5 lg:border-b lg:border-(--hairline) lg:pb-3">
+                      <div className="flex items-center gap-2.5">
+                        <span
+                          aria-hidden="true"
+                          className={cn(
+                            "hidden size-8 shrink-0 items-center justify-center rounded-full lg:flex [&_svg]:size-4",
+                            group.incoming ? "bg-positive/12 text-positive" : "bg-negative/10 text-negative",
+                          )}
+                        >
+                          {group.incoming ? <ArrowDownLeft /> : <ArrowUpRight />}
+                        </span>
+                        <SectionLabel>{groupLabel(group.kind, group.label, period.offset)}</SectionLabel>
+                      </div>
                       <span className="text-[13px] whitespace-nowrap font-medium text-muted-foreground tabular-nums">
                         {group.pending > 0.005 && group.pending < group.subtotal - 0.005 ? (
                           <>
@@ -1140,7 +1387,7 @@ export default async function ForecastPage({
                     {/* Um ciclo pode ter dezenas de lançamentos: as primeiras
                         linhas, e o resto num toque. */}
                     <CollapsibleList
-                      className="flex flex-col gap-2"
+                      className="flex flex-col gap-2 lg:gap-0 lg:[&>li+li]:border-t lg:[&>li+li]:border-(--hairline)"
                       items={group.entries.map((entry, index) => (
                         <EntryRow
                           key={`${entry.kind}-${entry.sourceId}-${entry.date.toISOString()}`}
@@ -1154,8 +1401,16 @@ export default async function ForecastPage({
                   </div>
                 ))}
               {side && showSummary && (
-                <div className="hidden flex-col gap-2 rounded-[18px] p-4 text-[13.5px] tabular-nums ring-1 ring-border xl:flex">
-                  <SectionLabel>Resumo do ciclo</SectionLabel>
+                <div className="hidden flex-col gap-3 rounded-[20px] bg-card p-5 text-[13.5px] tabular-nums shadow-(--shadow-card) xl:flex">
+                  <div className="flex items-center gap-2.5 border-b border-(--hairline) pb-3">
+                    <span
+                      aria-hidden="true"
+                      className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/12 text-primary [&_svg]:size-4"
+                    >
+                      <ListOrdered />
+                    </span>
+                    <SectionLabel>Resumo do ciclo</SectionLabel>
+                  </div>
                   {summaryLedger}
                 </div>
               )}
