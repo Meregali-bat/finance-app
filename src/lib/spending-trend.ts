@@ -21,13 +21,7 @@ function daysBetween(from: Date, to: Date): number {
 export function cumulativeDailySpending(input: {
   start: Date;
   today: Date;
-  transactions: {
-    amount: number;
-    date: Date;
-    transfer?: boolean;
-    lent?: number;
-    advance?: boolean;
-  }[];
+  transactions: { amount: number; date: Date; transfer?: boolean; lent?: number }[];
   cardPurchases: { amount: number; date: Date; lent?: number }[];
 }): { day: Date; total: number }[] {
   const { start, today } = input;

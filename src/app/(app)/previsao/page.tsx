@@ -263,9 +263,7 @@ function EntryRow({
         ? "recebido"
         : entry.kind === "jarReturn"
           ? "resgatado"
-          : entry.advanced
-            ? "pago adiantado"
-            : "pago"
+          : "pago"
       : current && !entry.awaiting
         ? incoming
           ? "previsto"

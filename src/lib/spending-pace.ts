@@ -53,7 +53,6 @@ export function spendingPace(input: {
     fromPeriodClose?: boolean;
     transfer?: boolean;
     lent?: number;
-    advance?: boolean;
   }[];
   cardPurchases: {
     cardId: string;
