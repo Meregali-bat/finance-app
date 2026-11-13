@@ -33,6 +33,8 @@ const tabsListVariants = cva(
         default:
           "rounded-[14px] bg-card p-1 shadow-[inset_0_0_0_1px_var(--hairline)] group-data-horizontal/tabs:h-[46px]",
         line: "gap-1 bg-transparent",
+        /** Abas soltas em pílula; a ativa preenchida com a cor da marca. */
+        pill: "gap-2 bg-transparent",
       },
     },
     defaultVariants: {
@@ -75,6 +77,7 @@ function TabsTrigger({ className, ...props }: TabsPrimitive.Tab.Props) {
         // No segmentado, quem pinta a aba ativa é a pílula que desliza; a aba
         // só muda a cor do texto e fica por cima dela.
         "z-[1] data-active:text-foreground dark:data-active:text-foreground group-data-[variant=default]/tabs-list:h-[38px] group-data-[variant=default]/tabs-list:rounded-[10px] group-data-[variant=default]/tabs-list:px-4 group-data-[variant=default]/tabs-list:text-[13.5px] group-data-[variant=default]/tabs-list:font-semibold group-data-[variant=default]/tabs-list:data-active:shadow-none",
+        "group-data-[variant=pill]/tabs-list:h-10 group-data-[variant=pill]/tabs-list:rounded-full group-data-[variant=pill]/tabs-list:border-(--hairline-strong) group-data-[variant=pill]/tabs-list:bg-card group-data-[variant=pill]/tabs-list:px-5 group-data-[variant=pill]/tabs-list:text-[13.5px] group-data-[variant=pill]/tabs-list:font-semibold group-data-[variant=pill]/tabs-list:data-active:border-transparent group-data-[variant=pill]/tabs-list:data-active:bg-brand group-data-[variant=pill]/tabs-list:data-active:text-brand-foreground dark:group-data-[variant=pill]/tabs-list:data-active:text-brand-foreground",
         "after:absolute after:bg-foreground after:opacity-0 after:transition-opacity group-data-horizontal/tabs:after:inset-x-0 group-data-horizontal/tabs:after:bottom-[-5px] group-data-horizontal/tabs:after:h-0.5 group-data-vertical/tabs:after:inset-y-0 group-data-vertical/tabs:after:-right-1 group-data-vertical/tabs:after:w-0.5 group-data-[variant=line]/tabs-list:data-active:after:opacity-100",
         className
       )}

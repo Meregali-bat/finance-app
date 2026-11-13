@@ -46,8 +46,10 @@ const ARROW_CLASS =
 export function PeriodPicker({
   range,
   cycles = false,
+  className,
 }: {
   range: ResolvedRange;
+  className?: string;
   /** Há renda que marca ciclo: o modo "Ciclo" (de um pagamento ao outro) aparece. */
   cycles?: boolean;
 }) {
@@ -91,7 +93,12 @@ export function PeriodPicker({
   }
 
   return (
-    <div className="rise-in flex items-center justify-between gap-2 rounded-[18px] bg-card p-1.5 shadow-[inset_0_0_0_1px_var(--hairline)] lg:w-fit lg:min-w-[24rem] lg:self-start">
+    <div
+      className={cn(
+        "rise-in flex items-center justify-between gap-2 rounded-[18px] bg-card p-1.5 shadow-[inset_0_0_0_1px_var(--hairline)] lg:w-fit lg:min-w-[24rem] lg:self-start",
+        className,
+      )}
+    >
       <Link
         href={hrefFor(range.previous)}
         className={ARROW_CLASS}

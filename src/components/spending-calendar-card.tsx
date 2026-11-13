@@ -1,6 +1,6 @@
 "use client";
 
-import { CreditCard } from "lucide-react";
+import { ArrowDown, ArrowDownLeft, CalendarDays, CreditCard, Lightbulb } from "lucide-react";
 import { homeCard } from "@/components/home-card";
 import { useHistoryDay } from "@/components/history-day";
 import { SectionLabel } from "@/components/page-header";
@@ -42,11 +42,21 @@ function dayLabel(key: string) {
  * novo solta. O dia é um só, o da listagem: o calendário não guarda outro, e
  * limpar o filtro lá embaixo apaga a marca aqui.
  */
+/** O resumo ao lado do calendário, enquanto nenhum dia está escolhido. */
+export type CalendarSummary = {
+  biggestIn: { amount: number; description: string; day: string } | null;
+  biggestOut: { amount: number; description: string; day: string } | null;
+  /** Uma frase sobre o ritmo, contra o período anterior. */
+  insight: { text: string; good: boolean } | null;
+};
+
 export function SpendingCalendarCard({
   calendar,
   today,
+  summary,
 }: {
   calendar: SpendingCalendar;
+  summary?: CalendarSummary;
   /** "YYYY-MM-DD" de hoje, para marcar o dia no calendário. */
   today: string;
 }) {
@@ -60,7 +70,12 @@ export function SpendingCalendarCard({
       style={{ "--rise-delay": "140ms" } as React.CSSProperties}
     >
       <div className="flex flex-col gap-1">
-        <SectionLabel>Calendário de gastos</SectionLabel>
+        <SectionLabel>
+          <span className="flex items-center gap-2.5">
+            <CalendarDays className="size-5 shrink-0 text-primary" aria-hidden="true" />
+            Calendário de gastos
+          </span>
+        </SectionLabel>
         <p className="text-[12.5px] text-muted-foreground">
           {calendar.activeDays > 0
             ? `${formatCurrency(calendar.total)} no dia a dia, em ${calendar.activeDays} ${calendar.activeDays === 1 ? "dia" : "dias"}: o cartão no dia da compra, sem contas fixas nem faturas. Por isso não bate com o Gasto.`
@@ -188,9 +203,88 @@ export function SpendingCalendarCard({
             )}
           </div>
         ) : (
-          <p className="border-t border-(--hairline) pt-3 text-[12.5px] text-muted-foreground lg:border-t-0 lg:border-l lg:pt-0 lg:pl-6">
-            Escolha um dia para ver o que saiu nele e filtrar a lista abaixo.
-          </p>
+          <div className="flex flex-col gap-3 border-t border-(--hairline) pt-3 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-6">
+            {summary && (
+              <>
+                <p className="font-heading text-[16px] font-bold tracking-[-0.02em]">
+                  Resumo do período
+                </p>
+                <SummaryLine
+                  label="Maior entrada"
+                  entry={summary.biggestIn}
+                  empty="Nenhuma entrada até agora."
+                  incoming
+                />
+                <SummaryLine
+                  label="Maior saída"
+                  entry={summary.biggestOut}
+                  empty="Nenhuma saída até agora."
+                />
+                {summary.insight && (
+                  <p
+                    className={cn(
+                      "flex items-start gap-2 rounded-[14px] px-3 py-2.5 text-[13px] leading-snug text-foreground",
+                      summary.insight.good ? "bg-positive/12" : "bg-negative/10",
+                    )}
+                  >
+                    <Lightbulb
+                      aria-hidden="true"
+                      className={cn(
+                        "mt-px size-4 shrink-0",
+                        summary.insight.good ? "text-positive" : "text-negative",
+                      )}
+                    />
+                    <span>{summary.insight.text}</span>
+                  </p>
+                )}
+              </>
+            )}
+            <p className="text-[12.5px] text-muted-foreground">
+              Escolha um dia para ver o que saiu nele e filtrar a lista abaixo.
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SummaryLine({
+  label,
+  entry,
+  empty,
+  incoming = false,
+}: {
+  label: string;
+  entry: CalendarSummary["biggestIn"];
+  empty: string;
+  incoming?: boolean;
+}) {
+  const Icon = incoming ? ArrowDownLeft : ArrowDown;
+  return (
+    <div className="flex items-start gap-3 border-b border-(--hairline) pb-3">
+      <span
+        aria-hidden="true"
+        className={cn(
+          "flex size-10 shrink-0 items-center justify-center rounded-full",
+          incoming ? "bg-positive/14 text-positive" : "bg-negative/12 text-negative",
+        )}
+      >
+        <Icon className="size-5" />
+      </span>
+      <div className="flex min-w-0 flex-col">
+        <span className="text-[12px] text-muted-foreground">{label}</span>
+        {entry ? (
+          <>
+            <span className="font-heading text-[18px] font-bold tracking-[-0.02em] tabular-nums">
+              {formatCurrency(entry.amount)}
+            </span>
+            <span className="truncate text-[12px] text-muted-foreground" title={entry.description}>
+              {entry.description} · {entry.day}
+            </span>
+          </>
+        ) : (
+          <span className="text-[13px] text-muted-foreground">{empty}</span>
         )}
       </div>
     </div>
