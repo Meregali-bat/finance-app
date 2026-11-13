@@ -11,16 +11,20 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { CurrencyInput } from "@/components/currency-input";
 import { markIncomeReceived } from "@/lib/actions/income-receipt";
 import type { IconTrigger } from "@/components/ui/icon-button";
 import { errorMessage } from "@/lib/error-message";
+import { todayInputValue } from "@/lib/format";
 
 export function MarkIncomeReceivedDialog({
   incomeId,
   label,
   dueDate,
   amount,
+  early = false,
+  earliestOn,
   trigger,
   onDone,
 }: {
@@ -28,6 +32,13 @@ export function MarkIncomeReceivedDialog({
   label: string;
   dueDate: Date;
   amount: number;
+  /**
+   * O pagamento ainda não chegou ao dia cadastrado: o dinheiro caiu antes, e o
+   * diálogo pergunta em que dia, que é onde o ciclo novo começa.
+   */
+  early?: boolean;
+  /** Com `early`: "YYYY-MM-DD", o dia mais antigo aceito. */
+  earliestOn?: string;
   trigger?: IconTrigger;
   /** Depois de salvar, com o que o "Desfazer" da Início precisa. */
   onDone?: (result: { incomeId: string; occurrenceDate: Date }) => void;
@@ -81,6 +92,23 @@ export function MarkIncomeReceivedDialog({
             day off from the payday the server computed.
           */}
           <input type="hidden" name="occurrenceDate" value={dueDate.toISOString()} />
+          {early && (
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="receipt-on">Caiu em</Label>
+              <Input
+                id="receipt-on"
+                name="receivedOn"
+                type="date"
+                defaultValue={todayInputValue()}
+                min={earliestOn}
+                max={todayInputValue()}
+                required
+              />
+              <p className="text-[13px] text-muted-foreground">
+                O ciclo novo começa nesse dia, e as contas dele já aparecem para pagar.
+              </p>
+            </div>
+          )}
           <div className="flex flex-col gap-2">
             <Label htmlFor="receipt-amount">Valor recebido</Label>
             <CurrencyInput id="receipt-amount" name="amount" defaultValue={amount} required />

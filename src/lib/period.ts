@@ -22,8 +22,17 @@ export interface IncomeInput {
 
 export interface IncomeReceiptInput {
   incomeId: string;
-  /** The occurrence (payday) this confirmation applies to. */
+  /**
+   * O dia em que o dinheiro caiu. É ele que marca o começo do ciclo, então um
+   * salário que chega antes do dia cadastrado abre o ciclo novo naquele dia.
+   */
   occurrenceDate: Date;
+  /**
+   * Só no recebimento antecipado: o dia de pagamento cadastrado que ele
+   * adiantou (o salário do dia 1º que caiu em 30/10 é o de novembro). Sem ele,
+   * o mês do recebimento é o mês de `occurrenceDate`.
+   */
+  forPayday?: Date | null;
   /** The amount actually received, which may differ from the income's registered amount. */
   amount: number;
 }
@@ -247,6 +256,12 @@ export interface IncomeReminder {
   incomeId: string;
   dueDate: Date;
   amount: number;
+  /**
+   * O próximo pagamento, que ainda não chegou ao dia: o lembrete existe para
+   * quem recebeu antes confirmar já e abrir o ciclo novo. Não é dinheiro deste
+   * ciclo, então fica fora do "a confirmar".
+   */
+  early?: boolean;
 }
 
 export interface CardLimitUsage {
@@ -411,12 +426,33 @@ function paydayInMonth(
   month: number,
   receipts: IncomeReceiptInput[],
 ): Date {
+  // O mês de um recebimento é o do dia de pagamento que ele quitou: o
+  // antecipado diz qual (`forPayday`); os demais, o próprio dia em que caiu.
   const confirmed = receipts
     .filter((r) => r.incomeId === income.id)
+    .filter((r) => {
+      const owner = storedDay(r.forPayday ?? r.occurrenceDate);
+      return owner.getFullYear() === year && owner.getMonth() === month;
+    })
     .map((r) => storedDay(r.occurrenceDate))
-    .filter((day) => day.getFullYear() === year && day.getMonth() === month)
     .sort((a, b) => b.getTime() - a.getTime());
   return confirmed[0] ?? dateForDayInMonth(year, month, income.dayOfMonth);
+}
+
+/**
+ * Os dias de pagamento da renda nos meses ao redor de `reference`, do mês
+ * anterior a dois à frente. O mês seguinte entra porque o salário dele pode ter
+ * caído antes, ainda neste mês (o do dia 1º que chegou em 30/10).
+ */
+function paydaysAround(
+  income: IncomeInput,
+  reference: Date,
+  receipts: IncomeReceiptInput[],
+): Date[] {
+  return [-1, 0, 1, 2].map((delta) => {
+    const { year, month } = addMonths(reference.getFullYear(), reference.getMonth(), delta);
+    return paydayInMonth(income, year, month, receipts);
+  });
 }
 
 /** O último dia de pagamento da renda em ou antes de `reference`. */
@@ -426,10 +462,8 @@ export function latestPaydayOnOrBefore(
   receipts: IncomeReceiptInput[] = [],
 ): Date {
   const ref = startOfDay(reference);
-  const candidate = paydayInMonth(income, ref.getFullYear(), ref.getMonth(), receipts);
-  if (candidate.getTime() <= ref.getTime()) return candidate;
-  const prev = addMonths(ref.getFullYear(), ref.getMonth(), -1);
-  return paydayInMonth(income, prev.year, prev.month, receipts);
+  const past = paydaysAround(income, ref, receipts).filter((d) => d.getTime() <= ref.getTime());
+  return new Date(Math.max(...past.map((d) => d.getTime())));
 }
 
 /** O primeiro dia de pagamento da renda depois de `reference`. */
@@ -439,10 +473,8 @@ export function earliestPaydayAfter(
   receipts: IncomeReceiptInput[] = [],
 ): Date {
   const ref = startOfDay(reference);
-  const candidate = paydayInMonth(income, ref.getFullYear(), ref.getMonth(), receipts);
-  if (candidate.getTime() > ref.getTime()) return candidate;
-  const next = addMonths(ref.getFullYear(), ref.getMonth(), 1);
-  return paydayInMonth(income, next.year, next.month, receipts);
+  const future = paydaysAround(income, ref, receipts).filter((d) => d.getTime() > ref.getTime());
+  return new Date(Math.min(...future.map((d) => d.getTime())));
 }
 
 /** Os dias de pagamento da renda em [start, end), com a mesma janela de `occurrencesInRange`. */
@@ -454,7 +486,9 @@ export function paydaysInRange(
 ): Date[] {
   const paydays: Date[] = [];
   let cursor = addMonths(start.getFullYear(), start.getMonth(), -1);
-  for (let i = 0; i < 3; i++) {
+  // Um mês a mais que `occurrencesInRange`: o pagamento do mês depois da
+  // janela pode ter caído antes, dentro dela.
+  for (let i = 0; i < 4; i++) {
     const d = paydayInMonth(income, cursor.year, cursor.month, receipts);
     if (d.getTime() >= start.getTime() && d.getTime() < end.getTime()) paydays.push(d);
     cursor = addMonths(cursor.year, cursor.month, 1);
@@ -720,6 +754,13 @@ export function deferralTargetDate(
  * older belongs to a stretch the app never tracked.
  */
 const PRE_REGISTRATION_GRACE_DAYS = 7;
+
+/**
+ * Quantos dias antes do dia cadastrado o salário pode cair e ser confirmado
+ * como antecipado. Uma semana cobre o dia útil anterior a um feriado longo e o
+ * "5º dia útil" que cai antes do dia 5; mais que isso, é outra renda.
+ */
+export const EARLY_INCOME_DAYS = 7;
 
 /** Whether a payday is recent enough to be worth asking the user about. */
 function isPaydayAskable(occurrence: Date, createdAt: Date | undefined): boolean {
@@ -1465,6 +1506,22 @@ export function budgetForBounds(
       dueDate: occurrence,
       amount: income.amount,
     }));
+
+  /**
+   * O próximo pagamento, nos dias antes dele: salário cai antes do dia (o dia
+   * útil anterior a um feriado, o 5º dia útil). Confirmado, ele abre o ciclo
+   * novo no dia em que caiu, e as contas do ciclo novo aparecem para pagar.
+   * Uma renda que ainda espera a confirmação do pagamento passado não ganha
+   * um segundo lembrete.
+   */
+  const asked = new Set(incomeReminders.map((r) => r.incomeId));
+  for (const income of active) {
+    if (asked.has(income.id)) continue;
+    const next = earliestPaydayAfter(income, today, incomeReceipts);
+    if (!isOccurrenceValid(next, income.createdAt)) continue;
+    if (diffCalendarDays(next, todayStart) > EARLY_INCOME_DAYS) continue;
+    incomeReminders.push({ incomeId: income.id, dueDate: next, amount: income.amount, early: true });
+  }
 
   const inPeriod = (day: Date) =>
     day.getTime() >= periodStart.getTime() && day.getTime() < periodEnd.getTime();

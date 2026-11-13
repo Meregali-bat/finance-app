@@ -64,7 +64,7 @@ export default async function FixedPage({
     // As confirmações recentes: dizem se a renda deste mês já chegou.
     prisma.incomeReceipt.findMany({
       where: { userId, occurrenceDate: { gte: recent } },
-      select: { incomeId: true, occurrenceDate: true, amount: true },
+      select: { incomeId: true, occurrenceDate: true, forPayday: true, amount: true },
     }),
     // As apagadas ficam no banco para o Histórico, mas não na lista.
     prisma.fixedExpense.findMany({
@@ -106,6 +106,7 @@ export default async function FixedPage({
     receipts.map((r) => ({
       incomeId: r.incomeId,
       occurrenceDate: r.occurrenceDate,
+      forPayday: r.forPayday,
       amount: Number(r.amount),
     })),
   );

@@ -57,7 +57,14 @@ export type HomeReminder =
       /** O dia da última leitura do saldo, "7 de nov."; nulo sem nenhuma. */
       readingLabel: string | null;
     })
-  | (Base & { kind: "income"; incomeId: string });
+  | (Base & {
+      kind: "income";
+      incomeId: string;
+      /** O próximo pagamento, antes do dia: "Recebi" pergunta em que dia caiu. */
+      early: boolean;
+      /** Com `early`: "YYYY-MM-DD", o dia mais antigo que o diálogo aceita. */
+      earliestOn?: string;
+    });
 
 type Toast = {
   id: number;
@@ -497,6 +504,8 @@ function ReminderCard({
             label={reminder.label}
             dueDate={reminder.dueDate}
             amount={reminder.amount}
+            early={reminder.early}
+            earliestOn={reminder.earliestOn}
             trigger={payTrigger}
             onDone={({ incomeId, occurrenceDate }) =>
               onPaid(() => unmarkIncomeReceived(incomeId, occurrenceDate))
