@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { ForecastArrowKeys } from "@/components/forecast-arrow-keys";
+import { cn } from "@/lib/utils";
 
 /**
  * As setas são o alvo de toque mais estreito da tela, então valem 44px (o
@@ -31,6 +32,7 @@ export function ForecastNav({
   previousHref,
   nextHref,
   currentHref = null,
+  className,
 }: {
   label: string;
   caption: string;
@@ -38,9 +40,15 @@ export function ForecastNav({
   nextHref: string | null;
   /** Longe do ciclo atual, a legenda vira o caminho de volta a ele. */
   currentHref?: string | null;
+  className?: string;
 }) {
   return (
-    <div className="rise-in flex items-center justify-between gap-2 rounded-[18px] bg-card p-1.5 shadow-[inset_0_0_0_1px_var(--hairline)] lg:w-fit lg:min-w-[24rem] lg:self-start">
+    <div
+      className={cn(
+        "rise-in flex items-center justify-between gap-2 rounded-[18px] bg-card p-1.5 shadow-[inset_0_0_0_1px_var(--hairline)] lg:w-fit lg:min-w-[24rem] lg:self-start",
+        className,
+      )}
+    >
       {previousHref ? (
         <Link
           href={previousHref}
