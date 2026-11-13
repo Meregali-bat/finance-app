@@ -84,7 +84,17 @@ const COLLAPSED_DESKTOP = 4;
  * some na hora, sem esperar o servidor — quando a página volta revalidada,
  * ele já não vem mais.
  */
-export function HomeReminders({ reminders }: { reminders: HomeReminder[] }) {
+export function HomeReminders({
+  reminders,
+  panel = false,
+}: {
+  reminders: HomeReminder[];
+  /**
+   * No desktop, a lista vira um painel só ("Contas a pagar"): um card com as
+   * linhas separadas por fio, em vez de um card por lembrete. No celular, igual.
+   */
+  panel?: boolean;
+}) {
   const reduceMotion = useReducedMotion();
   // Confirmados, aguardando a saída (check turquesa)…
   const [confirmed, setConfirmed] = useState<Set<string>>(() => new Set());
@@ -202,13 +212,24 @@ export function HomeReminders({ reminders }: { reminders: HomeReminder[] }) {
       .reduce((sum, r) => sum + r.amount, 0);
 
   return (
-    <div className="flex flex-col gap-3">
+    <div
+      className={cn(
+        "flex flex-col gap-3",
+        panel && "lg:h-full lg:rounded-[20px] lg:bg-card lg:p-5 lg:shadow-(--shadow-card)",
+      )}
+    >
       <div
         ref={heading}
         tabIndex={-1}
         className="-mx-1 flex items-center gap-2 rounded-lg px-1 outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
-        <SectionLabel>Lembretes</SectionLabel>
+        {/* Só contas e faturas: o nome do que são. Com um salário a confirmar
+            no meio, "Lembretes", que cobre os dois. */}
+        <SectionLabel>
+          {visible.length > 0 && visible.every((r) => r.kind === "due")
+            ? "Contas a pagar"
+            : "Lembretes"}
+        </SectionLabel>
         {visible.length > 0 && (
           <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-secondary px-1.5 text-[11px] font-semibold tabular-nums">
             {visible.length}
@@ -217,7 +238,12 @@ export function HomeReminders({ reminders }: { reminders: HomeReminder[] }) {
       </div>
 
       {visible.length === 0 ? (
-        <div className="flex flex-col items-center gap-1 rounded-[20px] border border-dashed border-border/70 px-6 py-8 text-center">
+        <div
+          className={cn(
+            "flex flex-col items-center gap-1 rounded-[20px] border border-dashed border-border/70 px-6 py-8 text-center",
+            panel && "lg:flex-1 lg:justify-center lg:border-0",
+          )}
+        >
           <CircleCheck
             className="mb-1 size-6 text-positive"
             aria-hidden="true"
@@ -263,11 +289,13 @@ export function HomeReminders({ reminders }: { reminders: HomeReminder[] }) {
                 // cabem na linha do texto ou descem para a linha de baixo.
                 className={cn(
                   "@container mb-2.5 overflow-hidden last:mb-0",
+                  panel && "lg:mb-0 lg:border-b lg:border-(--hairline) lg:last:border-b-0",
                   hiddenMobile > 0 && index >= COLLAPSED_MOBILE && "max-lg:hidden",
                   hiddenMobile > 0 && index === COLLAPSED_MOBILE - 1 && "max-lg:mb-0",
                 )}
               >
                 <ReminderCard
+                  flat={panel}
                   reminder={reminder}
                   confirmed={confirmed.has(reminder.key)}
                   onPaid={(undoFn) =>
@@ -340,12 +368,15 @@ export function HomeReminders({ reminders }: { reminders: HomeReminder[] }) {
 }
 
 function ReminderCard({
+  flat = false,
   reminder,
   confirmed,
   onPaid,
   onPartial,
   onDeferred,
 }: {
+  /** Linha do painel do desktop: sem a superfície de card a partir de `lg`. */
+  flat?: boolean;
   reminder: HomeReminder;
   confirmed: boolean;
   onPaid: (undo: () => Promise<void>) => void;
@@ -378,12 +409,16 @@ function ReminderCard({
   return (
     <div
       className={homeCard(
-        "flex flex-wrap items-center gap-x-3 gap-y-2 py-3.5 pr-3.5 pl-4 @[29rem]:flex-nowrap lg:py-3.5 lg:pr-3.5 lg:pl-4",
+        cn(
+          "flex flex-wrap items-center gap-x-3 gap-y-2 py-3.5 pr-3.5 pl-4 @[29rem]:flex-nowrap lg:py-3.5 lg:pr-3.5 lg:pl-4",
+          flat && "lg:rounded-none lg:bg-transparent lg:px-0 lg:py-3 lg:shadow-none",
+        ),
       )}
     >
       <div
         className={cn(
           "flex size-[38px] shrink-0 items-center justify-center rounded-xl",
+          flat && "lg:rounded-full",
           isIncome
             ? "bg-positive/12 text-positive"
             : overdue

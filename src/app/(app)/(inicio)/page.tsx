@@ -1,7 +1,20 @@
 import { differenceInCalendarDays } from "date-fns";
 import { Suspense } from "react";
 import Link from "next/link";
-import { ChevronRight, CircleAlert, CreditCard, Receipt, TriangleAlert } from "lucide-react";
+import {
+  ArrowDownLeft,
+  ArrowRight,
+  ArrowUpRight,
+  BarChart3,
+  Bell,
+  CalendarDays,
+  ChevronRight,
+  CircleAlert,
+  CircleDollarSign,
+  CreditCard,
+  Receipt,
+  TriangleAlert,
+} from "lucide-react";
 import { staleAdjustmentDays } from "@/lib/account-balance";
 import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/auth-helpers";
@@ -9,7 +22,7 @@ import { deferralTargetDate, fallsOnDay, ownSpendingOf } from "@/lib/period";
 import { cumulativeDailySpending } from "@/lib/spending-trend";
 import { AreaTrend } from "@/components/charts/area-trend";
 import { loadBudgetInputs, registeredMovementOf } from "@/lib/budget-inputs";
-import { formatCurrency, formatDate, installmentLabel } from "@/lib/format";
+import { formatCurrency, formatDate, formatDateOnly, installmentLabel } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SectionLabel } from "@/components/page-header";
@@ -43,6 +56,7 @@ import { NextCycleCommitmentCard } from "@/components/next-cycle-commitment-card
 import { nextCycleCommitment } from "@/lib/next-cycle-commitment";
 import { paceWarningFor } from "@/lib/pace-warning";
 import { DEFAULT_COMMITMENT_LIMIT_PERCENT } from "@/lib/purchase-simulation";
+import { PeriodSpendChart } from "@/components/period-spend-chart";
 
 /** "Quinta-feira" e "16 de outubro": o cabeçalho do desktop. */
 function longHeading(date: Date) {
@@ -118,7 +132,7 @@ export default async function DashboardPage() {
   // Datas de calendário ficam em meia-noite UTC: a janela das compras no cartão
   // de hoje e de amanhã vai de hoje a depois de amanhã.
   const todayUtc = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate());
-  const [inputs, categories, profile, debts, recentCardPurchases, slicesOverview] =
+  const [inputs, categories, profile, debts, recentCardPurchases, slicesOverview, lastCardPurchases] =
     await Promise.all([
       loadBudgetInputs(userId),
       prisma.category.findMany({
@@ -150,6 +164,27 @@ export default async function DashboardPage() {
         },
       }),
       loadSlicesOverview(userId, today),
+      // As últimas compras no cartão, até amanhã: a lista "Últimas
+      // movimentações" do desktop junta essas com os lançamentos da conta.
+      prisma.cardPurchase.findMany({
+        where: {
+          userId,
+          card: { deletedAt: null },
+          date: { lt: new Date(todayUtc + 2 * 86_400_000) },
+        },
+        orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+        take: 6,
+        select: {
+          id: true,
+          description: true,
+          amount: true,
+          date: true,
+          createdAt: true,
+          installments: true,
+          categoryId: true,
+          cardId: true,
+        },
+      }),
     ]);
 
   const tomorrow = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
@@ -398,6 +433,48 @@ export default async function DashboardPage() {
     (u) => u.percentUsed > 100 && !SLICES.find((s) => s.key === u.key)?.saving,
   ).length;
 
+  // O título do número do dia: o mesmo no hero do celular e no card do desktop.
+  const heroTitle = isOverBudget ? (
+    staleDays != null ? (
+      <>
+        Pode estar no vermelho: saldo conferido{" "}
+        <span className="whitespace-nowrap">há {staleDays} dias</span>
+      </>
+    ) : (
+      "Este período está no vermelho"
+    )
+  ) : allToSavings ? (
+    "Hoje, o que sobra vai para guardar"
+  ) : isTight ? (
+    "Apertado até receber"
+  ) : (
+    "Por dia, até receber"
+  );
+  const daysLeftText =
+    budget.daysRemaining === 1 ? "falta 1 dia" : `faltam ${budget.daysRemaining} dias`;
+  const firstName = profile.name?.trim().split(/\s+/)[0] ?? null;
+  // O que entrou de renda no período e o que ainda espera confirmação.
+  const incomeToConfirm = budget.incomeReminders.reduce((sum, r) => sum + r.amount, 0);
+  const averagePerDay = spentInPeriod / Math.max(1, Math.min(elapsedDays, spendingTrend.length));
+
+  // "Últimas movimentações" do desktop: conta e cartão juntos, do mais novo
+  // para o mais antigo, até amanhã (o que já está agendado aparece com o dia).
+  const untilTomorrow = todayUtc + 2 * 86_400_000;
+  const recentItems: DayItem[] = [
+    ...transactions
+      .filter((t) => t.date.getTime() < untilTomorrow)
+      .map((t) => ({ ...t, kind: "transaction" as const })),
+    ...lastCardPurchases.map((p) => ({ ...p, amount: Number(p.amount), kind: "card" as const })),
+  ]
+    .sort(
+      (a, b) =>
+        b.date.getTime() - a.date.getTime() ||
+        (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0),
+    )
+    .slice(0, 5);
+  const recentDay = (date: Date) =>
+    fallsOnDay(date, today) ? "hoje" : fallsOnDay(date, tomorrow) ? "amanhã" : formatDateOnly(date);
+
   const movementRows = (list: DayItem[]) =>
     list.map((t) => (
       <li key={`${t.kind}-${t.id}`}>
@@ -490,24 +567,56 @@ export default async function DashboardPage() {
           </Link>
         </div>
       </header>
-      <header className="rise-in hidden items-end justify-between gap-4 lg:flex" style={rise(0)}>
-        <div className="flex flex-col gap-1.5">
-          <p className="text-[13px] font-medium text-muted-foreground">{heading.weekday}</p>
-          {/* Texto, não título: o h1 da página é a frase do hero, em todos os tamanhos. */}
-          {/* 22px: um degrau acima dos títulos de seção (18px), e bem abaixo
-              do número do hero — a data situa, não compete. */}
-          <p className="font-heading text-[22px] leading-none font-bold tracking-[-0.03em]">
-            {heading.day}
+      {/* Desktop: a saudação, o período, o sino dos lembretes e o botão de
+          lançar. No celular o cabeçalho não gera caixa (`contents`): só o
+          botão + existe ali, fixo no canto, acima da barra inferior; ele
+          recolhe ao rolar para baixo. */}
+      <header className="contents lg:flex lg:items-end lg:justify-between lg:gap-6">
+        <div className="rise-in hidden flex-col gap-1.5 lg:flex" style={rise(0)}>
+          {/* Texto, não título: o h1 da página é a frase do número do dia. */}
+          <p className="font-heading text-[30px] leading-none font-bold tracking-[-0.035em]">
+            {firstName ? `Olá, ${firstName}!` : "Olá!"} <span aria-hidden="true">👋</span>
+          </p>
+          <p className="text-[15px] text-muted-foreground">
+            {heading.weekday}, {heading.day} · {daysLeftText} para o próximo pagamento
           </p>
         </div>
+        <div className="contents lg:flex lg:items-center lg:gap-2.5">
+          <Link
+            href="/previsao?p=0"
+            className="rise-in hidden h-11 items-center gap-2 rounded-full bg-card px-4 text-sm font-medium whitespace-nowrap shadow-(--shadow-card) transition-colors duration-150 hover:bg-card-hover lg:flex"
+            style={rise(0)}
+            title="Ver o período na Previsão"
+          >
+            <CalendarDays className="size-[18px] text-muted-foreground" aria-hidden="true" />
+            <span className="tabular-nums">
+              {formatDate(budget.periodStart)} – {formatDate(budget.periodEnd)}
+            </span>
+          </Link>
+          {/* Âncora nativa: o `hashchange` abre a lista inteira dos lembretes. */}
+          <a
+            href="#lembretes"
+            aria-label={
+              reminders.length > 0
+                ? `Lembretes: ${reminders.length} pendente${reminders.length === 1 ? "" : "s"}`
+                : "Lembretes: nenhum pendente"
+            }
+            className="rise-in relative hidden size-11 items-center justify-center rounded-full bg-card shadow-(--shadow-card) transition-colors duration-150 hover:bg-card-hover lg:flex"
+            style={rise(0)}
+          >
+            <Bell className="size-[19px]" aria-hidden="true" />
+            {reminders.length > 0 && (
+              <span
+                aria-hidden="true"
+                className="absolute top-2.5 right-2.5 size-2.5 rounded-full bg-negative ring-2 ring-card"
+              />
+            )}
+          </a>
+          <ScrollAwayFab className="fixed right-4 bottom-[calc(env(safe-area-inset-bottom)+74px)] z-20 lg:static lg:bottom-auto lg:z-auto">
+            <MovementFormDialog cards={cardOptions} categories={categoryOptions} shortcut="n" />
+          </ScrollAwayFab>
+        </div>
       </header>
-
-      {/* Fora de `lg` o botão é fixo no canto da viewport, logo acima da
-          barra inferior; em `lg` ele sobe para o cabeçalho, alinhado ao
-          título. No celular ele recolhe ao rolar para baixo. */}
-      <ScrollAwayFab className="fixed right-4 bottom-[calc(env(safe-area-inset-bottom)+74px)] z-20 lg:absolute lg:top-1.5 lg:right-0 lg:bottom-auto lg:z-auto">
-        <MovementFormDialog cards={cardOptions} categories={categoryOptions} shortcut="n" />
-      </ScrollAwayFab>
 
       {/* O card de destaque. O número do dia é a única figura grande: à
           esquerda, ele, a régua do período e, sob ela, a curva do gasto, em
@@ -518,7 +627,7 @@ export default async function DashboardPage() {
           vêm logo abaixo. */}
       <section
         aria-label="Orçamento de hoje"
-        className="hero-surface rise-in relative overflow-hidden rounded-[26px] lg:rounded-[28px]"
+        className="hero-surface rise-in relative overflow-hidden rounded-[26px] lg:hidden"
         data-tone={isOverBudget ? "negative" : isTight ? "tight" : undefined}
         style={rise(40)}
       >
@@ -539,18 +648,7 @@ export default async function DashboardPage() {
                   {/* Com o saldo velho, o próprio título é condicional: é o
                       que se lê primeiro, e não pode afirmar um vermelho que
                       talvez não exista. */}
-                  {isOverBudget
-                    ? staleDays != null
-                      ? <>
-                          Pode estar no vermelho: saldo conferido{" "}
-                          <span className="whitespace-nowrap">há {staleDays} dias</span>
-                        </>
-                      : "Este período está no vermelho"
-                    : allToSavings
-                      ? "Hoje, o que sobra vai para guardar"
-                      : isTight
-                        ? "Apertado até receber"
-                        : "Por dia, até receber"}
+                  {heroTitle}
                   {/* O número entra no título para o leitor de tela: a lista
                       de títulos e o "h" dizem a pergunta junto com a
                       resposta. O número grande abaixo fica só visual
@@ -841,23 +939,272 @@ export default async function DashboardPage() {
         </div>
       </section>
 
-      {/* Tudo abaixo do hero, na ordem do celular — que é também a ordem do
-          HTML, então leitor de tela e Tab andam como a tela: o que pagar, o
-          que saiu hoje, o saldo em conta, o planejar, o "a receber" e, por
-          último, ligar os avisos. Nada de `order`: no desktop as áreas da
-          grade seguem a mesma ordem — lembretes e movimentações lado a lado
-          em cima, as ferramentas numa faixa no meio, o "a receber" e os
-          avisos embaixo —, então o Tab desce como os olhos. A faixa ocupa a
-          largura toda e começa abaixo do mais alto entre lembretes e
-          movimentações; o "a receber" e os avisos, abaixo dela, começam
-          juntos. Cada bloco leva a própria entrada (`rise-in`), com o atraso
-          da sua altura na tela (ver `rise`). */}
-      <div className="flex flex-col gap-5 lg:grid lg:grid-cols-2 lg:items-start lg:gap-6 lg:[grid-template-areas:'reminders_today'_'tools_tools'_'bottom_bottom']">
-        <div id="lembretes" className="rise-in flex scroll-mt-4 flex-col gap-3 lg:[grid-area:reminders]" style={rise(120)}>
-          <HomeReminders reminders={reminders} />
+      {/* Desktop: a fileira de números. O do dia vem primeiro e maior, na
+          cor da marca quando o dia está normal; nos dias de cuidado ele leva
+          as cores do hero (apertado, vermelho). Depois o saldo em conta (com
+          o lápis de conferir), a renda que entrou e o gasto do período. */}
+      <div className="rise-in hidden lg:grid lg:grid-cols-[minmax(0,1.2fr)_repeat(3,minmax(0,1fr))] lg:gap-4" style={rise(40)}>
+        <section
+          aria-label="Orçamento de hoje"
+          className="hero-surface hero-brand relative overflow-hidden rounded-[20px] p-5"
+          data-tone={isOverBudget ? "negative" : isTight ? "tight" : undefined}
+        >
+          <div className="relative z-10 flex items-start gap-3">
+            <span
+              aria-hidden="true"
+              className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-(--hero-chip) text-(--hero-fg)"
+            >
+              <CircleDollarSign className="size-5" />
+            </span>
+            <div className="flex min-w-0 flex-col gap-1.5">
+              <h1 className="flex items-start gap-1.5 text-[12.5px] font-medium text-(--hero-muted)">
+                {isOverBudget && (
+                  <TriangleAlert aria-hidden className="mt-px size-3.5 shrink-0 text-negative" />
+                )}
+                <span>
+                  {heroTitle}
+                  <span className="sr-only">
+                    {isOverBudget
+                      ? `. Por dia: ${formatCurrency(dailyAvailable)}`
+                      : `: ${formatCurrency(dailyAvailable)}`}
+                  </span>
+                </span>
+              </h1>
+              <CountUpCurrency
+                value={dailyAvailable}
+                memoryKey="home:daily-kpi"
+                announce={false}
+                className={`font-heading text-[30px] leading-none font-bold tracking-[-0.04em] tabular-nums ${
+                  isOverBudget && staleDays == null ? "text-negative" : "text-(--hero-fg)"
+                }`}
+              />
+              <p className="text-xs text-(--hero-muted) tabular-nums">
+                {isOverBudget || allToSavings || isTight
+                  ? `por dia até ${formatDate(budget.periodEnd)}`
+                  : `por dia · pagamento em ${formatDate(budget.periodEnd)}`}
+              </p>
+              {spentToday >= 0.005 && (
+                <p className="text-xs text-(--hero-muted) tabular-nums">
+                  já descontado hoje:{" "}
+                  <span className="font-semibold text-(--hero-fg)">{formatCurrency(spentToday)}</span>
+                </p>
+              )}
+            </div>
+          </div>
+        </section>
+
+        <AccountBalanceCard
+          id="saldo-kpi"
+          variant="kpi"
+          balance={accountBalance}
+          adjustedAt={adjustedAt}
+          registeredMovement={registeredMovement}
+          today={today}
+          className="scroll-mt-4"
+        />
+
+        <div className={homeCard("flex items-start gap-3 lg:p-5")}>
+          <span
+            aria-hidden="true"
+            className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-positive/14 text-positive"
+          >
+            <ArrowDownLeft className="size-5" />
+          </span>
+          <div className="flex min-w-0 flex-col gap-1.5">
+            <h2 className="text-[12.5px] font-medium text-muted-foreground">Renda recebida</h2>
+            <p className="font-heading text-[24px] leading-none font-bold tracking-[-0.035em] tabular-nums">
+              {formatCurrency(budget.incomeTotal)}
+            </p>
+            <p
+              className={cn(
+                "text-xs tabular-nums",
+                incomeToConfirm >= 0.005 ? "font-semibold text-positive" : "text-muted-foreground",
+              )}
+            >
+              {incomeToConfirm >= 0.005
+                ? `+ ${formatCurrency(incomeToConfirm)} a confirmar`
+                : `próximo em ${formatDate(budget.periodEnd)}`}
+            </p>
+          </div>
         </div>
 
-        <div className="flex flex-col gap-5 lg:gap-6 lg:[grid-area:today]">
+        <div className={homeCard("flex items-start gap-3 lg:p-5")}>
+          <span
+            aria-hidden="true"
+            className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-negative/12 text-negative"
+          >
+            <ArrowUpRight className="size-5" />
+          </span>
+          <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+            <h2 className="text-[12.5px] font-medium text-muted-foreground">Gasto no período</h2>
+            <p className="font-heading text-[24px] leading-none font-bold tracking-[-0.035em] tabular-nums">
+              {formatCurrency(spentInPeriod)}
+            </p>
+            <p className="text-xs text-muted-foreground tabular-nums">
+              média de {formatCurrency(averagePerDay)} por dia
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Desktop: o período em uma faixa. À esquerda, a régua dos dias e o
+          que é preciso saber hoje (vermelho, apertado, ritmo, saldo velho);
+          à direita, aberta, a conta do número — o que faz confiar nele. */}
+      <section
+        aria-label="O período"
+        className={homeCard(
+          "rise-in hidden lg:grid lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)] lg:gap-8 lg:p-5",
+        )}
+        style={rise(80)}
+      >
+        <div className="flex flex-col gap-3 text-sm">
+          <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+            <SectionLabel>Seu período</SectionLabel>
+            <p className="text-[13px] text-muted-foreground tabular-nums">
+              dia {Math.min(elapsedDays, rulerDays)} de {rulerDays} · {daysLeftText}
+            </p>
+          </div>
+          <div className="[--ruler-gap:3px]">
+            <DayRuler totalDays={totalDays} elapsedDays={elapsedDays} />
+          </div>
+          <div className="flex flex-col gap-2 text-pretty tabular-nums">
+            {isOverBudget && (
+              <p className="flex items-start gap-1.5 font-medium">
+                <TriangleAlert aria-hidden className="mt-0.5 size-4 shrink-0 text-negative" />
+                <span>
+                  {staleDays != null
+                    ? `Se a estimativa estiver certa, o período fecha ${formatCurrency(periodDeficit)} no negativo. `
+                    : `O período fecha ${formatCurrency(periodDeficit)} no negativo, mesmo sem gastar mais nada. `}
+                  {staleDays != null ? (
+                    <a href="#saldo-kpi" className={heroLink}>
+                      Conferir o saldo
+                    </a>
+                  ) : canDefer ? (
+                    <a href="#lembretes" className={heroLink}>
+                      Veja o que dá para adiar
+                    </a>
+                  ) : (
+                    <Link href="/previsao" className={heroLink}>
+                      Veja como ficam os próximos ciclos
+                    </Link>
+                  )}
+                </span>
+              </p>
+            )}
+            {staleDays != null && !isOverBudget && (
+              <p className="flex items-start gap-1.5">
+                <CircleAlert aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
+                <span>
+                  Conta feita com o saldo conferido há {staleDays} dias ·{" "}
+                  <a href="#saldo-kpi" className={heroLink}>
+                    Conferir
+                  </a>
+                </span>
+              </p>
+            )}
+            {isTight && (
+              <p className="font-medium">
+                {tightTomorrow != null
+                  ? `${spentToday >= 0.005 ? "Se hoje ficar só nisso" : "Se hoje passar sem gastos"}, amanhã sobe para ${formatCurrency(tightTomorrow)} por dia. `
+                  : "As contas previstas até o pagamento já estão cobertas. "}
+                {canDefer && (
+                  <a href="#lembretes" className={cn(heroLink, "font-normal")}>
+                    Veja o que dá para adiar
+                  </a>
+                )}
+              </p>
+            )}
+            {paceWarn && !isOverBudget && (
+              <p className="flex items-start gap-1.5">
+                <CircleAlert aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
+                <span>
+                  {paceWarn.perDayTarget !== null
+                    ? `Para ${paceWarn.offset === 0 ? "este ciclo" : "o próximo ciclo"} não fechar no negativo, fique em ${formatCurrency(paceWarn.perDayTarget)} por dia até ${formatDate(paceWarn.lastDay)}. `
+                    : `${paceWarn.offset === 0 ? "Este ciclo" : "O próximo ciclo"} fecha ${formatCurrency(-paceWarn.left)} no negativo em ${formatDate(paceWarn.lastDay)}, mesmo sem gastar mais. `}
+                  <Link href={`/previsao?p=${paceWarn.offset}`} className={heroLink}>
+                    Ver na Previsão
+                  </Link>
+                </span>
+              </p>
+            )}
+            {savingsShortfall && <p className="text-muted-foreground">{savingsShortfall}</p>}
+            {!isOverBudget && !isTight && !paceWarn && !savingsShortfall && staleDays == null && (
+              <p className="text-muted-foreground">
+                Livre até receber:{" "}
+                <span className="font-semibold text-foreground">
+                  {formatCurrency(budget.periodBalance)}
+                </span>
+                {setAside && (
+                  <>
+                    {" · "}
+                    <Link href={setAside.href} className={heroLink}>
+                      {formatCurrency(setAside.amount)} {setAside.label}
+                    </Link>
+                  </>
+                )}
+              </p>
+            )}
+          </div>
+        </div>
+        <div className="flex flex-col gap-1 pl-8 text-[13px] leading-snug shadow-[-1px_0_0_0_var(--hairline)]">
+          <BudgetBreakdown
+            budget={budget}
+            accountBalance={accountBalance}
+            accountBalanceStaleDays={staleDays}
+            reservedForLater={reservedForLater}
+            savingsApplied={savingsApplied}
+            dailyAvailable={dailyAvailable}
+            spentInPeriod={spentInPeriod}
+          />
+        </div>
+      </section>
+
+      {/* Tudo abaixo, na ordem do celular — que é também a ordem do HTML:
+          o que pagar, o que saiu hoje, o próximo ciclo, o saldo e o
+          planejar, o "a receber" e os avisos. No desktop, uma grade de três
+          colunas que segue a mesma ordem (o gráfico, que só existe ali, vem
+          antes): gráfico e contas a pagar; últimas movimentações, próximo
+          ciclo e "posso comprar isso?"; fatias, "a receber" e avisos. Os
+          blocos só do celular somem da grade em `lg`. */}
+      <div className="flex flex-col gap-5 lg:grid lg:grid-cols-3 lg:gap-6">
+        <section
+          aria-label="Gasto no período, dia a dia"
+          className={homeCard("rise-in hidden lg:col-span-2 lg:flex lg:flex-col lg:gap-4 lg:p-5")}
+          style={rise(100)}
+        >
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="flex items-center gap-2.5 font-heading text-[18px] leading-tight font-bold tracking-[-0.025em]">
+              <BarChart3 className="size-5 text-primary" aria-hidden="true" />
+              Gasto no período
+            </h2>
+            <div className="flex items-center gap-4 text-[12.5px] text-muted-foreground">
+              <span className="flex items-center gap-1.5">
+                <span aria-hidden="true" className="size-2 rounded-full bg-primary" />
+                Acumulado
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span aria-hidden="true" className="size-2 rounded-full bg-primary/30" />
+                Por dia
+              </span>
+              <Link href="/historico" className="font-semibold text-primary hover:underline">
+                Histórico
+                <ArrowRight className="ml-1 inline size-3.5 align-[-2px]" aria-hidden="true" />
+              </Link>
+            </div>
+          </div>
+          <PeriodSpendChart
+            cumulative={spendingTrend.map((p) => p.value)}
+            periodStart={budget.periodStart}
+            totalDays={rulerDays}
+          />
+        </section>
+
+        <div id="lembretes" className="rise-in flex scroll-mt-4 flex-col gap-3" style={rise(120)}>
+          <HomeReminders reminders={reminders} panel />
+        </div>
+
+        {/* Celular: o que saiu hoje e o que está marcado para amanhã. */}
+        <div className="flex flex-col gap-5 lg:hidden">
           <div className="rise-in flex flex-col gap-3" style={rise(100)}>
             <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
               <SectionLabel>Movimentações de hoje</SectionLabel>
@@ -879,107 +1226,189 @@ export default async function DashboardPage() {
           {tomorrowsItems.length > 0 && (
             <div className="rise-in flex flex-col gap-3" style={rise(100)}>
               <SectionLabel>Amanhã</SectionLabel>
-              <ul className="flex flex-col gap-2.5">
-                {movementRows(tomorrowsItems)}
-              </ul>
-            </div>
-          )}
-
-          {/* O que o cartão já tirou do próximo ciclo: depois do que é de hoje
-              (pagar, lançar), no mesmo lugar no celular e no desktop, onde a
-              coluna do dia sobrava vazia. */}
-          {commitmentCard && (
-            <div className="rise-in flex flex-col gap-3" style={rise(120)}>
-              <SectionLabel>Próximo ciclo</SectionLabel>
-              {commitmentCard}
+              <ul className="flex flex-col gap-2.5">{movementRows(tomorrowsItems)}</ul>
             </div>
           )}
         </div>
 
-        {/* As ferramentas de planejar. No desktop, uma faixa de cards entre as
-            listas do dia e o "a receber", lado a lado quando cabem 320px cada; no celular, o saldo em
-            conta e o grupo "Planejar" (os cards completos somem ali, e o grupo
-            some no desktop: um só de cada vez na árvore de acessibilidade). */}
-        {/* Colunas contadas, não `auto-fit`: com três cards e espaço para
-            dois, o terceiro ficava sozinho numa linha. Com três, no `lg` o
-            saldo ocupa a linha de cima e as duas ferramentas dividem a de
-            baixo; no `xl` cabem os três lado a lado. */}
-        <div
-          className={`flex flex-col gap-5 lg:grid lg:gap-4 lg:[grid-area:tools] ${
-            cardOptions.length > 0 ? "lg:grid-cols-2 xl:grid-cols-3" : "lg:grid-cols-2"
-          }`}
+        {/* Desktop: as últimas movimentações, de qualquer dia. */}
+        <section
+          aria-label="Últimas movimentações"
+          className={homeCard("rise-in hidden lg:flex lg:flex-col lg:gap-2 lg:p-5")}
+          style={rise(140)}
         >
-          {/* O saldo em conta é um número de conferir, corrigido de tempos em
-              tempos olhando o extrato, e não uma ferramenta de planejar — fica
-              inteiro, fora do grupo. O `#saldo` é o destino do aviso de saldo
-              velho no hero. */}
+          <div className="flex items-center justify-between gap-3">
+            <SectionLabel>Últimas movimentações</SectionLabel>
+            <Link href="/historico" className="text-[13px] font-semibold text-primary hover:underline">
+              Ver todas
+              <ArrowRight className="ml-1 inline size-3.5 align-[-2px]" aria-hidden="true" />
+            </Link>
+          </div>
+          {recentItems.length === 0 ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">
+              Nenhuma movimentação ainda. Lance a primeira pelo botão acima.
+            </p>
+          ) : (
+            <ul className="flex flex-col">
+              {recentItems.map((t) => {
+                const income = t.amount < 0;
+                return (
+                  <li key={`${t.kind}-${t.id}`} className="border-b border-(--hairline) last:border-b-0">
+                    <MovementFormDialog
+                      movement={toMovementValues({
+                        id: t.id,
+                        kind: t.kind,
+                        description: t.description,
+                        amount: t.amount,
+                        date: t.date,
+                        categoryId: t.categoryId,
+                        ...(t.kind === "card" ? { cardId: t.cardId, installments: t.installments } : {}),
+                      })}
+                      cards={cardOptions}
+                      categories={categoryOptions}
+                    >
+                      <div className="-mx-2 flex cursor-pointer items-center gap-3 rounded-xl px-2 py-2.5 transition-colors duration-150 hover:bg-card-hover">
+                        <span
+                          aria-hidden="true"
+                          className={cn(
+                            "flex size-9 shrink-0 items-center justify-center rounded-full",
+                            income ? "bg-positive/14 text-positive" : "bg-negative/10 text-negative",
+                          )}
+                        >
+                          {income ? (
+                            <ArrowDownLeft className="size-[17px]" />
+                          ) : (
+                            <ArrowUpRight className="size-[17px]" />
+                          )}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-[14.5px] font-semibold">{t.description}</p>
+                          <p className="truncate text-[12.5px] text-muted-foreground">
+                            {recentDay(t.date)} ·{" "}
+                            {t.kind === "card" ? `no ${cardNameById.get(t.cardId) ?? "cartão"}` : "na conta"}
+                          </p>
+                        </div>
+                        <span
+                          className={cn(
+                            "shrink-0 text-[14.5px] font-semibold tabular-nums",
+                            income && "text-positive",
+                          )}
+                        >
+                          {income ? `+ ${formatCurrency(-t.amount)}` : `− ${formatCurrency(t.amount)}`}
+                        </span>
+                      </div>
+                    </MovementFormDialog>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </section>
+
+        {/* O que o cartão já tirou do próximo ciclo. No desktop o card se
+            explica sozinho, e o rótulo de fora sai. */}
+        {commitmentCard && (
+          <div className="rise-in flex flex-col gap-3 lg:[&>section]:h-full" style={rise(140)}>
+            <div className="lg:hidden">
+              <SectionLabel>Próximo ciclo</SectionLabel>
+            </div>
+            {commitmentCard}
+          </div>
+        )}
+
+        {/* Desktop: a simulação, em destaque. Sem cartão não há o que simular. */}
+        {cardOptions.length > 0 && (
+          <section
+            aria-label="Posso comprar isso?"
+            className="rise-in relative hidden overflow-hidden rounded-[20px] bg-brand p-6 text-brand-foreground shadow-(--shadow-card) lg:flex lg:flex-col lg:justify-end lg:gap-3"
+            style={rise(140)}
+          >
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 32 32"
+              className="pointer-events-none absolute -top-6 -right-6 size-40 opacity-15"
+            >
+              <circle
+                cx="16"
+                cy="16"
+                r="11"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                pathLength={100}
+                strokeDasharray="70 100"
+                transform="rotate(-90 16 16)"
+              />
+              <circle cx="7.1" cy="9.53" r="1.8" fill="currentColor" />
+            </svg>
+            <h2 className="mt-10 font-heading text-[21px] leading-tight font-bold tracking-[-0.025em]">
+              Posso comprar isso?
+            </h2>
+            <p className="max-w-[28ch] text-sm text-pretty opacity-80">
+              Simule uma compra no cartão e veja se ela cabe nos próximos ciclos.
+            </p>
+            <PurchaseSimulationDialog
+              cards={cardOptions}
+              categories={categoryOptions}
+              trigger={{
+                className:
+                  "mt-1 inline-flex h-10 w-fit items-center gap-1.5 rounded-full bg-white px-4 text-[13.5px] font-semibold text-brand transition-[background-color,transform] duration-150 hover:bg-white/90 active:scale-[0.97] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white",
+                children: (
+                  <>
+                    Simular compra
+                    <ArrowRight className="size-4" aria-hidden="true" />
+                  </>
+                ),
+              }}
+            />
+          </section>
+        )}
+
+        {/* Celular: o saldo em conta e o grupo "Planejar". O `#saldo` é o
+            destino do aviso de saldo velho no hero. */}
+        <div className="flex flex-col gap-5 lg:hidden">
           <AccountBalanceCard
             id="saldo"
             balance={accountBalance}
             adjustedAt={adjustedAt}
             registeredMovement={registeredMovement}
             today={today}
-            className={`rise-in scroll-mt-4 ${cardOptions.length > 0 ? "lg:col-span-2 xl:col-span-1" : ""}`}
+            className="rise-in scroll-mt-4"
             style={rise(120)}
           />
-
-          {/* Sem cartão não há o que simular: a compra parcelada entra como uma
-              compra de cartão para usar o fechamento e o vencimento de verdade,
-              e um botão cuja única resposta possível é "cadastre um cartão" é
-              ruído. No celular, a simulação mora no grupo "Planejar". */}
-          {cardOptions.length > 0 && (
-            <div
-              className={homeCard("rise-in hidden items-center justify-between gap-4 lg:flex")}
-              style={rise(120)}
-            >
-              <div className="flex min-w-0 flex-col gap-1.5">
-                <SectionLabel>Posso comprar isso?</SectionLabel>
-                <p className="text-sm text-pretty text-muted-foreground">
-                  Simule uma compra no cartão e veja se ela cabe nos próximos ciclos.
-                </p>
-              </div>
-              <PurchaseSimulationDialog cards={cardOptions} categories={categoryOptions} />
-            </div>
-          )}
-
-          <HomeSlicesCard
-            configured={slicesOverview.configured}
-            usage={slicesOverview.usage}
-            savings={slicesOverview.savings}
-            className="rise-in hidden lg:flex"
-            style={rise(120)}
-          />
-
           <HomePlanLinks
             cards={cardOptions}
             categories={categoryOptions}
             slicesConfigured={slicesOverview.configured}
             slicesOver={slicesOver}
-            className="rise-in lg:hidden"
+            className="rise-in"
             style={rise(120)}
           />
         </div>
 
-        {/* O "a receber" e os avisos dividem a última faixa em partes iguais;
-            se um deles não desenha nada (`empty:hidden`), o outro fica com a
-            faixa inteira, em vez de deixar meia tela vazia ao lado. No
-            celular, uma coluna só, com os avisos no fim. */}
-        <div className="flex flex-col gap-5 lg:flex-row [&:not(:has(>:not(:empty)))]:hidden lg:items-start lg:gap-6 lg:[grid-area:bottom]">
-          <div
-            id="a-receber"
-            className="rise-in scroll-mt-4 empty:hidden lg:min-w-0 lg:flex-1"
-            style={rise(140)}
-          >
-            <HomeDebts debts={debts} />
-          </div>
+        <HomeSlicesCard
+          configured={slicesOverview.configured}
+          usage={slicesOverview.usage}
+          savings={slicesOverview.savings}
+          className="rise-in hidden lg:flex lg:p-5"
+          style={rise(160)}
+        />
 
-          {/* Ligar os avisos é coisa de uma vez: no celular, vai para o fim. */}
-          {process.env.VAPID_PUBLIC_KEY && (
-            <div className="rise-in empty:hidden lg:min-w-0 lg:flex-1" style={rise(140)}>
-              <PushSetup publicKey={process.env.VAPID_PUBLIC_KEY} />
-            </div>
-          )}
+        <div
+          id="a-receber"
+          className="rise-in scroll-mt-4 empty:hidden lg:min-w-0"
+          style={rise(160)}
+        >
+          <HomeDebts debts={debts} />
         </div>
+
+        {/* Ligar os avisos é coisa de uma vez: no celular, vai para o fim. */}
+        {process.env.VAPID_PUBLIC_KEY && (
+          <div className="rise-in empty:hidden lg:min-w-0" style={rise(160)}>
+            <PushSetup publicKey={process.env.VAPID_PUBLIC_KEY} />
+          </div>
+        )}
       </div>
     </div>
   );
