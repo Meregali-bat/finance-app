@@ -1,4 +1,4 @@
-import { CircleAlert } from "lucide-react";
+import { CircleAlert, Wallet } from "lucide-react";
 import { formatDate } from "@/lib/format";
 import { staleAdjustmentDays } from "@/lib/account-balance";
 import { CountUpCurrency } from "@/components/ui/animated-number";
@@ -19,6 +19,7 @@ export function AccountBalanceCard({
   today,
   className,
   style,
+  variant = "default",
 }: {
   id?: string;
   balance: number | null;
@@ -27,7 +28,10 @@ export function AccountBalanceCard({
   today: Date;
   className?: string;
   style?: React.CSSProperties;
+  /** "kpi": o card da fileira de números do desktop, com ícone e número menor. */
+  variant?: "default" | "kpi";
 }) {
+  const kpi = variant === "kpi";
   // Uma semana depois do ajuste, o saldo já soma muita coisa que pode não ter
   // passado pelo app (tarifa, Pix recebido): ele deixa de ser mostrado como
   // fato e passa a pedir conferência com o extrato.
@@ -35,10 +39,24 @@ export function AccountBalanceCard({
   return (
     <div
       id={id}
-      className={homeCard(cn("flex items-center justify-between gap-4", className))}
+      className={homeCard(
+        cn(
+          "flex justify-between gap-4",
+          kpi ? "items-start gap-3 lg:p-5" : "items-center",
+          className,
+        ),
+      )}
       style={style}
     >
-      <div className="flex min-w-0 flex-col gap-1.5">
+      {kpi && (
+        <span
+          aria-hidden="true"
+          className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/14 text-primary"
+        >
+          <Wallet className="size-5" />
+        </span>
+      )}
+      <div className={cn("flex min-w-0 flex-col gap-1.5", kpi && "flex-1")}>
         {/* Um título com cara de rótulo: é o número de que o do dia parte, e
             precisa aparecer na navegação por títulos do leitor de tela. */}
         <h2 className="text-[12.5px] font-medium text-muted-foreground">
@@ -46,7 +64,9 @@ export function AccountBalanceCard({
         </h2>
         {balance == null ? (
           <p className="text-sm text-muted-foreground">
-            Informe o saldo da sua conta para acompanhar quanto você tem agora.
+            {kpi
+              ? "Informe o saldo da conta no lápis."
+              : "Informe o saldo da sua conta para acompanhar quanto você tem agora."}
           </p>
         ) : (
           <>
@@ -57,7 +77,7 @@ export function AccountBalanceCard({
             <CountUpCurrency
               value={balance}
               memoryKey="account-balance"
-              className={`font-heading text-[22px] leading-none font-bold tracking-[-0.035em] tabular-nums lg:text-[32px] ${
+              className={`font-heading text-[22px] leading-none font-bold tracking-[-0.035em] tabular-nums ${kpi ? "lg:text-[24px]" : "lg:text-[32px]"} ${
                 balance < 0 ? "text-negative" : staleDays != null ? "text-foreground/70" : ""
               }`}
             />
@@ -77,7 +97,7 @@ export function AccountBalanceCard({
             ) : adjustedAt && (
               <p className="text-xs text-muted-foreground">
                 Conferido em {formatDate(adjustedAt)}
-                {" · atualizado pelos lançamentos"}
+                {!kpi && " · atualizado pelos lançamentos"}
               </p>
             )}
           </>

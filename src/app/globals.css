@@ -512,6 +512,24 @@
 }
 
 /*
+ * O número do dia na fileira de cards do desktop. No estado normal, preenchido
+ * com a cor da marca (é o card que puxa o olho); nos estados de cuidado
+ * (apertado, vermelho) ele volta às cores do hero, que já baixam a voz —
+ * a cor da marca diria "tudo bem" num dia que não está.
+ */
+.hero-surface.hero-brand:not([data-tone]) {
+  --hero-fg: #ffffff;
+  --hero-muted: rgb(255 255 255 / 0.76);
+  --hero-faint: rgb(255 255 255 / 0.66);
+  --hero-line: rgb(255 255 255 / 0.16);
+  --hero-dots: rgb(255 255 255 / 0.14);
+  --hero-glow: rgb(255 255 255 / 0.1);
+  --hero-bg: var(--brand);
+  --hero-chart: rgb(255 255 255 / 0.9);
+  --hero-dot-ring: var(--brand);
+}
+
+/*
  * Período no vermelho. Se o card continuasse garnet, o coral do número seria
  * vermelho sobre vermelho; então o card perde a cor da marca e vira tinta
  * neutra — igual nos dois temas, porque é um estado e não uma superfície —, e
