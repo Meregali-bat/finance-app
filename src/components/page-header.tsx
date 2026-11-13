@@ -12,8 +12,11 @@ export function PageHeader({
   backHref,
   backLabel,
   action,
+  icon: Icon,
 }: {
   title: string;
+  /** Um ícone grande ao lado do título, na cor da marca. */
+  icon?: React.ComponentType<{ className?: string; "aria-hidden"?: boolean | "true" }>;
   subtitle?: string;
   backHref?: string;
   backLabel?: string;
@@ -35,6 +38,12 @@ export function PageHeader({
           <ArrowLeft className="size-5" aria-hidden="true" />
         </Link>
       )}
+      {Icon && (
+        <Icon
+          aria-hidden="true"
+          className={`mr-1.5 hidden shrink-0 self-center text-primary lg:block ${subtitle ? "size-9" : "size-8"}`}
+        />
+      )}
       <div className="min-w-0 flex-1">
         <h1
           className={`truncate font-heading leading-[1.05] font-bold tracking-[-0.035em] ${
@@ -43,9 +52,19 @@ export function PageHeader({
         >
           {title}
         </h1>
-        {subtitle && <p className="mt-1 truncate text-[13px] text-muted-foreground">{subtitle}</p>}
+        {subtitle && (
+          // Com ícone, o cabeçalho é o do desktop: no celular o subtítulo
+          // sai, para o título não ser cortado pelos botões ao lado.
+          <p
+            className={`mt-1 truncate text-[13px] text-muted-foreground lg:mt-1.5 lg:text-[15px] ${
+              Icon ? "max-lg:hidden" : ""
+            }`}
+          >
+            {subtitle}
+          </p>
+        )}
       </div>
-      {action && <div className="flex shrink-0 items-center gap-1">{action}</div>}
+      {action && <div className="flex shrink-0 items-center gap-1 lg:gap-2.5">{action}</div>}
     </div>
   );
 }

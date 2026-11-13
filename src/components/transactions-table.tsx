@@ -4,6 +4,8 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import {
   ArrowDown,
+  ArrowDownLeft,
+  ArrowLeftRight,
   ArrowUp,
   ArrowUpRight,
   ChevronLeft,
@@ -507,9 +509,35 @@ export function TransactionsTable({
         </span>
       );
     const positive = incoming(item);
+    // O que sai leva "−" e o coral: entrada e saída se separam de relance,
+    // sem precisar ler o sinal.
     return (
-      <span className={cn("font-semibold tabular-nums", positive && "text-positive")}>
-        {positive ? `+${formatCurrency(-item.amount)}` : formatCurrency(Math.abs(item.amount))}
+      <span
+        className={cn("font-semibold tabular-nums", positive ? "text-positive" : "text-negative")}
+      >
+        {positive ? `+${formatCurrency(-item.amount)}` : `−${formatCurrency(Math.abs(item.amount))}`}
+      </span>
+    );
+  }
+
+  /** O círculo da linha: entrou, saiu, ou só trocou de lugar. */
+  function directionIcon(item: HistoryItem) {
+    const neutral = transfer(item) || billPayment(item) || item.kind === "jarDeposit";
+    const positive = !neutral && (incoming(item) || (item.kind === "cardBillAdjustment" && item.amount < 0));
+    const Icon = neutral ? ArrowLeftRight : positive ? ArrowDownLeft : ArrowUpRight;
+    return (
+      <span
+        aria-hidden="true"
+        className={cn(
+          "flex size-8 shrink-0 items-center justify-center rounded-full",
+          neutral
+            ? "bg-muted text-muted-foreground"
+            : positive
+              ? "bg-positive/14 text-positive"
+              : "bg-negative/10 text-negative",
+        )}
+      >
+        <Icon className="size-4" />
       </span>
     );
   }
@@ -705,7 +733,7 @@ export function TransactionsTable({
             <div role="table" aria-label="Lançamentos do período" className="min-w-0">
               <div
                 role="row"
-                className={cn(tableGrid, "py-3")}
+                className={cn(tableGrid, "bg-muted/70 py-3")}
               >
                 <span role="columnheader">
                   <input
@@ -769,16 +797,19 @@ export function TransactionsTable({
                   <span role="cell" className="text-[13px] text-muted-foreground tabular-nums">
                     {dayLabel(item)}
                   </span>
-                  <span role="cell" className="min-w-0">
-                    <span className="block truncate text-sm font-semibold">{item.description}</span>
-                    {rowNote(item) && (
-                      <span
-                        className="block truncate text-xs text-muted-foreground tabular-nums"
-                        title={rowNote(item)}
-                      >
-                        {rowNote(item)}
-                      </span>
-                    )}
+                  <span role="cell" className="flex min-w-0 items-center gap-3">
+                    {directionIcon(item)}
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-semibold">{item.description}</span>
+                      {rowNote(item) && (
+                        <span
+                          className="block truncate text-xs text-muted-foreground tabular-nums"
+                          title={rowNote(item)}
+                        >
+                          {rowNote(item)}
+                        </span>
+                      )}
+                    </span>
                   </span>
                   <span role="cell" className="text-right text-sm">
                     {amount(item)}

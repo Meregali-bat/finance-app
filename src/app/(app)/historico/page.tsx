@@ -1,10 +1,11 @@
 import Link from "next/link";
-import { FileUp, HandCoins } from "lucide-react";
+import { FileUp, HandCoins, History } from "lucide-react";
 import { iconButton } from "@/components/ui/icon-button";
 import { requireUserId } from "@/lib/auth-helpers";
 import { resolveRange, type CycleOf, type RangeParams } from "@/lib/date-range";
 import {
   calculateReportTotals,
+  countsAsReceived,
   countsAsSpending,
   ownSpending,
   spendingBuckets,
@@ -14,12 +15,16 @@ import { homeCard } from "@/components/home-card";
 import { SectionLabel } from "@/components/page-header";
 import { formatCurrency, formatDate, todayInputValue } from "@/lib/format";
 import { PeriodPicker } from "@/components/period-picker";
-import { ReportTotalsCard, type PeriodAccount } from "@/components/report-totals-card";
+import {
+  ReportTotalsCard,
+  type PeriodAccount,
+  type PreviousTotals,
+} from "@/components/report-totals-card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/page-header";
 import { CategoryBreakdown, type CategoryGroup } from "@/components/category-breakdown";
-import { lentNames, type HistoryItem } from "@/lib/history-item";
+import { itemDayKey, lentNames, type HistoryItem } from "@/lib/history-item";
 import { loadHistoryItems } from "@/lib/history-items";
 import { loadBudgetInputs } from "@/lib/budget-inputs";
 import { getPeriodBoundsDetailed } from "@/lib/period";
@@ -27,7 +32,7 @@ import { balanceAtDay } from "@/lib/account-balance";
 import { prisma } from "@/lib/prisma";
 import { parseSlices, sliceOfCategory } from "@/lib/slices";
 import { TransactionsTable } from "@/components/transactions-table";
-import { SpendingCalendarCard } from "@/components/spending-calendar-card";
+import { SpendingCalendarCard, type CalendarSummary } from "@/components/spending-calendar-card";
 import { HistoryDayProvider } from "@/components/history-day";
 import { spendingCalendar } from "@/lib/spending-calendar";
 
@@ -57,10 +62,14 @@ export default async function HistoryPage({
   // do calendário em meia-noite UTC, confirmações guardam instantes locais.
   const { rangeStart, rangeEnd, utcRangeStart, utcRangeEnd } = range;
 
-  const [{ items, categories, creditCards, categoryNameById }, user] = await Promise.all([
-    loadHistoryItems(userId, range),
-    prisma.user.findUnique({ where: { id: userId }, select: { budgetSlices: true } }),
-  ]);
+  // O período anterior, para dar referência aos números deste.
+  const previousRange = resolveRange(range.previous, now, cycleOf);
+  const [{ items, categories, creditCards, categoryNameById }, user, previousHistory] =
+    await Promise.all([
+      loadHistoryItems(userId, range),
+      prisma.user.findUnique({ where: { id: userId }, select: { budgetSlices: true } }),
+      loadHistoryItems(userId, previousRange),
+    ]);
   const slicesActive = parseSlices(user?.budgetSlices) !== null;
 
   const totals = calculateReportTotals({ items, rangeStart, rangeEnd, today: now });
@@ -85,6 +94,29 @@ export default async function HistoryPage({
       }
     : null;
   const buckets = spendingBuckets({ items, rangeStart, rangeEnd });
+
+  // No modo mês, o anterior tem nome ("outubro"); nos outros, é "o período anterior".
+  const previousName =
+    range.mode === "mes"
+      ? new Intl.DateTimeFormat("pt-BR", { month: "long" }).format(
+          new Date(previousRange.month.year, previousRange.month.monthIndex, 1),
+        )
+      : null;
+  const previousTotals = calculateReportTotals({
+    items: previousHistory.items,
+    rangeStart: previousRange.rangeStart,
+    rangeEnd: previousRange.rangeEnd,
+    today: now,
+  });
+  const previous: PreviousTotals | null =
+    previousHistory.items.length > 0
+      ? {
+          totals: previousTotals,
+          label: previousName ?? "o período anterior",
+          // Este período ainda corre: o total dele não se compara com um inteiro.
+          partial: !past,
+        }
+      : null;
 
   // Agrupado por id, não por nome: nada impede duas categorias homônimas, e
   // fundi-las num balde só esconderia a diferença.
@@ -182,6 +214,49 @@ export default async function HistoryPage({
       })
     : null;
 
+  // O resumo ao lado do calendário: a maior entrada e a maior saída até hoje,
+  // e o ritmo por dia contra o período anterior.
+  const shortDay = (key: string) => `${key.slice(8, 10)}/${key.slice(5, 7)}`;
+  const upToToday = items.filter((i) => itemDayKey(i) <= today);
+  const biggest = (list: HistoryItem[], value: (i: HistoryItem) => number) => {
+    const top = list.reduce<HistoryItem | null>(
+      (best, i) => (best == null || value(i) > value(best) ? i : best),
+      null,
+    );
+    return top && value(top) >= 0.005
+      ? { amount: value(top), description: top.description, day: shortDay(itemDayKey(top)) }
+      : null;
+  };
+  const pace =
+    previous && previous.totals.dailyAverage >= 0.005
+      ? Math.round((totals.dailyAverage / previous.totals.dailyAverage - 1) * 100)
+      : null;
+  const calendarSummary: CalendarSummary = {
+    biggestIn: biggest(upToToday.filter(countsAsReceived), (i) => -i.amount),
+    biggestOut: biggest(upToToday.filter(countsAsSpending), ownSpending),
+    insight:
+      pace == null || !previous
+        ? null
+        : {
+            text:
+              pace === 0
+                ? `Seu gasto médio por dia está igual ao ${previousName ? `de ${previousName}` : "do período anterior"}.`
+                : `Seu gasto médio por dia está ${Math.abs(pace)}% ${pace > 0 ? "acima" : "abaixo"} ${previousName ? `do de ${previousName}` : "do período anterior"}.`,
+            good: pace <= 0,
+          },
+  };
+  // As curvas dos cards: o gasto de cada dia já vivido, e o acumulado.
+  const dailySeries = calendar
+    ? calendar.weeks
+        .flat()
+        .filter((d): d is NonNullable<typeof d> => d !== null && !d.future)
+        .map((d) => d.total)
+    : undefined;
+  const cumulativeSeries = dailySeries?.reduce<number[]>(
+    (acc, v) => [...acc, (acc.at(-1) ?? 0) + v],
+    [],
+  );
+
   const categoryOptions = categories.map((c) => ({ id: c.id, name: c.name }));
   // As compras feitas no período, inteiras e no dia da compra: é como o
   // calendário as mostra, e a listagem filtrada por um dia mostra o mesmo.
@@ -220,8 +295,15 @@ export default async function HistoryPage({
       <div className="flex flex-col gap-6">
         <PageHeader
           title="Histórico"
+          icon={History}
+          subtitle="Tudo o que entrou e saiu no período"
           action={
             <div className="flex gap-2">
+              <PeriodPicker
+                range={range}
+                cycles={inputs.incomes.some((i) => i.active)}
+                className="hidden lg:flex lg:min-w-[22rem]"
+              />
               <Link
                 href="/historico/emprestimos"
                 title="Relatório de empréstimos"
@@ -244,14 +326,24 @@ export default async function HistoryPage({
 
         {/* O seletor de período é o controle principal desta tela, então ele
           ganha uma superfície própria em vez de flutuar solto sobre o fundo. */}
-        <PeriodPicker range={range} cycles={inputs.incomes.some((i) => i.active)} />
+        <PeriodPicker
+          range={range}
+          cycles={inputs.incomes.some((i) => i.active)}
+          className="lg:hidden"
+        />
 
-        <ReportTotalsCard totals={totals} account={account} />
+        <ReportTotalsCard
+          totals={totals}
+          account={account}
+          previous={previous}
+          cumulative={cumulativeSeries}
+          daily={dailySeries}
+        />
 
         {/* O gasto do período no tempo: uma série só, em rosé, sem legenda — o
           título diz o que é. As colunas somam o "Gasto" do resumo. */}
         {calendar && (
-          <SpendingCalendarCard calendar={calendar} today={today} />
+          <SpendingCalendarCard calendar={calendar} today={today} summary={calendarSummary} />
         )}
 
         {buckets.length > 1 && !daily && (
@@ -297,7 +389,7 @@ export default async function HistoryPage({
           className="rise-in"
           style={{ "--rise-delay": "180ms" } as React.CSSProperties}
         >
-          <TabsList className="w-full lg:w-fit">
+          <TabsList variant="pill" className="w-full lg:w-fit">
             <TabsTrigger value="lancamentos" className="flex-1 lg:flex-none">
               Lançamentos
             </TabsTrigger>
