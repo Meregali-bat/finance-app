@@ -142,6 +142,7 @@ async function loadBudgetInputsUncached(userId: string): Promise<BudgetInputs> {
     incomeReceipts: incomeReceipts.map((r) => ({
       incomeId: r.incomeId,
       occurrenceDate: r.occurrenceDate,
+      forPayday: r.forPayday,
       amount: Number(r.amount),
     })),
     fixedExpenses: fixedExpenses.map((e) => ({ ...toFixedExpenseInput(e), label: e.label })),

@@ -113,7 +113,13 @@ model IncomeReceipt {
   id             String   @id @default(cuid())
   incomeId       String
   userId         String
+  /// O dia em que o dinheiro caiu: é ele que abre o ciclo. Normalmente o dia
+  /// de pagamento; antes dele quando o salário foi antecipado.
   occurrenceDate DateTime
+  /// Só no recebimento antecipado: o dia de pagamento cadastrado que ele
+  /// adiantou. É o que diz de que mês é o recebimento quando ele caiu no mês
+  /// anterior (o salário do dia 1º que chegou em 30/10 é o de novembro).
+  forPayday      DateTime?
   amount         Decimal
   createdAt      DateTime @default(now())
   income         Income   @relation(fields: [incomeId], references: [id], onDelete: Cascade)

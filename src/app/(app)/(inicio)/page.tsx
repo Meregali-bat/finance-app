@@ -1,4 +1,4 @@
-import { differenceInCalendarDays } from "date-fns";
+import { differenceInCalendarDays, format as formatDay, subDays } from "date-fns";
 import { Suspense } from "react";
 import Link from "next/link";
 import {
@@ -18,7 +18,7 @@ import {
 import { staleAdjustmentDays } from "@/lib/account-balance";
 import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/auth-helpers";
-import { deferralTargetDate, fallsOnDay, ownSpendingOf } from "@/lib/period";
+import { EARLY_INCOME_DAYS, deferralTargetDate, fallsOnDay, ownSpendingOf } from "@/lib/period";
 import { cumulativeDailySpending } from "@/lib/spending-trend";
 import { AreaTrend } from "@/components/charts/area-trend";
 import { loadBudgetInputs, registeredMovementOf } from "@/lib/budget-inputs";
@@ -389,6 +389,10 @@ export default async function DashboardPage() {
       dueDate: inc.dueDate,
       overdue: false,
       incomeId: inc.incomeId,
+      early: inc.early ?? false,
+      earliestOn: inc.early
+        ? formatDay(subDays(inc.dueDate, EARLY_INCOME_DAYS), "yyyy-MM-dd")
+        : undefined,
     })),
   ]
     // `overdue` do cálculo marca o que ficou de um período anterior; para a
@@ -404,6 +408,7 @@ export default async function DashboardPage() {
           ? `falta ${formatCurrency(r.amount)} (pago ${formatCurrency(r.paidSoFar)})`
           : formatCurrency(r.amount),
         dueText(r.kind, r.overdue, r.dueDate, today),
+        r.kind === "income" && r.early ? "caiu antes? confirme já" : null,
         r.kind === "due" && r.deferredIn > 0
           ? `inclui ${formatCurrency(r.deferredIn)} adiados`
           : null,
@@ -454,7 +459,10 @@ export default async function DashboardPage() {
     budget.daysRemaining === 1 ? "falta 1 dia" : `faltam ${budget.daysRemaining} dias`;
   const firstName = profile.name?.trim().split(/\s+/)[0] ?? null;
   // O que entrou de renda no período e o que ainda espera confirmação.
-  const incomeToConfirm = budget.incomeReminders.reduce((sum, r) => sum + r.amount, 0);
+  // O antecipado é o salário do ciclo que vem: não é renda deste a confirmar.
+  const incomeToConfirm = budget.incomeReminders
+    .filter((r) => !r.early)
+    .reduce((sum, r) => sum + r.amount, 0);
   const averagePerDay = spentInPeriod / Math.max(1, Math.min(elapsedDays, spendingTrend.length));
 
   // "Últimas movimentações" do desktop: conta e cartão juntos, do mais novo
