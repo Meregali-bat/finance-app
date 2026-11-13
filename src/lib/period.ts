@@ -129,6 +129,11 @@ export interface ExpensePaymentInput {
    * Ausente = `amount`.
    */
   coveredAmount?: number;
+  /**
+   * Quitado por um adiantamento (parcelas adiantadas, conta paga antes do
+   * ciclo dela): `amount` é 0 porque o dinheiro saiu num lançamento à parte.
+   */
+  advanced?: boolean;
 }
 
 export interface TransactionInput {
@@ -144,11 +149,17 @@ export interface TransactionInput {
   transfer?: boolean;
   /** Quanto da saída é de outros (empréstimos). */
   lent?: number;
+  /**
+   * O lançamento de um adiantamento (parcelas, conta paga antes do ciclo dela):
+   * é conta fixa, não gasto do dia a dia. Move o saldo e pesa no período, mas
+   * fica fora dos ritmos de gasto, como o pagamento de uma conta fixa.
+   */
+  advance?: boolean;
 }
 
 /**
- * O gasto seu de um lançamento ou compra: zero para entrada, transferência e
- * linha do fechamento antigo; sem a parte emprestada. É o que os ritmos de
+ * O gasto seu de um lançamento ou compra: zero para entrada, transferência,
+ * adiantamento de conta fixa e linha do fechamento antigo; sem a parte emprestada. É o que os ritmos de
  * gasto somam — o saldo continua contando o valor inteiro, porque o dinheiro
  * saiu.
  */
@@ -157,8 +168,11 @@ export function ownSpendingOf(movement: {
   transfer?: boolean;
   fromPeriodClose?: boolean;
   lent?: number;
+  advance?: boolean;
 }): number {
-  if (movement.amount <= 0 || movement.transfer || movement.fromPeriodClose) return 0;
+  if (movement.amount <= 0 || movement.transfer || movement.fromPeriodClose || movement.advance) {
+    return 0;
+  }
   return Math.max(0, movement.amount - (movement.lent ?? 0));
 }
 
@@ -677,6 +691,30 @@ export function expenseCharges(
       return { dueDate: new Date(time), amount: base + deferredIn, deferredIn };
     })
     .filter((charge) => charge.amount > 0);
+}
+
+/**
+ * A primeira cobrança de uma despesa fixa avulsa em ou depois de `from` que
+ * ainda não foi quitada — o que dá para pagar adiantado quando o ciclo de
+ * agora já não tem nada dela em aberto. Com o valor da cobrança, que inclui o
+ * que foi adiado para ela. Olha até dois anos à frente; nulo se nada cobra
+ * (encerrada, pausada sem volta, parcelas acabadas).
+ */
+export function nextUnpaidChargeFrom(
+  expense: FixedExpenseInput,
+  from: Date,
+  paidDueDates: Date[] = [],
+): { dueDate: Date; amount: number } | null {
+  if (expense.cardId || expense.dueDay == null) return null;
+  const paid = new Set(paidDueDates.map((d) => storedDay(d).getTime()));
+  // Mês a mês: `expenseCharges` só enxerga uma janela de poucos meses.
+  for (let i = 0; i < 24; i++) {
+    const start = new Date(from.getFullYear(), from.getMonth() + i, from.getDate());
+    const end = new Date(from.getFullYear(), from.getMonth() + i + 1, from.getDate());
+    const charge = expenseCharges(expense, start, end).find((c) => !paid.has(c.dueDate.getTime()));
+    if (charge) return { dueDate: charge.dueDate, amount: charge.amount };
+  }
+  return null;
 }
 
 /**

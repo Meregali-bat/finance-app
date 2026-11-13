@@ -114,7 +114,10 @@ async function loadBudgetInputsUncached(userId: string): Promise<BudgetInputs> {
     prisma.transaction.findMany({
       where: { userId },
       orderBy: { date: "desc" },
-      include: { loans: { select: { amount: true, forgiven: true } } },
+      include: {
+        loans: { select: { amount: true, forgiven: true } },
+        _count: { select: { advancedPayments: true } },
+      },
     }),
     prisma.expensePayment.findMany({
       where: { userId },
@@ -180,6 +183,7 @@ async function loadBudgetInputsUncached(userId: string): Promise<BudgetInputs> {
       settled: p.settled,
       // Pago no cartão, o pagamento tem 0 e o valor está na compra.
       ...(p.cardPurchase ? { coveredAmount: Number(p.cardPurchase.amount) } : {}),
+      ...(p.advanceTransactionId ? { advanced: true } : {}),
     })),
     transactions: transactions.map((t) => ({
       id: t.id,
@@ -191,6 +195,7 @@ async function loadBudgetInputsUncached(userId: string): Promise<BudgetInputs> {
       fromPeriodClose: t.fromPeriodClose,
       transfer: t.transfer || undefined,
       lent: lentTotal(t.loans),
+      advance: t._count.advancedPayments > 0 || undefined,
     })),
     jarDeposits: jarDeposits.map((d) => ({
       amount: Number(d.amount),
