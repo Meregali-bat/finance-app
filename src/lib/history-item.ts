@@ -65,8 +65,6 @@ export type HistoryItem = {
   loanRepayment?: boolean;
   /** Dinheiro entre contas da própria pessoa: nem renda nem gasto. */
   transfer?: boolean;
-  /** O lançamento de um adiantamento de conta fixa: gasto, mas não do dia a dia. */
-  advance?: boolean;
   /** Pagamento de fatura ou conta: falso quando foi só uma parte. */
   settled?: boolean;
   /** A fatia escolhida para este lançamento; ausente = a da categoria. */

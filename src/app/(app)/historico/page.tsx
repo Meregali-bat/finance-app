@@ -190,8 +190,7 @@ export default async function HistoryPage({
           // O gasto seu, como o resumo: sem transferências e sem a parte
           // emprestada.
           ...items
-            // O adiantamento de uma conta fixa é conta fixa, não dia a dia.
-            .filter((i) => i.kind === "transaction" && !i.advance && ownSpending(i) > 0)
+            .filter((i) => i.kind === "transaction" && ownSpending(i) > 0)
             .map((i) => ({
               date: i.date,
               amount: ownSpending(i),

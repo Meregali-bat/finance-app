@@ -4,14 +4,11 @@ import { formatCurrency, formatShortDate } from "@/lib/format";
 import Link from "next/link";
 import {
   dateForDayInMonth,
-  getNextPeriodBounds,
   getPeriodBounds,
   installmentsLeft,
-  nextUnpaidChargeFrom,
   openInstallments,
   storedDay,
 } from "@/lib/period";
-import { toFixedExpenseInput } from "@/lib/budget-inputs";
 import { EmptyState } from "@/components/ui/empty-state";
 import { FixedTabs, type FixedTab } from "@/components/fixed-tabs";
 import { ListRow, SubtitleParts, stagger } from "@/components/list-row";
@@ -21,7 +18,6 @@ import { ExpenseFormDialog } from "@/components/forms/expense-form-dialog";
 import { CategoryFormDialog } from "@/components/forms/category-form-dialog";
 import { DeleteIconButton } from "@/components/delete-icon-button";
 import { AdvanceInstallmentsDialog } from "@/components/advance-installments-dialog";
-import { PayAheadDialog } from "@/components/pay-ahead-dialog";
 import { undoInstallmentAdvance } from "@/lib/actions/installment-advance";
 import { ToggleActiveButton } from "@/components/toggle-active-button";
 import { deleteIncome, toggleIncomeActive } from "@/lib/actions/income";
@@ -48,10 +44,6 @@ function resolveTab(param: string | string[] | undefined): FixedTab {
 function dayMonth(date: Date) {
   return formatShortDate(date).slice(0, 5);
 }
-
-/** "2026-12-10", o formato dos diálogos de pagamento. */
-const isoDay = (d: Date) =>
-  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
 const sameMonth = (a: Date, b: Date) =>
   a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth();
@@ -102,21 +94,21 @@ export default async function FixedPage({
 
   // O ciclo de pagamento de agora, o mesmo da Início e da Previsão: o estado de
   // cada linha é o deste ciclo, não o do mês do calendário.
-  const incomeInputs = incomes.map((i) => ({
-    id: i.id,
-    amount: Number(i.amount),
-    dayOfMonth: i.dayOfMonth,
-    createdAt: i.createdAt,
-    active: i.active,
-  }));
-  const receiptInputs = receipts.map((r) => ({
-    incomeId: r.incomeId,
-    occurrenceDate: r.occurrenceDate,
-    amount: Number(r.amount),
-  }));
-  const { periodStart, periodEnd } = getPeriodBounds(incomeInputs, today, receiptInputs);
-  // Até onde vai o "Pagar adiantado": só a cobrança do ciclo seguinte.
-  const nextPeriodEnd = getNextPeriodBounds(incomeInputs, periodEnd, receiptInputs).periodEnd;
+  const { periodStart, periodEnd } = getPeriodBounds(
+    incomes.map((i) => ({
+      id: i.id,
+      amount: Number(i.amount),
+      dayOfMonth: i.dayOfMonth,
+      createdAt: i.createdAt,
+      active: i.active,
+    })),
+    today,
+    receipts.map((r) => ({
+      incomeId: r.incomeId,
+      occurrenceDate: r.occurrenceDate,
+      amount: Number(r.amount),
+    })),
+  );
   /** Os vencimentos de um dia do mês dentro do ciclo, e o primeiro depois dele. */
   function dueDatesInCycle(day: number) {
     const dates: Date[] = [];
@@ -179,32 +171,10 @@ export default async function FixedPage({
           p.advanceTransaction ? [[p.advanceTransaction.id, p.advanceTransaction] as const] : [],
         ),
       ).values(),
-    ].map((t) => {
-      const paid = expense.payments.filter((p) => p.advanceTransaction?.id === t.id);
-      return { ...t, count: paid.length, dueDate: paid[0]?.dueDate };
-    });
-    // A próxima cobrança que dá para pagar adiantado: só quando o ciclo de agora
-    // já não tem nenhuma em aberto (essa se paga pela Início) e a seguinte cai
-    // no ciclo seguinte — um de cada vez, como a Início. Parcelada já tem o
-    // "Adiantar parcelas".
-    const nextUnpaid =
-      expense.active && !expense.cardId && expense.dueDay != null && expense.installmentCount == null
-        ? nextUnpaidChargeFrom(
-            toFixedExpenseInput({
-              ...expense,
-              // Só as pausas abertas vêm do banco, e só elas cortam cobranças futuras.
-              pauses: expense.pauses.map((p) => ({ startedAt: p.startedAt, endedAt: null })),
-            }),
-            periodStart,
-            expense.payments.map((p) => p.dueDate),
-          )
-        : null;
-    const ahead =
-      nextUnpaid &&
-      nextUnpaid.dueDate.getTime() >= periodEnd.getTime() &&
-      nextUnpaid.dueDate.getTime() < nextPeriodEnd.getTime()
-        ? nextUnpaid
-        : null;
+    ].map((t) => ({
+      ...t,
+      count: expense.payments.filter((p) => p.advanceTransaction?.id === t.id).length,
+    }));
     return {
       expense,
       left,
@@ -212,7 +182,6 @@ export default async function FixedPage({
       afterLast,
       open,
       advances,
-      ahead,
       ended: left?.remaining === 0 && afterLast.length === 0,
     };
   });
@@ -248,14 +217,6 @@ export default async function FixedPage({
       };
     }
     const paid = dates.length > 0 ? paidFor(dates.at(-1)!) : undefined;
-    // A do próximo ciclo, paga adiantada: dizer, senão parecia que ainda falta.
-    if (paidFor(next)) {
-      return {
-        text: paid
-          ? `paga em ${dayMonth(paid.paidAt)} · a de ${dayMonth(next)} já paga`
-          : `a de ${dayMonth(next)} já paga`,
-      };
-    }
     return {
       text: paid
         ? `paga em ${dayMonth(paid.paidAt)} · próxima ${dayMonth(next)}`
@@ -365,7 +326,7 @@ export default async function FixedPage({
   const onlyActiveIncome = activeIncomes.length === 1 ? activeIncomes[0].id : null;
 
   const expenseItem = (row: (typeof rows)[number], index: number) => {
-    const { expense, left, deferrals, afterLast, open, advances, ahead } = row;
+    const { expense, left, deferrals, afterLast, open, advances } = row;
     const state = expenseState(row);
     const cardName = expense.cardId ? cardNameById.get(expense.cardId) : undefined;
     // Uma parcela adiada para depois da última também falta, e é ela a última.
@@ -417,15 +378,6 @@ export default async function FixedPage({
                 }}
                 onToggle={toggleFixedExpenseActive.bind(null, expense.id)}
               />
-              {ahead && (
-                <PayAheadDialog
-                  expenseId={expense.id}
-                  label={expense.label}
-                  dueDate={isoDay(ahead.dueDate)}
-                  amount={ahead.amount}
-                  minPaidOn={isoDay(periodStart)}
-                />
-              )}
               {expense.active && open.length > 0 && expense.installmentCount != null && (
                 <AdvanceInstallmentsDialog
                   expenseId={expense.id}
@@ -433,7 +385,7 @@ export default async function FixedPage({
                   total={expense.installmentCount}
                   installments={open.map((i) => ({
                     number: i.number,
-                    dueDate: isoDay(i.dueDate),
+                    dueDate: `${i.dueDate.getFullYear()}-${String(i.dueDate.getMonth() + 1).padStart(2, "0")}-${String(i.dueDate.getDate()).padStart(2, "0")}`,
                     amount: i.amount,
                   }))}
                 />
@@ -462,20 +414,13 @@ export default async function FixedPage({
         >
           {advances.map((advance) => {
             const on = dayMonth(storedDay(advance.date));
-            // Sem número de parcelas é a cobrança de um mês paga adiantada.
-            const single = expense.installmentCount == null && advance.dueDate;
-            const due = single ? dayMonth(storedDay(advance.dueDate!)) : null;
             return (
               <div
                 key={advance.id}
                 className="flex items-center justify-between gap-2 rounded-xl bg-muted py-1 pr-1 pl-3 text-xs text-muted-foreground"
               >
                 <span className="tabular-nums">
-                  {due
-                    ? `Vencimento de ${due} pago adiantado`
-                    : advance.count === 1
-                      ? "1 parcela adiantada"
-                      : `${advance.count} parcelas adiantadas`}{" "}
+                  {advance.count === 1 ? "1 parcela adiantada" : `${advance.count} parcelas adiantadas`}{" "}
                   em {on} ({formatCurrency(Number(advance.amount))})
                 </span>
                 <DeleteIconButton
@@ -483,11 +428,7 @@ export default async function FixedPage({
                   itemLabel={`adiantamento de ${on}`}
                   title="Desfazer adiantamento"
                   action={undoInstallmentAdvance.bind(null, advance.id)}
-                  confirmMessage={
-                    due
-                      ? `Desfazer o pagamento adiantado? O lançamento de ${formatCurrency(Number(advance.amount))} sai e a cobrança de ${due} volta a ficar em aberto.`
-                      : `Desfazer o adiantamento? O lançamento de ${formatCurrency(Number(advance.amount))} sai e as parcelas voltam a faltar.`
-                  }
+                  confirmMessage={`Desfazer o adiantamento? O lançamento de ${formatCurrency(Number(advance.amount))} sai e as parcelas voltam a faltar.`}
                 />
               </div>
             );

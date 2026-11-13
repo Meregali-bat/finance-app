@@ -82,11 +82,6 @@ export interface ForecastEntry {
   awaiting?: boolean;
   /** Só em `fixedExpense`: quanto do valor veio de ocorrências adiadas. */
   deferredIn?: number;
-  /**
-   * Só em `fixedExpense`: quitada por um adiantamento. O valor é 0 aqui porque
-   * o dinheiro saiu no lançamento do adiantamento, no dia em que foi pago.
-   */
-  advanced?: boolean;
 }
 
 export interface PeriodForecast {
@@ -306,7 +301,6 @@ function forecastOnePeriod(
         date: charge.dueDate,
         amount: payment ? payment.amount : openOccurrenceAmounts(charge.amount, partial).committed,
         confirmed: payment !== undefined,
-        ...(payment?.advanced ? { advanced: true } : {}),
         ...(charge.deferredIn > 0 ? { deferredIn: charge.deferredIn } : {}),
       };
     }),
