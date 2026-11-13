@@ -48,6 +48,7 @@ export async function loadHistoryItems(
             orderBy: { createdAt: "asc" },
           },
           loanRepayment: { select: { id: true } },
+          _count: { select: { advancedPayments: true } },
         },
       }),
       // Agrupado pela data em que foi pago, não pelo vencimento: pagar antes do
@@ -227,6 +228,7 @@ export async function loadHistoryItems(
       lent: lentShare(t.loans, Number(t.amount), Number(t.amount)),
       loanRepayment: t.loanRepayment ? true : undefined,
       transfer: t.transfer || undefined,
+      advance: t._count.advancedPayments > 0 || undefined,
     })),
     ...cardItems,
     ...expensePayments.map((p) => ({
