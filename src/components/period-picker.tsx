@@ -127,7 +127,7 @@ export function PeriodPicker({
           </span>
           <ChevronDown className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
         </DialogTrigger>
-        <DialogContent>
+        <DialogContent className="sm:max-w-[30rem]">
           <DialogHeader>
             <DialogTitle>Período</DialogTitle>
           </DialogHeader>
@@ -141,13 +141,15 @@ export function PeriodPicker({
           >
             {/* 2×2 no celular: em quatro colunas sobram ~80px por botão e
                 "Personalizado" trunca. Com o ciclo, 3 + 2, e o último ocupa
-                o espaço que sobra na segunda linha. */}
+                o espaço que sobra na segunda linha. A partir de `sm`, uma
+                linha só, com cada botão do tamanho do seu rótulo: em colunas
+                iguais "Personalizado" não cabia e a fileira rolava de lado. */}
             <div
               className={cn(
                 "grid gap-1 rounded-xl bg-muted p-1",
                 modes.length === 5
-                  ? "grid-cols-3 sm:grid-cols-5 [&>:last-child]:col-span-2 sm:[&>:last-child]:col-span-1"
-                  : "grid-cols-2 sm:grid-cols-4",
+                  ? "grid-cols-3 sm:flex [&>:last-child]:col-span-2"
+                  : "grid-cols-2 sm:flex",
               )}
             >
               {modes.map((option) => (
@@ -157,7 +159,7 @@ export function PeriodPicker({
                   onClick={() => setMode(option.value)}
                   aria-pressed={mode === option.value}
                   className={cn(
-                    "rounded-lg py-2 text-sm font-medium transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring",
+                    "rounded-lg py-2 text-sm font-medium whitespace-nowrap transition-colors sm:flex-auto sm:px-3 duration-150 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring",
                     mode === option.value
                       ? "bg-card text-foreground shadow-surface ring-1 ring-foreground/10"
                       : "text-muted-foreground",
